@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import { AuthPanel } from "./auth-panel";
+import { auth, type RefHQSession } from "./auth-client";
 
 type View = "overview" | "checkin" | "schedule" | "coaching" | "assessments" | "import";
 type Role = "Assignor" | "Referee" | "Referee coach";
@@ -145,7 +147,7 @@ function ImportView() {
   return <section className="page-section"><div className="section-title"><div><p className="eyebrow">ASSIGNR BRIDGE</p><h1>Import a schedule</h1><p>Bring event, game, and crew data into RefHQ in minutes.</p></div></div><div className="import-grid"><article className="panel import-card"><span className="upload-icon">↑</span><h2>{file || "Drop your Assignr CSV here"}</h2><p>CSV files up to 10 MB. You’ll review every row before anything is added.</p><label className="primary file-button">Choose CSV<input type="file" accept=".csv" onChange={e=>setFile(e.target.files?.[0]?.name || "")}/></label></article><article className="panel mapping"><p className="eyebrow">EXPECTED COLUMNS</p><h2>A simple, forgiving importer</h2>{["Date and start time","Venue and field","Home and away teams","Official name, email, and position"].map((x,i)=><div key={x}><span>{i+1}</span><p><strong>{x}</strong><small>Recognized automatically or mapped during review.</small></p></div>)}<button className="text-button">Download sample CSV →</button></article></div></section>;
 }
 
-export default function Home() {
+function Dashboard({ session }: { session: RefHQSession }) {
   const [view, setView] = useState<View>("overview");
   const [role, setRole] = useState<Role>("Assignor");
   const nav = useMemo(() => role === "Referee" ? [["overview","My day"],["checkin","Check in"],["schedule","Schedule"],["assessments","My feedback"]] : role === "Referee coach" ? [["overview","Overview"],["schedule","Schedule"],["coaching","Coaching"],["assessments","Assessments"]] : [["overview","Overview"],["checkin","Check-in"],["schedule","Schedule"],["coaching","Coaching"],["assessments","Assessments"],["import","Import"]], [role]) as [View,string][];
@@ -154,11 +156,33 @@ export default function Home() {
       <header className="topbar">
         <button className="brand" onClick={() => setView("overview")}><Mark /><span><strong>RefHQ</strong><small>PROVIDED BY FALKSPORTS</small></span></button>
         <nav>{nav.map(([id,label])=><button key={id} className={view===id?"active":""} onClick={()=>setView(id)}>{label}</button>)}</nav>
-        <div className="account"><span className="live-dot" /><select aria-label="Preview role" value={role} onChange={e=>{setRole(e.target.value as Role);setView("overview")}}><option>Assignor</option><option>Referee</option><option>Referee coach</option></select><span className="avatar">AF</span></div>
+        <div className="account"><span className="live-dot" /><select aria-label="Preview role" value={role} onChange={e=>{setRole(e.target.value as Role);setView("overview")}}><option>Assignor</option><option>Referee</option><option>Referee coach</option></select><button className="avatar account-avatar" aria-label={`Sign out ${session.user.email ?? "user"}`} title="Sign out" onClick={() => auth.signOut()}>AF</button></div>
       </header>
       <div className="eventbar"><div><span className="event-mark">C</span><p><strong>Capital Cup 2026</strong><small>Riverside Sports Complex · Jun 28–29</small></p></div><span className="weather">☀ 72°F · Clear</span></div>
       <div className="shell">{view==="overview"&&<Overview setView={setView}/>} {view==="checkin"&&<CheckIn/>} {view==="schedule"&&<Schedule/>} {view==="coaching"&&<Coaching/>} {view==="assessments"&&<Assessments/>} {view==="import"&&<ImportView/>}</div>
       <footer><div className="brand footer-brand"><Mark small/><span><strong>RefHQ</strong><small>PROVIDED BY FALKSPORTS</small></span></div><p>Better prepared. Better supported. Better officiating.</p><span>© 2026 FalkSports</span></footer>
     </main>
   );
+}
+
+export default function Home() {
+  const [session, setSession] = useState<RefHQSession | null>(null);
+  const [recovery, setRecovery] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const handleSession = useCallback((nextSession: RefHQSession) => {
+    setRecovery(false);
+    setSession(nextSession);
+  }, []);
+
+  useEffect(() => {
+    const initial = auth.initialize();
+    setSession(initial.recovery ? null : initial.session);
+    setRecovery(initial.recovery);
+    setLoading(false);
+    return auth.subscribe(setSession);
+  }, []);
+
+  if (loading) return <main className="auth-page"><p className="auth-loading">Loading RefHQ…</p></main>;
+  if (!session || recovery) return <AuthPanel onSession={handleSession} recovery={recovery} />;
+  return <Dashboard session={session} />;
 }

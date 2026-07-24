@@ -1,0 +1,4 @@
+external_id,date,start_time,venue,field,home_team,away_team,division,official_name,official_email,position
+assignr-1001,2026-06-28,08:00,Riverside Sports Complex,Field 1,River City FC,Capital United,U16 Boys Premier,Maya Rodriguez,maya@example.com,Referee
+assignr-1001,2026-06-28,08:00,Riverside Sports Complex,Field 1,River City FC,Capital United,U16 Boys Premier,Jordan Lee,jordan@example.com,Assistant Referee
+assignr-1002,2026-06-28,08:30,Riverside Sports Complex,Field 3,Northside SC,Lakeview FC,U14 Girls Gold,Avery Wilson,avery@example.com,Referee

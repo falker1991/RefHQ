@@ -1,0 +1,95 @@
+"use client";
+
+import { FormEvent, useEffect, useState } from "react";
+import { auth, type RefHQSession } from "./auth-client";
+
+type AuthPanelProps = {
+  onSession: (session: RefHQSession) => void;
+  recovery?: boolean;
+};
+
+export function AuthPanel({ onSession, recovery = false }: AuthPanelProps) {
+  const [mode, setMode] = useState<"login" | "recovery">(recovery ? "recovery" : "login");
+  const [email, setEmail] = useState("falkref91@gmail.com");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => setMode(recovery ? "recovery" : "login"), [recovery]);
+
+  async function signIn(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      onSession(await auth.signIn(email, password));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to sign in.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendRecovery() {
+    if (!email) return setMessage("Enter your email address first.");
+    setBusy(true);
+    setMessage("");
+    try {
+      await auth.sendRecovery(email);
+      setMessage("Password setup email sent. Check your inbox.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to send the email.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function updatePassword(event: FormEvent) {
+    event.preventDefault();
+    if (password.length < 8) return setMessage("Use at least 8 characters.");
+    if (password !== confirmPassword) return setMessage("The passwords do not match.");
+    setBusy(true);
+    setMessage("");
+    try {
+      const { session } = auth.initialize();
+      if (!session) throw new Error("This password link has expired. Request a new one.");
+      onSession(await auth.updatePassword(session, password));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to save your password.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="auth-page">
+      <section className="auth-brand">
+        <div className="auth-logo"><span /><span /><span /></div>
+        <div><strong>RefHQ</strong><small>PROVIDED BY FALKSPORTS</small></div>
+      </section>
+      <section className="auth-card">
+        <p className="eyebrow">WELCOME TO REFHQ</p>
+        <h1>{mode === "recovery" ? "Create your password" : "Sign in"}</h1>
+        <p className="auth-intro">
+          {mode === "recovery"
+            ? "Choose a secure password to finish setting up your account."
+            : "Access tournament check-in, schedules, coaching, and assessments."}
+        </p>
+        <form onSubmit={mode === "recovery" ? updatePassword : signIn}>
+          {mode === "login" && (
+            <label>Email address<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required /></label>
+          )}
+          <label>{mode === "recovery" ? "New password" : "Password"}<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "recovery" ? "new-password" : "current-password"} minLength={8} required /></label>
+          {mode === "recovery" && (
+            <label>Confirm new password<input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" minLength={8} required /></label>
+          )}
+          {message && <p className="auth-message" role="status">{message}</p>}
+          <button className="primary wide" disabled={busy}>{busy ? "Please wait…" : mode === "recovery" ? "Save password" : "Sign in"}</button>
+        </form>
+        {mode === "login" && <button className="auth-link" onClick={sendRecovery} disabled={busy}>Set or reset your password</button>}
+      </section>
+      <p className="auth-footer">Better prepared. Better supported. Better officiating.</p>
+    </main>
+  );
+}

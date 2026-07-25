@@ -16,14 +16,14 @@ async function render() {
   );
 }
 
-test("server-renders the RefHQ application shell", async () => {
+test("server-renders the Law18Referee Management application shell", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>RefHQ — Tournament referee operations<\/title>/i);
-  assert.match(html, /Loading RefHQ/);
+  assert.match(html, /<title>Law18Referee Management — Tournament referee operations<\/title>/i);
+  assert.match(html, /Loading Law18Referee Management/);
   assert.doesNotMatch(html, /Your site is taking shape|codex-preview/i);
 });
 

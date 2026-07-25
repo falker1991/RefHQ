@@ -7,6 +7,7 @@ The current pilot is designed for a small live tournament. Assignors can import 
 ## What is included
 
 - Supabase-backed Assignr CSV import with validation and review
+- Repeat schedule imports that append new days or update matching games in an existing event
 - Multiple-event switcher for assignors and officials
 - Full-day field/time assignment board with checked-in referees highlighted
 - Tournament QR and authenticated self check-in
@@ -59,12 +60,14 @@ Never expose `SUPABASE_SERVICE_ROLE_KEY` to browser code or commit `.env.local`.
 ## Small-tournament pilot
 
 1. Sign in as an administrator or assignor.
-2. Open **Import**, select an Assignr-format CSV, review the detected event details, and confirm.
+2. Open **Import**, select an Assignr-format CSV, choose **Create a new event**, review the detected event details, and confirm.
 3. Switch to the imported event using the event selector.
 4. Display the event QR from **Check-in** at referee headquarters.
 5. Each referee selects **Create referee account** and uses the exact email address imported from Assignr.
 6. Referees can open RefHQ from their Home Screen, view confirmed assignments, scan the event QR, and check in.
 7. The assignor monitors arrivals from **Assignment board**.
+
+For a later schedule release, return to **Import**, choose **Add to [event name]** as the destination, and upload the next CSV. New Assignr game IDs are appended to the event. Matching game IDs and the referee crews included for those games are updated, while other days and existing check-ins remain intact. Every upload is retained in the import history.
 
 The expected CSV template is downloadable inside RefHQ and is also stored at `examples/assignr-schedule.csv`.
 

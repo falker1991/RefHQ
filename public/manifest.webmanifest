@@ -1,17 +1,9 @@
 {
-  "name": "RefHQ by FalkSports",
-  "short_name": "RefHQ",
+  "name": "Law18Referee Management by FalkSports",
+  "short_name": "Law18Ref",
   "description": "Tournament referee schedules and QR check-in.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f4f5f1",
-  "theme_color": "#075c43",
-  "icons": [
-    {
-      "src": "/og.png",
-      "sizes": "1200x630",
-      "type": "image/png",
-      "purpose": "any"
-    }
-  ]
+  "theme_color": "#075c43"
 }

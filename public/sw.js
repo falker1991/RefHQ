@@ -1,4 +1,4 @@
-const CACHE = "refhq-pilot-v1";
+const CACHE = "law18referee-pilot-v1";
 const SHELL = ["/", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {

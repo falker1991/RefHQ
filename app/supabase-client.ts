@@ -229,28 +229,58 @@ function normalizePosition(position: string): AssignmentRecord["position"] {
 export async function importTournament(
   session: RefHQSession,
   profile: Profile,
-  details: { name: string; venue: string; startsOn: string; endsOn: string; fileName: string },
+  details: {
+    name: string;
+    venue: string;
+    startsOn: string;
+    endsOn: string;
+    fileName: string;
+    eventId?: string;
+  },
   rows: ImportRow[],
 ) {
-  const slug = `${details.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${Date.now().toString(36)}`;
-  const events = await rest<EventRecord[]>(
-    session,
-    "events",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        organization_id: profile.organization_id,
-        name: details.name,
-        venue_name: details.venue,
-        starts_on: details.startsOn,
-        ends_on: details.endsOn,
-        check_in_slug: slug,
-        created_by: profile.id,
-      }),
-    },
-    "return=representation",
-  );
-  const event = events[0];
+  let event: EventRecord;
+  if (details.eventId) {
+    const existingEvents = await rest<EventRecord[]>(
+      session,
+      `events?id=eq.${enc(details.eventId)}&organization_id=eq.${enc(profile.organization_id)}&select=*`,
+    );
+    const existingEvent = existingEvents[0];
+    if (!existingEvent) throw new Error("The selected event is no longer available.");
+    const updatedEvents = await rest<EventRecord[]>(
+      session,
+      `events?id=eq.${enc(existingEvent.id)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          starts_on: details.startsOn < existingEvent.starts_on ? details.startsOn : existingEvent.starts_on,
+          ends_on: details.endsOn > existingEvent.ends_on ? details.endsOn : existingEvent.ends_on,
+        }),
+      },
+      "return=representation",
+    );
+    event = updatedEvents[0] ?? existingEvent;
+  } else {
+    const slug = `${details.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${Date.now().toString(36)}`;
+    const events = await rest<EventRecord[]>(
+      session,
+      "events",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          organization_id: profile.organization_id,
+          name: details.name,
+          venue_name: details.venue,
+          starts_on: details.startsOn,
+          ends_on: details.endsOn,
+          check_in_slug: slug,
+          created_by: profile.id,
+        }),
+      },
+      "return=representation",
+    );
+    event = events[0];
+  }
 
   const officialPayload = [...new Map(rows.map((row) => [
     row.official_email,
@@ -287,12 +317,29 @@ export async function importTournament(
     "resolution=merge-duplicates,return=representation",
   );
   const gameByExternalId = new Map(games.map((game) => [game.external_id, game]));
-  const assignmentPayload = rows.map((row) => ({
-    game_id: gameByExternalId.get(row.external_id)?.id,
-    official_id: officialByEmail.get(row.official_email)?.id,
-    position: normalizePosition(row.position),
-    accepted: true,
-  }));
+  const assignmentPayload = rows.map((row) => {
+    const gameId = gameByExternalId.get(row.external_id)?.id;
+    const officialId = officialByEmail.get(row.official_email)?.id;
+    if (!gameId || !officialId) throw new Error(`Unable to match assignment for game ${row.external_id}.`);
+    return {
+      game_id: gameId,
+      official_id: officialId,
+      position: normalizePosition(row.position),
+      accepted: true,
+    };
+  });
+  if (details.eventId) {
+    const importedSlots = [...new Map(assignmentPayload.map((assignment) => [
+      `${assignment.game_id}:${assignment.position}`,
+      { gameId: assignment.game_id, position: assignment.position },
+    ])).values()];
+    await Promise.all(importedSlots.map(({ gameId, position }) => rest(
+      session,
+      `assignments?game_id=eq.${enc(gameId)}&position=eq.${enc(position)}`,
+      { method: "DELETE" },
+      "return=minimal",
+    )));
+  }
   await rest(
     session,
     "assignments?on_conflict=game_id,official_id,position",

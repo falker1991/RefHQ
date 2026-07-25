@@ -243,17 +243,46 @@ function ScheduleView({ data }: { data: EventData }) {
 function ImportView({
   session,
   profile,
+  events,
   onImported,
 }: {
   session: RefHQSession;
   profile: Profile;
+  events: EventRecord[];
   onImported: (event: EventRecord) => void;
 }) {
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [fileName, setFileName] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [destinationEventId, setDestinationEventId] = useState("");
   const [details, setDetails] = useState({ name: "", venue: "", startsOn: "", endsOn: "" });
+  const destinationEvent = events.find((event) => event.id === destinationEventId);
+
+  function chooseDestination(eventId: string) {
+    setDestinationEventId(eventId);
+    const selectedEvent = events.find((event) => event.id === eventId);
+    if (selectedEvent) {
+      setDetails({
+        name: selectedEvent.name,
+        venue: selectedEvent.venue_name,
+        startsOn: selectedEvent.starts_on,
+        endsOn: selectedEvent.ends_on,
+      });
+      setMessage(rows.length
+        ? `${rows.length} assignment rows will be added to ${selectedEvent.name}.`
+        : `The next CSV will be added to ${selectedEvent.name}.`);
+    } else if (rows.length) {
+      const dates = rows.map((row) => row.date).sort();
+      setDetails({
+        name: fileName.replace(/\.csv$/i, "").replace(/[-_]+/g, " "),
+        venue: rows[0].venue,
+        startsOn: dates[0],
+        endsOn: dates[dates.length - 1],
+      });
+      setMessage(`${rows.length} assignment rows are ready to create a new event.`);
+    }
+  }
 
   async function readFile(file?: File) {
     if (!file) return;
@@ -262,13 +291,22 @@ function ImportView({
       setRows(parsed);
       setFileName(file.name);
       const dates = parsed.map((row) => row.date).sort();
-      setDetails({
-        name: file.name.replace(/\.csv$/i, "").replace(/[-_]+/g, " "),
-        venue: parsed[0].venue,
-        startsOn: dates[0],
-        endsOn: dates[dates.length - 1],
-      });
-      setMessage(`${parsed.length} assignment rows are ready to review.`);
+      setDetails(destinationEvent
+        ? {
+            name: destinationEvent.name,
+            venue: destinationEvent.venue_name,
+            startsOn: destinationEvent.starts_on < dates[0] ? destinationEvent.starts_on : dates[0],
+            endsOn: destinationEvent.ends_on > dates[dates.length - 1] ? destinationEvent.ends_on : dates[dates.length - 1],
+          }
+        : {
+            name: file.name.replace(/\.csv$/i, "").replace(/[-_]+/g, " "),
+            venue: parsed[0].venue,
+            startsOn: dates[0],
+            endsOn: dates[dates.length - 1],
+          });
+      setMessage(destinationEvent
+        ? `${parsed.length} assignment rows are ready to add to ${destinationEvent.name}.`
+        : `${parsed.length} assignment rows are ready to create a new event.`);
     } catch (error) {
       setRows([]);
       setMessage(error instanceof Error ? error.message : "Unable to read that CSV.");
@@ -280,8 +318,15 @@ function ImportView({
     setBusy(true);
     setMessage("Importing tournament…");
     try {
-      const event = await importTournament(session, profile, { ...details, fileName }, rows);
-      setMessage("Tournament imported successfully.");
+      const event = await importTournament(
+        session,
+        profile,
+        { ...details, fileName, eventId: destinationEventId || undefined },
+        rows,
+      );
+      setMessage(destinationEventId
+        ? `Schedule added to ${event.name} successfully.`
+        : "Tournament created successfully.");
       onImported(event);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Import failed.");
@@ -303,11 +348,13 @@ function ImportView({
       </article>
       <article className="panel import-review">
         <p className="eyebrow">IMPORT REVIEW</p><h2>{rows.length ? `${games} games · ${referees} referees` : "Select a file to begin"}</h2>
-        <label>Event name<input value={details.name} onChange={(event) => setDetails({ ...details, name: event.target.value })} /></label>
-        <label>Primary venue<input value={details.venue} onChange={(event) => setDetails({ ...details, venue: event.target.value })} /></label>
+        <label>Import destination<select value={destinationEventId} onChange={(event) => chooseDestination(event.target.value)}><option value="">Create a new event</option>{events.map((event) => <option value={event.id} key={event.id}>Add to {event.name}</option>)}</select></label>
+        <label>Event name<input value={details.name} disabled={Boolean(destinationEvent)} onChange={(event) => setDetails({ ...details, name: event.target.value })} /></label>
+        <label>Primary venue<input value={details.venue} disabled={Boolean(destinationEvent)} onChange={(event) => setDetails({ ...details, venue: event.target.value })} /></label>
         <div className="date-fields"><label>Starts<input type="date" value={details.startsOn} onChange={(event) => setDetails({ ...details, startsOn: event.target.value })} /></label><label>Ends<input type="date" value={details.endsOn} onChange={(event) => setDetails({ ...details, endsOn: event.target.value })} /></label></div>
+        {destinationEvent && <p className="import-note">Games with new Assignr IDs will be added. Matching game IDs and their imported referee crews will be updated. Existing check-ins and other event days stay in place.</p>}
         {message && <p className="pilot-message">{message}</p>}
-        <button className="primary wide" disabled={busy || !rows.length} onClick={confirmImport}>{busy ? "Importing…" : "Import tournament"}</button>
+        <button className="primary wide" disabled={busy || !rows.length} onClick={confirmImport}>{busy ? "Importing…" : destinationEvent ? "Add schedule to event" : "Create event"}</button>
       </article>
     </div>
     {rows.length > 0 && <div className="panel preview-table"><table><thead><tr><th>Game</th><th>Date/time</th><th>Field</th><th>Official</th><th>Position</th></tr></thead><tbody>{rows.slice(0, 12).map((row, index) => <tr key={`${row.external_id}-${row.official_email}-${index}`}><td>{row.home_team} vs. {row.away_team}</td><td>{row.date} {row.start_time}</td><td>{row.field}</td><td>{row.official_name}<small>{row.official_email}</small></td><td>{row.position}</td></tr>)}</tbody></table>{rows.length > 12 && <p>Showing 12 of {rows.length} rows.</p>}</div>}
@@ -391,13 +438,13 @@ function Dashboard({ session }: { session: RefHQSession }) {
       <span>{event ? `${event.venue_name} · ${formatDate(event.starts_on)}` : "No event imported"}</span>
     </div>
     <div className="shell">
-      {!event && isStaff && <ImportView session={session} profile={profile!} onImported={handleImported} />}
+      {!event && isStaff && <ImportView session={session} profile={profile!} events={events} onImported={handleImported} />}
       {event && view === "board" && (isStaff ? <AssignmentBoard data={data} /> : <RefereeDay event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} />)}
       {event && view === "checkin" && <CheckInView event={event} data={data} isStaff={Boolean(isStaff)} />}
       {event && view === "schedule" && <ScheduleView data={data} />}
       {event && view === "coaching" && <Placeholder title="Coaching assignments" copy="Assign coaches to this event and its matches." />}
       {event && view === "assessments" && <Placeholder title="Assessment center" copy="Complete and review structured referee feedback." />}
-      {isStaff && view === "import" && profile && <ImportView session={session} profile={profile} onImported={handleImported} />}
+      {isStaff && view === "import" && profile && <ImportView session={session} profile={profile} events={events} onImported={handleImported} />}
     </div>
     <footer><div className="brand footer-brand"><Mark /><span><strong>RefHQ</strong><small>PROVIDED BY FALKSPORTS</small></span></div><p>Better prepared. Better supported. Better officiating.</p><span>© 2026 FalkSports</span></footer>
   </main>;

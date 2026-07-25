@@ -1,4 +1,4 @@
--- RefHQ MVP schema for Supabase/PostgreSQL
+-- Law18Referee Management MVP schema for Supabase/PostgreSQL
 create extension if not exists "pgcrypto";
 
 create type public.app_role as enum ('admin', 'assignor', 'referee', 'coach');

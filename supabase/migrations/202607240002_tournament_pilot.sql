@@ -1,4 +1,4 @@
--- RefHQ small-tournament pilot
+-- Law18Referee Management small-tournament pilot
 -- Adds importable officials, account linking, and official-based check-in.
 
 create table if not exists public.officials (

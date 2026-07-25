@@ -1,4 +1,4 @@
--- Allow authenticated RefHQ users to reach the tables protected by RLS.
+-- Allow authenticated Law18Referee Management users to reach the tables protected by RLS.
 -- Row-level security policies remain the authorization boundary.
 
 grant usage on schema public to authenticated;

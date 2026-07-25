@@ -1,6 +1,8 @@
-# RefHQ
+# Law18Referee Management
 
-RefHQ is a responsive tournament referee operations MVP provided by FalkSports. It complements Assignr with QR check-in, live attendance, coach assignments, structured assessments, and development history.
+Law18Referee Management is a responsive tournament referee operations MVP provided by FalkSports. It complements Assignr with QR check-in, live attendance, coach assignments, structured assessments, and development history.
+
+The future production domain is `law18ref.com`. The pilot remains on its existing Cloudflare address until it is ready for full use. A draft logo concept is stored at `public/logo-draft-law18referee-management.png`; it is not yet the approved production logo.
 
 The current pilot is designed for a small live tournament. Assignors can import an Assignr-format CSV, switch between events, monitor the full-day staffing board, and see check-ins update. Imported referees create their own account with the same email address contained in the CSV.
 
@@ -64,12 +66,12 @@ Never expose `SUPABASE_SERVICE_ROLE_KEY` to browser code or commit `.env.local`.
 3. Switch to the imported event using the event selector.
 4. Display the event QR from **Check-in** at referee headquarters.
 5. Each referee selects **Create referee account** and uses the exact email address imported from Assignr.
-6. Referees can open RefHQ from their Home Screen, view confirmed assignments, scan the event QR, and check in.
+6. Referees can open Law18Referee Management from their Home Screen, view confirmed assignments, scan the event QR, and check in.
 7. The assignor monitors arrivals from **Assignment board**.
 
 For a later schedule release, return to **Import**, choose **Add to [event name]** as the destination, and upload the next CSV. New Assignr game IDs are appended to the event. Matching game IDs and the referee crews included for those games are updated, while other days and existing check-ins remain intact. Every upload is retained in the import history.
 
-The expected CSV template is downloadable inside RefHQ and is also stored at `examples/assignr-schedule.csv`.
+The expected CSV template is downloadable inside Law18Referee Management and is also stored at `examples/assignr-schedule.csv`.
 
 ## Cloudflare deployment
 
@@ -91,6 +93,29 @@ The hosted pilot uses Supabase as its source of truth. Do not use it as the sole
 
 ## Production checklist
 
+- Next update: replace the single global profile role with scoped organization and event memberships.
+  - Add the hierarchy: site owner → organization admin → event admin → assignor → referee coach → referee.
+  - Allow organization admins to create/manage organizations, members, and events and inherit all lower-role capabilities.
+  - Allow event admins to create events and fully manage only the events where they are listed as an event admin.
+  - Allow organization and event admins to assign assignors and referee coaches to specific events.
+  - Give assignors schedule import, assignment editing, referee messaging, check-in oversight, coaching-data access, and coach-assignment tools for their assigned events.
+  - Let event admins enable or disable assignor access to evaluation and coaching tools.
+  - Scope referee-coach schedule access to assigned dates, venues, games, crews, or referees, defaulting to the full event schedule.
+  - Add public evaluations that evaluated referees can view and private evaluations limited to the submitting coach and the event’s assignors/admins, with organization admins and the site owner inheriting access.
+  - Add audit history for role changes, event access, coaching-tool settings, and evaluation visibility changes.
+  - Make event removal a recoverable archive action before permanent deletion is considered.
+  - Add an organization referee directory so each referee belongs to the organization once and can participate in multiple events.
+  - Automatically create or reuse organization referee records when officials first appear in a schedule import.
+  - Add bulk referee import independent of an event, manual referee creation, and duplicate-account review tools.
+  - Add optional invitation emails with secure, expiring account-creation links and pending, active, suspended, and archived membership states.
+  - Default to an administrator-reviewed workflow: import referees, review new and matched records, then explicitly send invitations individually or in bulk.
+  - Add invitation delivery states for pending, delivered, accepted, expired, and failed invitations.
+  - Let administrators resend invitations, copy a secure invitation link, correct an email before resending, and defer invitations until the schedule is ready.
+  - Suppress invitations during test imports and prevent duplicate or premature invitation emails across repeated schedule imports.
+  - On account setup, have referees confirm their name and email, create a password, activate their organization membership, and immediately receive access to linked assignments.
+  - Distinguish organization membership from participation or assignments within a particular event.
+  - Support schedule rows without email addresses by creating unclaimed provisional referee records, while requiring an admin to add and verify an email before the referee can claim an account.
+  - Add identity-matching review for provisional referees; never automatically merge people using name alone.
 - Add automated tests for RLS role boundaries and check-in time rules.
 - Add a server-managed invitation option for organizations that do not want referee self-registration.
 - Add offline queuing for check-ins when tournament connectivity is unreliable.

@@ -112,7 +112,6 @@ export function AuthPanel({ onSession, recovery = false }: AuthPanelProps) {
         </>}
         {mode === "signup" && <button className="auth-link" onClick={() => setMode("login")} disabled={busy}>Already have an account? Sign in</button>}
       </section>
-      <p className="auth-footer">Better prepared. Better supported. Better officiating.</p>
     </main>
   );
 }

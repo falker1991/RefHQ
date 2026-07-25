@@ -82,8 +82,7 @@ export function AuthPanel({ onSession, recovery = false }: AuthPanelProps) {
   return (
     <main className="auth-page">
       <section className="auth-brand">
-        <div className="auth-logo"><span /><span /><span /></div>
-        <div><strong className="brand-wordmark"><span className="brand-primary">Law18Ref</span><span className="brand-secondary">eree Management</span></strong><small>PROVIDED BY FALKSPORTS</small></div>
+        <span className="auth-logo-lockup"><img src="/logo-draft-law18referee-management-v4.png" alt="Law18Referee Management" /></span>
       </section>
       <section className="auth-card">
         <p className="eyebrow">WELCOME TO LAW18REFEREE MANAGEMENT</p>

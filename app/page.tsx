@@ -30,7 +30,7 @@ type EventData = {
 };
 
 function Mark() {
-  return <span className="mark"><i /><i /><i /></span>;
+  return <span className="logo-lockup"><img src="/logo-draft-law18referee-management-v4.png" alt="Law18Referee Management" /></span>;
 }
 
 function initials(name: string) {
@@ -429,7 +429,7 @@ function Dashboard({ session }: { session: Law18Session }) {
 
   return <main>
     <header className="topbar">
-      <button className="brand" onClick={() => setView(isStaff ? "board" : "schedule")}><Mark /><span><strong className="brand-wordmark"><span className="brand-primary">Law18Ref</span><span className="brand-secondary">eree Management</span></strong><small>PROVIDED BY FALKSPORTS</small></span></button>
+      <button className="brand" aria-label="Law18Referee Management home" onClick={() => setView(isStaff ? "board" : "schedule")}><Mark /></button>
       <nav>{nav.map(([id, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}>{label}</button>)}</nav>
       <button className="avatar account-avatar" aria-label="Sign out" title="Sign out" onClick={() => auth.signOut()}>{initials(profile?.full_name || session.user.email || "RH")}</button>
     </header>
@@ -446,7 +446,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {event && view === "assessments" && <Placeholder title="Assessment center" copy="Complete and review structured referee feedback." />}
       {isStaff && view === "import" && profile && <ImportView session={session} profile={profile} events={events} onImported={handleImported} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /><span><strong className="brand-wordmark"><span className="brand-primary">Law18Ref</span><span className="brand-secondary">eree Management</span></strong><small>PROVIDED BY FALKSPORTS</small></span></div><p>Better prepared. Better supported. Better officiating.</p><span>© 2026 FalkSports</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><p>Better prepared. Better supported. Better officiating.</p><span>© 2026 FalkSports</span></footer>
   </main>;
 }
 

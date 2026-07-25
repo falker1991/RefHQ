@@ -1,10 +1,10 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { auth, type RefHQSession } from "./auth-client";
+import { auth, type Law18Session } from "./auth-client";
 
 type AuthPanelProps = {
-  onSession: (session: RefHQSession) => void;
+  onSession: (session: Law18Session) => void;
   recovery?: boolean;
 };
 
@@ -83,10 +83,10 @@ export function AuthPanel({ onSession, recovery = false }: AuthPanelProps) {
     <main className="auth-page">
       <section className="auth-brand">
         <div className="auth-logo"><span /><span /><span /></div>
-        <div><strong>RefHQ</strong><small>PROVIDED BY FALKSPORTS</small></div>
+        <div><strong className="brand-wordmark"><span className="brand-primary">Law18Ref</span><span className="brand-secondary">eree Management</span></strong><small>PROVIDED BY FALKSPORTS</small></div>
       </section>
       <section className="auth-card">
-        <p className="eyebrow">WELCOME TO REFHQ</p>
+        <p className="eyebrow">WELCOME TO LAW18REFEREE MANAGEMENT</p>
         <h1>{mode === "recovery" ? "Create your password" : mode === "signup" ? "Create referee account" : "Sign in"}</h1>
         <p className="auth-intro">
           {mode === "recovery"

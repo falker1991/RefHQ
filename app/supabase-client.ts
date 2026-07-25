@@ -1,4 +1,4 @@
-import type { RefHQSession } from "./auth-client";
+import type { Law18Session } from "./auth-client";
 
 const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -62,7 +62,7 @@ function configuration() {
 }
 
 async function rest<T>(
-  session: RefHQSession,
+  session: Law18Session,
   path: string,
   init: RequestInit = {},
   prefer?: string,
@@ -88,12 +88,12 @@ async function rest<T>(
 
 const enc = encodeURIComponent;
 
-export async function loadProfile(session: RefHQSession) {
+export async function loadProfile(session: Law18Session) {
   const rows = await rest<Profile[]>(session, `profiles?id=eq.${enc(session.user.id)}&select=*`);
   return rows[0] ?? null;
 }
 
-export async function linkCurrentReferee(session: RefHQSession) {
+export async function linkCurrentReferee(session: Law18Session) {
   const config = configuration();
   const response = await fetch(`${config.baseUrl}/rest/v1/rpc/link_current_referee`, {
     method: "POST",
@@ -110,11 +110,11 @@ export async function linkCurrentReferee(session: RefHQSession) {
   }
 }
 
-export async function loadEvents(session: RefHQSession) {
+export async function loadEvents(session: Law18Session) {
   return rest<EventRecord[]>(session, "events?select=*&order=starts_on.desc");
 }
 
-export async function loadEventData(session: RefHQSession, eventId: string) {
+export async function loadEventData(session: Law18Session, eventId: string) {
   const games = await rest<GameRecord[]>(
     session,
     `games?event_id=eq.${enc(eventId)}&select=*&order=starts_at.asc`,
@@ -137,7 +137,7 @@ export async function loadEventData(session: RefHQSession, eventId: string) {
 }
 
 export async function checkIn(
-  session: RefHQSession,
+  session: Law18Session,
   eventId: string,
   officialId: string,
   method: "qr" | "app" | "assignor" = "app",
@@ -227,7 +227,7 @@ function normalizePosition(position: string): AssignmentRecord["position"] {
 }
 
 export async function importTournament(
-  session: RefHQSession,
+  session: Law18Session,
   profile: Profile,
   details: {
     name: string;

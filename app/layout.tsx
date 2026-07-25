@@ -1,21 +1,16 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const requestHeaders = await headers();
-  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "localhost:3000";
-  const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  const image = `${protocol}://${host}/og.png`;
-  const title = "RefHQ — Tournament referee operations";
+  const title = "Law18Referee Management — Tournament referee operations";
   const description = "Referee check-in, coaching, assessments, and tournament operations. Provided by FalkSports.";
   return {
     title,
     description,
-    openGraph: { title, description, images: [{ url: image, width: 1200, height: 630, alt: "RefHQ tournament operations and referee development" }] },
-    twitter: { card: "summary_large_image", title, description, images: [image] },
+    openGraph: { title, description },
+    twitter: { card: "summary", title, description },
     manifest: "/manifest.webmanifest",
-    appleWebApp: { capable: true, statusBarStyle: "default", title: "RefHQ" },
+    appleWebApp: { capable: true, statusBarStyle: "default", title: "Law18Referee Management" },
   };
 }
 

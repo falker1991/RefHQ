@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { AuthPanel } from "./auth-panel";
-import { auth, type RefHQSession } from "./auth-client";
+import { auth, type Law18Session } from "./auth-client";
 import {
   checkIn,
   importTournament,
@@ -113,7 +113,7 @@ function RefereeDay({
 }: {
   event: EventRecord;
   data: EventData;
-  session: RefHQSession;
+  session: Law18Session;
   onCheckedIn: () => void;
 }) {
   const email = session.user.email?.toLowerCase();
@@ -207,7 +207,7 @@ function QrScanner({ onFound }: { onFound: () => void }) {
 
   useEffect(() => () => streamRef.current?.getTracks().forEach((track) => track.stop()), []);
   return <section className="panel scanner-card" id="scan">
-    <div><p className="eyebrow">EVENT QR</p><h2>Scan at referee headquarters</h2><p>Use RefHQ or your phone’s Camera app.</p></div>
+    <div><p className="eyebrow">EVENT QR</p><h2>Scan at referee headquarters</h2><p>Use Law18Referee Management or your phone’s Camera app.</p></div>
     <video ref={videoRef} autoPlay muted playsInline className={scanning ? "scanner-video active" : "scanner-video"} />
     <button className="secondary" onClick={start} disabled={scanning}>{scanning ? "Scanning…" : "Open QR scanner"}</button>
     {message && <p className="pilot-message">{message}</p>}
@@ -246,7 +246,7 @@ function ImportView({
   events,
   onImported,
 }: {
-  session: RefHQSession;
+  session: Law18Session;
   profile: Profile;
   events: EventRecord[];
   onImported: (event: EventRecord) => void;
@@ -342,7 +342,7 @@ function ImportView({
     <div className="import-grid">
       <article className="panel import-card">
         <span className="upload-icon">↑</span><h2>{fileName || "Choose an Assignr CSV"}</h2>
-        <p>Expected columns match the downloadable RefHQ template.</p>
+        <p>Expected columns match the downloadable Law18Referee Management template.</p>
         <label className="primary file-button">Choose CSV<input type="file" accept=".csv,text/csv" onChange={(event) => readFile(event.target.files?.[0])} /></label>
         <a className="text-button sample-link" href="/assignr-schedule.csv" download>Download sample CSV</a>
       </article>
@@ -365,7 +365,7 @@ function Placeholder({ title, copy }: { title: string; copy: string }) {
   return <section className="page-section"><div className="section-title"><div><p className="eyebrow">PILOT WORKSPACE</p><h1>{title}</h1><p>{copy}</p></div></div><EmptyState>This area is ready for the next pilot iteration.</EmptyState></section>;
 }
 
-function Dashboard({ session }: { session: RefHQSession }) {
+function Dashboard({ session }: { session: Law18Session }) {
   const [view, setView] = useState<View>("board");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [events, setEvents] = useState<EventRecord[]>([]);
@@ -394,7 +394,7 @@ function Dashboard({ session }: { session: RefHQSession }) {
         setEventId(selected);
         if (selected) setData(await loadEventData(session, selected));
       } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Unable to load RefHQ.");
+        setError(reason instanceof Error ? reason.message : "Unable to load Law18Referee Management.");
       } finally {
         setLoading(false);
       }
@@ -425,11 +425,11 @@ function Dashboard({ session }: { session: RefHQSession }) {
       : [["board", "My day"], ["checkin", "QR check-in"], ["schedule", "Schedule"], ["assessments", "My feedback"]];
 
   if (loading) return <main className="auth-page"><p className="auth-loading">Loading tournament data…</p></main>;
-  if (error) return <main className="auth-page"><section className="auth-card"><h1>Setup needed</h1><p className="auth-intro">{error}</p><p>Run the latest RefHQ Supabase migration, then reload this page.</p><button className="secondary wide" onClick={() => auth.signOut()}>Sign out</button></section></main>;
+  if (error) return <main className="auth-page"><section className="auth-card"><h1>Setup needed</h1><p className="auth-intro">{error}</p><p>Run the latest Law18Referee Management Supabase migration, then reload this page.</p><button className="secondary wide" onClick={() => auth.signOut()}>Sign out</button></section></main>;
 
   return <main>
     <header className="topbar">
-      <button className="brand" onClick={() => setView(isStaff ? "board" : "schedule")}><Mark /><span><strong>RefHQ</strong><small>PROVIDED BY FALKSPORTS</small></span></button>
+      <button className="brand" onClick={() => setView(isStaff ? "board" : "schedule")}><Mark /><span><strong className="brand-wordmark"><span className="brand-primary">Law18Ref</span><span className="brand-secondary">eree Management</span></strong><small>PROVIDED BY FALKSPORTS</small></span></button>
       <nav>{nav.map(([id, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}>{label}</button>)}</nav>
       <button className="avatar account-avatar" aria-label="Sign out" title="Sign out" onClick={() => auth.signOut()}>{initials(profile?.full_name || session.user.email || "RH")}</button>
     </header>
@@ -446,15 +446,15 @@ function Dashboard({ session }: { session: RefHQSession }) {
       {event && view === "assessments" && <Placeholder title="Assessment center" copy="Complete and review structured referee feedback." />}
       {isStaff && view === "import" && profile && <ImportView session={session} profile={profile} events={events} onImported={handleImported} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /><span><strong>RefHQ</strong><small>PROVIDED BY FALKSPORTS</small></span></div><p>Better prepared. Better supported. Better officiating.</p><span>© 2026 FalkSports</span></footer>
+    <footer><div className="brand footer-brand"><Mark /><span><strong className="brand-wordmark"><span className="brand-primary">Law18Ref</span><span className="brand-secondary">eree Management</span></strong><small>PROVIDED BY FALKSPORTS</small></span></div><p>Better prepared. Better supported. Better officiating.</p><span>© 2026 FalkSports</span></footer>
   </main>;
 }
 
 export default function Home() {
-  const [session, setSession] = useState<RefHQSession | null>(null);
+  const [session, setSession] = useState<Law18Session | null>(null);
   const [recovery, setRecovery] = useState(false);
   const [loading, setLoading] = useState(true);
-  const handleSession = useCallback((nextSession: RefHQSession) => {
+  const handleSession = useCallback((nextSession: Law18Session) => {
     setRecovery(false);
     setSession(nextSession);
   }, []);
@@ -468,7 +468,7 @@ export default function Home() {
   useEffect(() => {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
   }, []);
-  if (loading) return <main className="auth-page"><p className="auth-loading">Loading RefHQ…</p></main>;
+  if (loading) return <main className="auth-page"><p className="auth-loading">Loading Law18Referee Management…</p></main>;
   if (!session || recovery) return <AuthPanel onSession={handleSession} recovery={recovery} />;
   return <Dashboard session={session} />;
 }

@@ -1,4 +1,4 @@
-export type RefHQSession = {
+export type Law18Session = {
   access_token: string;
   refresh_token: string;
   expires_at?: number;
@@ -7,11 +7,11 @@ export type RefHQSession = {
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const storageKey = "refhq-session";
-const listeners = new Set<(session: RefHQSession | null) => void>();
+const storageKey = "law18referee-session";
+const listeners = new Set<(session: Law18Session | null) => void>();
 
 function config() {
-  if (!url || !key) throw new Error("RefHQ is missing its Supabase public configuration.");
+  if (!url || !key) throw new Error("Law18Referee Management is missing its Supabase public configuration.");
   return { url, key };
 }
 
@@ -31,13 +31,13 @@ async function request(path: string, init: RequestInit = {}, token?: string) {
   return data;
 }
 
-function save(session: RefHQSession | null) {
+function save(session: Law18Session | null) {
   if (session) localStorage.setItem(storageKey, JSON.stringify(session));
   else localStorage.removeItem(storageKey);
   listeners.forEach((listener) => listener(session));
 }
 
-function fromUrl(): { session: RefHQSession | null; recovery: boolean } {
+function fromUrl(): { session: Law18Session | null; recovery: boolean } {
   const params = new URLSearchParams(window.location.hash.slice(1));
   const accessToken = params.get("access_token");
   const refreshToken = params.get("refresh_token");
@@ -60,13 +60,13 @@ export const auth = {
     const raw = localStorage.getItem(storageKey);
     if (!raw) return { session: null, recovery: false };
     try {
-      return { session: JSON.parse(raw) as RefHQSession, recovery: false };
+      return { session: JSON.parse(raw) as Law18Session, recovery: false };
     } catch {
       localStorage.removeItem(storageKey);
       return { session: null, recovery: false };
     }
   },
-  subscribe(listener: (session: RefHQSession | null) => void) {
+  subscribe(listener: (session: Law18Session | null) => void) {
     listeners.add(listener);
     return () => {
       listeners.delete(listener);
@@ -76,7 +76,7 @@ export const auth = {
     const session = await request("/token?grant_type=password", {
       method: "POST",
       body: JSON.stringify({ email, password }),
-    }) as RefHQSession;
+    }) as Law18Session;
     save(session);
     return session;
   },
@@ -89,7 +89,7 @@ export const auth = {
         data: { full_name: fullName },
         email_redirect_to: window.location.origin,
       }),
-    }) as Promise<RefHQSession>;
+    }) as Promise<Law18Session>;
   },
   async sendRecovery(email: string) {
     await request("/recover", {
@@ -97,7 +97,7 @@ export const auth = {
       body: JSON.stringify({ email, redirect_to: window.location.origin }),
     });
   },
-  async updatePassword(session: RefHQSession, password: string) {
+  async updatePassword(session: Law18Session, password: string) {
     const user = await request("/user", {
       method: "PUT",
       body: JSON.stringify({ password }),

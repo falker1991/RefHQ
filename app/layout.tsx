@@ -14,6 +14,8 @@ export async function generateMetadata(): Promise<Metadata> {
     description,
     openGraph: { title, description, images: [{ url: image, width: 1200, height: 630, alt: "RefHQ tournament operations and referee development" }] },
     twitter: { card: "summary_large_image", title, description, images: [image] },
+    manifest: "/manifest.webmanifest",
+    appleWebApp: { capable: true, statusBarStyle: "default", title: "RefHQ" },
   };
 }
 

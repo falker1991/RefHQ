@@ -1,168 +1,406 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { AuthPanel } from "./auth-panel";
 import { auth, type RefHQSession } from "./auth-client";
+import {
+  checkIn,
+  importTournament,
+  linkCurrentReferee,
+  loadEventData,
+  loadEvents,
+  loadProfile,
+  parseAssignrCsv,
+  type AssignmentRecord,
+  type CheckInRecord,
+  type EventRecord,
+  type GameRecord,
+  type ImportRow,
+  type OfficialRecord,
+  type Profile,
+} from "./supabase-client";
 
-type View = "overview" | "checkin" | "schedule" | "coaching" | "assessments" | "import";
-type Role = "Assignor" | "Referee" | "Referee coach";
+type View = "board" | "checkin" | "schedule" | "coaching" | "assessments" | "import";
+type EventData = {
+  games: GameRecord[];
+  assignments: AssignmentRecord[];
+  officials: OfficialRecord[];
+  checkIns: CheckInRecord[];
+};
 
-const officials = [
-  { name: "Maya Rodriguez", initials: "MR", role: "Referee", first: "8:00 AM", field: "Field 1", status: "Checked in", time: "7:24 AM" },
-  { name: "Jordan Lee", initials: "JL", role: "Assistant referee", first: "8:00 AM", field: "Field 1", status: "Checked in", time: "7:31 AM" },
-  { name: "Chris Bennett", initials: "CB", role: "Assistant referee", first: "8:00 AM", field: "Field 1", status: "Due soon", time: "—" },
-  { name: "Avery Wilson", initials: "AW", role: "Referee", first: "8:30 AM", field: "Field 3", status: "Checked in", time: "7:42 AM" },
-  { name: "Sam Patel", initials: "SP", role: "Assistant referee", first: "8:30 AM", field: "Field 3", status: "Late", time: "—" },
-  { name: "Taylor Morgan", initials: "TM", role: "Referee", first: "9:00 AM", field: "Field 2", status: "Upcoming", time: "—" },
-];
-
-const games = [
-  { time: "8:00 AM", field: "Field 1", match: "River City FC vs. Capital United", division: "U16 Boys • Premier", crew: "Maya R. · Jordan L. · Chris B.", status: "Crew due" },
-  { time: "8:30 AM", field: "Field 3", match: "Northside SC vs. Lakeview FC", division: "U14 Girls • Gold", crew: "Avery W. · Sam P. · Devon K.", status: "Missing" },
-  { time: "9:00 AM", field: "Field 2", match: "Metro Stars vs. Union Athletic", division: "U18 Boys • Showcase", crew: "Taylor M. · Casey N. · Riley J.", status: "Ready" },
-  { time: "9:30 AM", field: "Field 4", match: "City Juniors vs. Eastern Elite", division: "U15 Girls • Premier", crew: "Morgan S. · Alex T. · Jamie D.", status: "Ready" },
-];
-
-const assessments = [
-  { referee: "Maya Rodriguez", game: "River City FC vs. Capital United", date: "Jun 22", score: "4.4", focus: "Advantage & presence", state: "In progress" },
-  { referee: "Avery Wilson", game: "Northside SC vs. Lakeview FC", date: "May 18", score: "4.1", focus: "Positioning", state: "Shared" },
-  { referee: "Jordan Lee", game: "Metro Stars vs. Union Athletic", date: "Apr 27", score: "3.8", focus: "Flag technique", state: "Shared" },
-];
-
-function Mark({ small = false }: { small?: boolean }) {
-  return <span className={small ? "mark small" : "mark"}><i /><i /><i /></span>;
+function Mark() {
+  return <span className="mark"><i /><i /><i /></span>;
 }
 
-function Status({ children }: { children: string }) {
-  return <span className={`status ${children.toLowerCase().replace(" ", "-")}`}><b />{children}</span>;
+function initials(name: string) {
+  return name.split(/\s+/).map((word) => word[0]).join("").slice(0, 2).toUpperCase();
 }
 
-function Overview({ setView }: { setView: (v: View) => void }) {
-  return (
-    <>
-      <section className="welcome">
-        <div>
-          <p className="eyebrow">SATURDAY, JUNE 28</p>
-          <h1>Good morning, Alex.</h1>
-          <p>Here’s what needs your attention at the Capital Cup.</p>
-        </div>
-        <button className="primary" onClick={() => setView("checkin")}><span className="scan-icon">⌗</span> Open check-in</button>
-      </section>
-
-      <section className="metrics" aria-label="Tournament summary">
-        <article><span className="metric-icon green">✓</span><div><strong>42</strong><p>Checked in</p></div><em>of 48 due</em></article>
-        <article><span className="metric-icon amber">!</span><div><strong>4</strong><p>Due soon</p></div><em>next 30 min</em></article>
-        <article><span className="metric-icon red">×</span><div><strong>2</strong><p>Missing</p></div><em>needs action</em></article>
-        <article><span className="metric-icon blue">◎</span><div><strong>7</strong><p>Assessments</p></div><em>3 complete</em></article>
-      </section>
-
-      <div className="content-grid">
-        <section className="panel attendance">
-          <div className="panel-head">
-            <div><p className="eyebrow">LIVE ATTENDANCE</p><h2>Officials arriving now</h2></div>
-            <button className="text-button" onClick={() => setView("checkin")}>View all <span>→</span></button>
-          </div>
-          <div className="official-list">
-            {officials.slice(0, 5).map((person) => (
-              <div className="official-row" key={person.name}>
-                <span className="avatar">{person.initials}</span>
-                <div className="official-name"><strong>{person.name}</strong><span>{person.role} · {person.field}</span></div>
-                <div className="first-game"><span>FIRST GAME</span><strong>{person.first}</strong></div>
-                <Status>{person.status}</Status>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <aside>
-          <section className="panel next-up">
-            <div className="panel-head compact"><div><p className="eyebrow">NEXT UP</p><h2>8:00 AM kickoffs</h2></div><span className="count">3 games</span></div>
-            {games.slice(0, 2).map((game) => (
-              <button className="game-card" key={game.field} onClick={() => setView("schedule")}>
-                <span className="field">{game.field}</span>
-                <strong>{game.match}</strong>
-                <small>{game.division}</small>
-                <span className="crew"><span className="stacked">MR JL CB</span>{game.status}</span>
-              </button>
-            ))}
-          </section>
-          <section className="support">
-            <span>?</span><div><strong>Need tournament help?</strong><p>View the quick-start guide or contact support.</p></div><button>Get help</button>
-          </section>
-        </aside>
-      </div>
-    </>
-  );
+function formatTime(value: string) {
+  return new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
 
-function CheckIn() {
-  const [checked, setChecked] = useState(false);
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat([], { weekday: "long", month: "short", day: "numeric" }).format(new Date(`${value}T12:00:00`));
+}
+
+function positionLabel(position: AssignmentRecord["position"]) {
+  return {
+    referee: "Referee",
+    assistant_referee: "Assistant referee",
+    fourth_official: "Fourth official",
+    mentor: "Mentor",
+  }[position];
+}
+
+function Status({ checked, due = false }: { checked: boolean; due?: boolean }) {
+  return <span className={`status ${checked ? "checked-in" : due ? "due-soon" : ""}`}><b />{checked ? "Checked in" : due ? "Due soon" : "Expected"}</span>;
+}
+
+function EmptyState({ children }: { children: React.ReactNode }) {
+  return <div className="panel empty-state"><span>◎</span><p>{children}</p></div>;
+}
+
+function AssignmentBoard({ data }: { data: EventData }) {
+  const officials = useMemo(() => new Map(data.officials.map((official) => [official.id, official])), [data.officials]);
+  const checked = useMemo(() => new Set(data.checkIns.filter((item) => item.status === "checked_in").map((item) => item.official_id)), [data.checkIns]);
+  const fields = [...new Set(data.games.map((game) => game.field_name))];
+  const times = [...new Set(data.games.map((game) => formatTime(game.starts_at)))];
+  if (!data.games.length) return <EmptyState>Import a schedule to populate the assignment board.</EmptyState>;
   return (
     <section className="page-section">
-      <div className="section-title"><div><p className="eyebrow">TOURNAMENT OPERATIONS</p><h1>Referee check-in</h1><p>Capital Cup · Riverside Sports Complex</p></div><Status>Live</Status></div>
-      <div className="checkin-grid">
-        <article className="panel qr-panel">
-          <div className="qr" aria-label="Tournament QR code">
-            <QRCodeSVG value="https://refhq.app/check-in/capital-cup-2026" size={176} bgColor="#ffffff" fgColor="#12261f" level="M" />
-          </div>
-          <h2>Scan to check in</h2><p>Open <strong>refhq.app/check-in/capital-cup</strong> on any phone.</p>
-          <button className="secondary">Download QR code</button>
-        </article>
-        <article className="panel self-check">
-          <p className="eyebrow">MOBILE EXPERIENCE</p>
-          <div className="phone-card">
-            <Mark small />
-            <span className="event-pill">Capital Cup</span>
-            <h2>{checked ? "You’re checked in." : "Ready for match day?"}</h2>
-            <p>{checked ? "Arrival recorded at 7:44 AM." : "Your first assignment is at 8:00 AM on Field 1."}</p>
-            <div className="assignment-mini"><span>REFEREE</span><strong>River City FC<br />vs. Capital United</strong><small>Field 1 · 8:00 AM</small></div>
-            <button className="primary wide" onClick={() => setChecked(true)} disabled={checked}>{checked ? "✓ Check-in complete" : "Check in now"}</button>
-          </div>
-        </article>
+      <div className="section-title">
+        <div><p className="eyebrow">LIVE ASSIGNMENT BOARD</p><h1>Full-day staffing</h1><p>Checked-in officials are highlighted as arrivals happen.</p></div>
+        <div className="legend"><Status checked /><Status checked={false} /></div>
       </div>
-      <section className="panel roster-panel">
-        <div className="panel-head"><div><p className="eyebrow">TODAY’S ROSTER</p><h2>48 officials expected</h2></div><input className="search" aria-label="Search officials" placeholder="Search officials…" /></div>
-        <div className="table">{officials.map(p => <div className="table-row" key={p.name}><span className="avatar">{p.initials}</span><strong>{p.name}</strong><span>{p.first} · {p.field}</span><span>{p.time}</span><Status>{p.status}</Status></div>)}</div>
-      </section>
+      <div className="board-wrap panel">
+        <table className="assignment-board">
+          <thead><tr><th>Time</th>{fields.map((field) => <th key={field}>{field}</th>)}</tr></thead>
+          <tbody>{times.map((time) => (
+            <tr key={time}><th>{time}</th>{fields.map((field) => {
+              const game = data.games.find((item) => item.field_name === field && formatTime(item.starts_at) === time);
+              if (!game) return <td key={field} className="board-empty">—</td>;
+              const crew = data.assignments.filter((assignment) => assignment.game_id === game.id);
+              return <td key={field}>
+                <article className="board-game">
+                  <strong>{game.home_team} <span>vs.</span> {game.away_team}</strong>
+                  <small>{game.division || "Tournament match"}</small>
+                  <div className="crew-chips">{crew.map((assignment) => {
+                    const official = officials.get(assignment.official_id);
+                    const isChecked = checked.has(assignment.official_id);
+                    return <span className={isChecked ? "crew-chip arrived" : "crew-chip"} key={assignment.id} title={positionLabel(assignment.position)}>
+                      <b>{official ? initials(official.full_name) : "?"}</b>
+                      <span>{official?.full_name || "Unassigned"}</span>
+                      <small>{positionLabel(assignment.position)}</small>
+                    </span>;
+                  })}</div>
+                </article>
+              </td>;
+            })}</tr>
+          ))}</tbody>
+        </table>
+      </div>
     </section>
   );
 }
 
-function Schedule() {
-  return <section className="page-section"><div className="section-title"><div><p className="eyebrow">CAPITAL CUP</p><h1>Today’s schedule</h1><p>Saturday, June 28 · 24 games across 4 fields</p></div><button className="secondary">Filter schedule</button></div><div className="schedule-list">{games.map(g => <article className="panel schedule-card" key={g.match}><div className="timebox"><strong>{g.time}</strong><span>{g.field}</span></div><div><h2>{g.match}</h2><p>{g.division}</p><span className="crew-line">Crew: {g.crew}</span></div><Status>{g.status}</Status><button className="dots">•••</button></article>)}</div></section>;
+function RefereeDay({
+  event,
+  data,
+  session,
+  onCheckedIn,
+}: {
+  event: EventRecord;
+  data: EventData;
+  session: RefHQSession;
+  onCheckedIn: () => void;
+}) {
+  const email = session.user.email?.toLowerCase();
+  const official = data.officials.find((item) => item.email.toLowerCase() === email);
+  const assignments = official ? data.assignments.filter((item) => item.official_id === official.id) : [];
+  const games = assignments.map((assignment) => ({
+    assignment,
+    game: data.games.find((game) => game.id === assignment.game_id),
+  })).filter((item): item is { assignment: AssignmentRecord; game: GameRecord } => Boolean(item.game));
+  const isChecked = Boolean(official && data.checkIns.some((item) => item.official_id === official.id && item.status === "checked_in"));
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function handleCheckIn(method: "qr" | "app" = "app") {
+    if (!official) return;
+    setBusy(true);
+    try {
+      await checkIn(session, event.id, official.id, method);
+      setMessage("You’re checked in. Have a great day!");
+      onCheckedIn();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to check in.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!official || !games.length) return <EmptyState>No imported assignments match {session.user.email}. Ask your assignor to confirm the email in the CSV.</EmptyState>;
+  return <section className="referee-home">
+    <div className="referee-hero">
+      <p className="eyebrow">MY TOURNAMENT DAY</p>
+      <h1>Hi, {official.full_name.split(" ")[0]}.</h1>
+      <p>{event.name} · {event.venue_name}</p>
+      <button className="primary checkin-cta" disabled={busy || isChecked} onClick={() => handleCheckIn("app")}>
+        {isChecked ? "✓ Checked in" : busy ? "Checking in…" : "Check in now"}
+      </button>
+      {message && <p className="pilot-message">{message}</p>}
+    </div>
+    <section className="mobile-actions">
+      <a href="#my-schedule"><span>☷</span><strong>My schedule</strong></a>
+      <a href="#scan"><span>⌗</span><strong>Scan QR</strong></a>
+      <button onClick={() => handleCheckIn("app")} disabled={isChecked}><span>✓</span><strong>Check in</strong></button>
+    </section>
+    <section className="panel my-games" id="my-schedule">
+      <div className="panel-head"><div><p className="eyebrow">ASSIGNED — NO ACCEPTANCE REQUIRED</p><h2>Today’s games</h2></div></div>
+      {games.map(({ assignment, game }) => <article key={assignment.id}>
+        <time>{formatTime(game.starts_at)}</time>
+        <div><strong>{game.home_team} vs. {game.away_team}</strong><p>{game.field_name} · {positionLabel(assignment.position)}</p></div>
+        <Status checked={isChecked} />
+      </article>)}
+    </section>
+    <QrScanner onFound={() => handleCheckIn("qr")} />
+  </section>;
 }
 
-function Coaching() {
-  return <section className="page-section"><div className="section-title"><div><p className="eyebrow">REFEREE DEVELOPMENT</p><h1>Coaching assignments</h1><p>Plan observations and capture feedback while it’s fresh.</p></div><button className="primary">Assign coach</button></div><div className="coach-grid">{games.slice(0,3).map((g,i) => <article className="panel coach-card" key={g.match}><div className="coach-top"><span className="date-tile"><b>JUN</b><strong>28</strong></span><Status>{i === 0 ? "In progress" : "Planned"}</Status></div><h2>{g.match}</h2><p>{g.time} · {g.field} · {g.division}</p><hr/><span className="label">OBSERVING</span><div className="observing"><span className="avatar">{i ? "AW" : "MR"}</span><div><strong>{i ? "Avery Wilson" : "Maya Rodriguez"}</strong><small>{i ? "Referee" : "Referee · Advancement track"}</small></div></div><button className="secondary wide">{i === 0 ? "Continue assessment" : "Open game plan"}</button></article>)}</div></section>;
+function QrScanner({ onFound }: { onFound: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function start() {
+    if (!navigator.mediaDevices?.getUserMedia || !("BarcodeDetector" in window)) {
+      setMessage("Use your phone’s Camera app to scan the event QR, or tap Check in.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      streamRef.current = stream;
+      if (videoRef.current) videoRef.current.srcObject = stream;
+      setScanning(true);
+      const Detector = (window as unknown as { BarcodeDetector: new (options: { formats: string[] }) => { detect: (source: HTMLVideoElement) => Promise<{ rawValue: string }[]> } }).BarcodeDetector;
+      const detector = new Detector({ formats: ["qr_code"] });
+      const scan = async () => {
+        if (!streamRef.current || !videoRef.current) return;
+        const codes = await detector.detect(videoRef.current).catch(() => []);
+        if (codes.length) {
+          streamRef.current.getTracks().forEach((track) => track.stop());
+          streamRef.current = null;
+          setScanning(false);
+          onFound();
+          return;
+        }
+        window.setTimeout(scan, 350);
+      };
+      window.setTimeout(scan, 600);
+    } catch {
+      setMessage("Camera access was not available. You can still tap Check in.");
+    }
+  }
+
+  useEffect(() => () => streamRef.current?.getTracks().forEach((track) => track.stop()), []);
+  return <section className="panel scanner-card" id="scan">
+    <div><p className="eyebrow">EVENT QR</p><h2>Scan at referee headquarters</h2><p>Use RefHQ or your phone’s Camera app.</p></div>
+    <video ref={videoRef} autoPlay muted playsInline className={scanning ? "scanner-video active" : "scanner-video"} />
+    <button className="secondary" onClick={start} disabled={scanning}>{scanning ? "Scanning…" : "Open QR scanner"}</button>
+    {message && <p className="pilot-message">{message}</p>}
+  </section>;
 }
 
-function Assessments() {
-  const [saved, setSaved] = useState(false);
-  return <section className="page-section"><div className="section-title"><div><p className="eyebrow">COACH WORKSPACE</p><h1>Assessment center</h1><p>Structured feedback that builds better referees.</p></div><button className="secondary">Export history</button></div><div className="assessment-grid"><form className="panel assessment-form" onSubmit={(e)=>{e.preventDefault();setSaved(true)}}><div className="panel-head"><div><p className="eyebrow">ACTIVE ASSESSMENT</p><h2>Maya Rodriguez</h2><p>River City FC vs. Capital United · Referee</p></div><span className="avatar big">MR</span></div>{["Positioning & movement","Decision making","Communication","Match control"].map((label,index)=><label className="rating" key={label}><span><strong>{label}</strong><small>{["Finds credible angles and anticipates play.","Applies the laws with accuracy and context.","Clear signals and confident presence.","Sets the temperature and manages players."][index]}</small></span><select defaultValue={index===3?"3":"4"}><option value="1">1 — Needs work</option><option value="2">2 — Developing</option><option value="3">3 — Effective</option><option value="4">4 — Strong</option><option value="5">5 — Exceptional</option></select></label>)}<label className="notes"><strong>Coach’s notes</strong><textarea defaultValue="Strong diagonal movement and calm communication. Look for earlier opportunities to use public warnings before the match temperature rises." /></label><button className="primary wide">{saved ? "✓ Assessment saved" : "Save assessment"}</button></form><section className="panel history"><div className="panel-head"><div><p className="eyebrow">RECENT</p><h2>Assessment history</h2></div></div>{assessments.map(a=><article key={a.referee}><div><strong>{a.referee}</strong><p>{a.game}</p><small>{a.date} · Focus: {a.focus}</small></div><span className="score">{a.score}</span><Status>{a.state}</Status></article>)}</section></div></section>;
+function CheckInView({ event, data, isStaff }: { event: EventRecord; data: EventData; isStaff: boolean }) {
+  const url = `${window.location.origin}/?event=${event.check_in_slug}`;
+  const checked = new Set(data.checkIns.map((item) => item.official_id));
+  return <section className="page-section">
+    <div className="section-title"><div><p className="eyebrow">TOURNAMENT CHECK-IN</p><h1>Arrival station</h1><p>Display or print this code at referee headquarters.</p></div></div>
+    <div className="checkin-grid">
+      <article className="panel qr-panel"><div className="qr"><QRCodeSVG value={url} size={210} /></div><h2>{event.name}</h2><p>{url}</p></article>
+      <article className="panel roster-panel"><div className="panel-head"><div><p className="eyebrow">LIVE ROSTER</p><h2>{checked.size} checked in</h2></div></div>
+        {data.officials.map((official) => <div className="official-row" key={official.id}><span className="avatar">{initials(official.full_name)}</span><div className="official-name"><strong>{official.full_name}</strong><span>{official.email}</span></div><Status checked={checked.has(official.id)} /></div>)}
+        {!data.officials.length && <EmptyState>No officials have been imported.</EmptyState>}
+      </article>
+    </div>
+    {!isStaff && <p className="pilot-message">Your personal check-in button is on My day.</p>}
+  </section>;
 }
 
-function ImportView() {
-  const [file, setFile] = useState("");
-  return <section className="page-section"><div className="section-title"><div><p className="eyebrow">ASSIGNR BRIDGE</p><h1>Import a schedule</h1><p>Bring event, game, and crew data into RefHQ in minutes.</p></div></div><div className="import-grid"><article className="panel import-card"><span className="upload-icon">↑</span><h2>{file || "Drop your Assignr CSV here"}</h2><p>CSV files up to 10 MB. You’ll review every row before anything is added.</p><label className="primary file-button">Choose CSV<input type="file" accept=".csv" onChange={e=>setFile(e.target.files?.[0]?.name || "")}/></label></article><article className="panel mapping"><p className="eyebrow">EXPECTED COLUMNS</p><h2>A simple, forgiving importer</h2>{["Date and start time","Venue and field","Home and away teams","Official name, email, and position"].map((x,i)=><div key={x}><span>{i+1}</span><p><strong>{x}</strong><small>Recognized automatically or mapped during review.</small></p></div>)}<button className="text-button">Download sample CSV →</button></article></div></section>;
+function ScheduleView({ data }: { data: EventData }) {
+  const officials = new Map(data.officials.map((official) => [official.id, official]));
+  return <section className="page-section"><div className="section-title"><div><p className="eyebrow">EVENT SCHEDULE</p><h1>Games and crews</h1><p>{data.games.length} imported games</p></div></div>
+    <div className="schedule-list">{data.games.map((game) => {
+      const crew = data.assignments.filter((assignment) => assignment.game_id === game.id);
+      return <article className="panel schedule-card" key={game.id}><div className="timebox"><strong>{formatTime(game.starts_at)}</strong><span>{game.field_name}</span></div><div><h2>{game.home_team} vs. {game.away_team}</h2><p>{game.division}</p><span className="crew-line">{crew.map((assignment) => `${positionLabel(assignment.position)}: ${officials.get(assignment.official_id)?.full_name || "Open"}`).join(" · ")}</span></div></article>;
+    })}</div>
+  </section>;
+}
+
+function ImportView({
+  session,
+  profile,
+  onImported,
+}: {
+  session: RefHQSession;
+  profile: Profile;
+  onImported: (event: EventRecord) => void;
+}) {
+  const [rows, setRows] = useState<ImportRow[]>([]);
+  const [fileName, setFileName] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [details, setDetails] = useState({ name: "", venue: "", startsOn: "", endsOn: "" });
+
+  async function readFile(file?: File) {
+    if (!file) return;
+    try {
+      const parsed = parseAssignrCsv(await file.text());
+      setRows(parsed);
+      setFileName(file.name);
+      const dates = parsed.map((row) => row.date).sort();
+      setDetails({
+        name: file.name.replace(/\.csv$/i, "").replace(/[-_]+/g, " "),
+        venue: parsed[0].venue,
+        startsOn: dates[0],
+        endsOn: dates[dates.length - 1],
+      });
+      setMessage(`${parsed.length} assignment rows are ready to review.`);
+    } catch (error) {
+      setRows([]);
+      setMessage(error instanceof Error ? error.message : "Unable to read that CSV.");
+    }
+  }
+
+  async function confirmImport() {
+    if (!rows.length || !details.name || !details.venue) return;
+    setBusy(true);
+    setMessage("Importing tournament…");
+    try {
+      const event = await importTournament(session, profile, { ...details, fileName }, rows);
+      setMessage("Tournament imported successfully.");
+      onImported(event);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Import failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const games = new Set(rows.map((row) => row.external_id)).size;
+  const referees = new Set(rows.map((row) => row.official_email)).size;
+  return <section className="page-section">
+    <div className="section-title"><div><p className="eyebrow">ASSIGNR BRIDGE</p><h1>Import a tournament</h1><p>Assignments arrive confirmed; referees only need to sign in and check in.</p></div></div>
+    <div className="import-grid">
+      <article className="panel import-card">
+        <span className="upload-icon">↑</span><h2>{fileName || "Choose an Assignr CSV"}</h2>
+        <p>Expected columns match the downloadable RefHQ template.</p>
+        <label className="primary file-button">Choose CSV<input type="file" accept=".csv,text/csv" onChange={(event) => readFile(event.target.files?.[0])} /></label>
+        <a className="text-button sample-link" href="/assignr-schedule.csv" download>Download sample CSV</a>
+      </article>
+      <article className="panel import-review">
+        <p className="eyebrow">IMPORT REVIEW</p><h2>{rows.length ? `${games} games · ${referees} referees` : "Select a file to begin"}</h2>
+        <label>Event name<input value={details.name} onChange={(event) => setDetails({ ...details, name: event.target.value })} /></label>
+        <label>Primary venue<input value={details.venue} onChange={(event) => setDetails({ ...details, venue: event.target.value })} /></label>
+        <div className="date-fields"><label>Starts<input type="date" value={details.startsOn} onChange={(event) => setDetails({ ...details, startsOn: event.target.value })} /></label><label>Ends<input type="date" value={details.endsOn} onChange={(event) => setDetails({ ...details, endsOn: event.target.value })} /></label></div>
+        {message && <p className="pilot-message">{message}</p>}
+        <button className="primary wide" disabled={busy || !rows.length} onClick={confirmImport}>{busy ? "Importing…" : "Import tournament"}</button>
+      </article>
+    </div>
+    {rows.length > 0 && <div className="panel preview-table"><table><thead><tr><th>Game</th><th>Date/time</th><th>Field</th><th>Official</th><th>Position</th></tr></thead><tbody>{rows.slice(0, 12).map((row, index) => <tr key={`${row.external_id}-${row.official_email}-${index}`}><td>{row.home_team} vs. {row.away_team}</td><td>{row.date} {row.start_time}</td><td>{row.field}</td><td>{row.official_name}<small>{row.official_email}</small></td><td>{row.position}</td></tr>)}</tbody></table>{rows.length > 12 && <p>Showing 12 of {rows.length} rows.</p>}</div>}
+  </section>;
+}
+
+function Placeholder({ title, copy }: { title: string; copy: string }) {
+  return <section className="page-section"><div className="section-title"><div><p className="eyebrow">PILOT WORKSPACE</p><h1>{title}</h1><p>{copy}</p></div></div><EmptyState>This area is ready for the next pilot iteration.</EmptyState></section>;
 }
 
 function Dashboard({ session }: { session: RefHQSession }) {
-  const [view, setView] = useState<View>("overview");
-  const [role, setRole] = useState<Role>("Assignor");
-  const nav = useMemo(() => role === "Referee" ? [["overview","My day"],["checkin","Check in"],["schedule","Schedule"],["assessments","My feedback"]] : role === "Referee coach" ? [["overview","Overview"],["schedule","Schedule"],["coaching","Coaching"],["assessments","Assessments"]] : [["overview","Overview"],["checkin","Check-in"],["schedule","Schedule"],["coaching","Coaching"],["assessments","Assessments"],["import","Import"]], [role]) as [View,string][];
-  return (
-    <main>
-      <header className="topbar">
-        <button className="brand" onClick={() => setView("overview")}><Mark /><span><strong>RefHQ</strong><small>PROVIDED BY FALKSPORTS</small></span></button>
-        <nav>{nav.map(([id,label])=><button key={id} className={view===id?"active":""} onClick={()=>setView(id)}>{label}</button>)}</nav>
-        <div className="account"><span className="live-dot" /><select aria-label="Preview role" value={role} onChange={e=>{setRole(e.target.value as Role);setView("overview")}}><option>Assignor</option><option>Referee</option><option>Referee coach</option></select><button className="avatar account-avatar" aria-label={`Sign out ${session.user.email ?? "user"}`} title="Sign out" onClick={() => auth.signOut()}>AF</button></div>
-      </header>
-      <div className="eventbar"><div><span className="event-mark">C</span><p><strong>Capital Cup 2026</strong><small>Riverside Sports Complex · Jun 28–29</small></p></div><span className="weather">☀ 72°F · Clear</span></div>
-      <div className="shell">{view==="overview"&&<Overview setView={setView}/>} {view==="checkin"&&<CheckIn/>} {view==="schedule"&&<Schedule/>} {view==="coaching"&&<Coaching/>} {view==="assessments"&&<Assessments/>} {view==="import"&&<ImportView/>}</div>
-      <footer><div className="brand footer-brand"><Mark small/><span><strong>RefHQ</strong><small>PROVIDED BY FALKSPORTS</small></span></div><p>Better prepared. Better supported. Better officiating.</p><span>© 2026 FalkSports</span></footer>
-    </main>
-  );
+  const [view, setView] = useState<View>("board");
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [events, setEvents] = useState<EventRecord[]>([]);
+  const [eventId, setEventId] = useState("");
+  const [data, setData] = useState<EventData>({ games: [], assignments: [], officials: [], checkIns: [] });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const isStaff = profile?.role === "admin" || profile?.role === "assignor";
+  const isCoach = profile?.role === "coach";
+  const event = events.find((item) => item.id === eventId);
+
+  const refresh = useCallback(async (selectedId = eventId) => {
+    if (!selectedId) return;
+    setData(await loadEventData(session, selectedId));
+  }, [eventId, session]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        await linkCurrentReferee(session);
+        const [currentProfile, availableEvents] = await Promise.all([loadProfile(session), loadEvents(session)]);
+        setProfile(currentProfile);
+        setEvents(availableEvents);
+        const slug = new URLSearchParams(window.location.search).get("event");
+        const selected = availableEvents.find((item) => item.check_in_slug === slug)?.id || availableEvents[0]?.id || "";
+        setEventId(selected);
+        if (selected) setData(await loadEventData(session, selected));
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Unable to load RefHQ.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [session]);
+
+  async function switchEvent(nextId: string) {
+    setEventId(nextId);
+    setLoading(true);
+    try {
+      setData(await loadEventData(session, nextId));
+      setView(isStaff ? "board" : "schedule");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleImported(newEvent: EventRecord) {
+    const nextEvents = await loadEvents(session);
+    setEvents(nextEvents);
+    await switchEvent(newEvent.id);
+  }
+
+  const nav: [View, string][] = isStaff
+    ? [["board", "Assignment board"], ["checkin", "Check-in"], ["schedule", "Schedule"], ["coaching", "Coaching"], ["assessments", "Assessments"], ["import", "Import"]]
+    : isCoach
+      ? [["schedule", "Schedule"], ["coaching", "Coaching"], ["assessments", "Assessments"]]
+      : [["board", "My day"], ["checkin", "QR check-in"], ["schedule", "Schedule"], ["assessments", "My feedback"]];
+
+  if (loading) return <main className="auth-page"><p className="auth-loading">Loading tournament data…</p></main>;
+  if (error) return <main className="auth-page"><section className="auth-card"><h1>Setup needed</h1><p className="auth-intro">{error}</p><p>Run the latest RefHQ Supabase migration, then reload this page.</p><button className="secondary wide" onClick={() => auth.signOut()}>Sign out</button></section></main>;
+
+  return <main>
+    <header className="topbar">
+      <button className="brand" onClick={() => setView(isStaff ? "board" : "schedule")}><Mark /><span><strong>RefHQ</strong><small>PROVIDED BY FALKSPORTS</small></span></button>
+      <nav>{nav.map(([id, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}>{label}</button>)}</nav>
+      <button className="avatar account-avatar" aria-label="Sign out" title="Sign out" onClick={() => auth.signOut()}>{initials(profile?.full_name || session.user.email || "RH")}</button>
+    </header>
+    <div className="eventbar">
+      <div><span className="event-mark">{event?.name[0] || "R"}</span><label><span>{isStaff ? "Active event" : "My event"}</span><select value={eventId} onChange={(event) => switchEvent(event.target.value)} disabled={!events.length}>{events.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label></div>
+      <span>{event ? `${event.venue_name} · ${formatDate(event.starts_on)}` : "No event imported"}</span>
+    </div>
+    <div className="shell">
+      {!event && isStaff && <ImportView session={session} profile={profile!} onImported={handleImported} />}
+      {event && view === "board" && (isStaff ? <AssignmentBoard data={data} /> : <RefereeDay event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} />)}
+      {event && view === "checkin" && <CheckInView event={event} data={data} isStaff={Boolean(isStaff)} />}
+      {event && view === "schedule" && <ScheduleView data={data} />}
+      {event && view === "coaching" && <Placeholder title="Coaching assignments" copy="Assign coaches to this event and its matches." />}
+      {event && view === "assessments" && <Placeholder title="Assessment center" copy="Complete and review structured referee feedback." />}
+      {isStaff && view === "import" && profile && <ImportView session={session} profile={profile} onImported={handleImported} />}
+    </div>
+    <footer><div className="brand footer-brand"><Mark /><span><strong>RefHQ</strong><small>PROVIDED BY FALKSPORTS</small></span></div><p>Better prepared. Better supported. Better officiating.</p><span>© 2026 FalkSports</span></footer>
+  </main>;
 }
 
 export default function Home() {
@@ -173,7 +411,6 @@ export default function Home() {
     setRecovery(false);
     setSession(nextSession);
   }, []);
-
   useEffect(() => {
     const initial = auth.initialize();
     setSession(initial.recovery ? null : initial.session);
@@ -181,7 +418,9 @@ export default function Home() {
     setLoading(false);
     return auth.subscribe(setSession);
   }, []);
-
+  useEffect(() => {
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+  }, []);
   if (loading) return <main className="auth-page"><p className="auth-loading">Loading RefHQ…</p></main>;
   if (!session || recovery) return <AuthPanel onSession={handleSession} recovery={recovery} />;
   return <Dashboard session={session} />;

@@ -80,6 +80,17 @@ export const auth = {
     save(session);
     return session;
   },
+  async signUp(email: string, password: string, fullName: string) {
+    return request("/signup", {
+      method: "POST",
+      body: JSON.stringify({
+        email,
+        password,
+        data: { full_name: fullName },
+        email_redirect_to: window.location.origin,
+      }),
+    }) as Promise<RefHQSession>;
+  },
   async sendRecovery(email: string) {
     await request("/recover", {
       method: "POST",

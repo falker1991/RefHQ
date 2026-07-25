@@ -9,7 +9,8 @@ type AuthPanelProps = {
 };
 
 export function AuthPanel({ onSession, recovery = false }: AuthPanelProps) {
-  const [mode, setMode] = useState<"login" | "recovery">(recovery ? "recovery" : "login");
+  const [mode, setMode] = useState<"login" | "signup" | "recovery">(recovery ? "recovery" : "login");
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("falkref91@gmail.com");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -62,6 +63,22 @@ export function AuthPanel({ onSession, recovery = false }: AuthPanelProps) {
     }
   }
 
+  async function createAccount(event: FormEvent) {
+    event.preventDefault();
+    if (password.length < 8) return setMessage("Use at least 8 characters.");
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await auth.signUp(email, password, fullName);
+      if (result.access_token) onSession(result);
+      else setMessage("Check your email to confirm your account, then sign in.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to create the account.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <main className="auth-page">
       <section className="auth-brand">
@@ -70,14 +87,17 @@ export function AuthPanel({ onSession, recovery = false }: AuthPanelProps) {
       </section>
       <section className="auth-card">
         <p className="eyebrow">WELCOME TO REFHQ</p>
-        <h1>{mode === "recovery" ? "Create your password" : "Sign in"}</h1>
+        <h1>{mode === "recovery" ? "Create your password" : mode === "signup" ? "Create referee account" : "Sign in"}</h1>
         <p className="auth-intro">
           {mode === "recovery"
             ? "Choose a secure password to finish setting up your account."
-            : "Access tournament check-in, schedules, coaching, and assessments."}
+            : mode === "signup"
+              ? "Use the same email address your assignor imported from Assignr."
+              : "Access tournament check-in, schedules, coaching, and assessments."}
         </p>
-        <form onSubmit={mode === "recovery" ? updatePassword : signIn}>
-          {mode === "login" && (
+        <form onSubmit={mode === "recovery" ? updatePassword : mode === "signup" ? createAccount : signIn}>
+          {mode === "signup" && <label>Full name<input value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" required /></label>}
+          {mode !== "recovery" && (
             <label>Email address<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required /></label>
           )}
           <label>{mode === "recovery" ? "New password" : "Password"}<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "recovery" ? "new-password" : "current-password"} minLength={8} required /></label>
@@ -85,9 +105,13 @@ export function AuthPanel({ onSession, recovery = false }: AuthPanelProps) {
             <label>Confirm new password<input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" minLength={8} required /></label>
           )}
           {message && <p className="auth-message" role="status">{message}</p>}
-          <button className="primary wide" disabled={busy}>{busy ? "Please wait…" : mode === "recovery" ? "Save password" : "Sign in"}</button>
+          <button className="primary wide" disabled={busy}>{busy ? "Please wait…" : mode === "recovery" ? "Save password" : mode === "signup" ? "Create account" : "Sign in"}</button>
         </form>
-        {mode === "login" && <button className="auth-link" onClick={sendRecovery} disabled={busy}>Set or reset your password</button>}
+        {mode === "login" && <>
+          <button className="auth-link" onClick={() => setMode("signup")} disabled={busy}>New referee? Create an account</button>
+          <button className="auth-link compact-link" onClick={sendRecovery} disabled={busy}>Set or reset your password</button>
+        </>}
+        {mode === "signup" && <button className="auth-link" onClick={() => setMode("login")} disabled={busy}>Already have an account? Sign in</button>}
       </section>
       <p className="auth-footer">Better prepared. Better supported. Better officiating.</p>
     </main>

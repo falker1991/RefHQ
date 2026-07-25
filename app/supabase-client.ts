@@ -8,7 +8,14 @@ export type Profile = {
   organization_id: string;
   full_name: string;
   email: string;
+  phone?: string | null;
   role: "admin" | "assignor" | "referee" | "coach";
+};
+
+export type OrganizationRecord = {
+  id: string;
+  name: string;
+  slug: string;
 };
 
 export type EventRecord = {
@@ -91,6 +98,35 @@ const enc = encodeURIComponent;
 export async function loadProfile(session: Law18Session) {
   const rows = await rest<Profile[]>(session, `profiles?id=eq.${enc(session.user.id)}&select=*`);
   return rows[0] ?? null;
+}
+
+export async function loadOrganization(session: Law18Session, organizationId: string) {
+  const rows = await rest<OrganizationRecord[]>(
+    session,
+    `organizations?id=eq.${enc(organizationId)}&select=id,name,slug`,
+  );
+  return rows[0] ?? null;
+}
+
+export async function updateOwnProfile(
+  session: Law18Session,
+  changes: Pick<Profile, "full_name" | "phone">,
+) {
+  const rows = await rest<Profile[]>(
+    session,
+    `profiles?id=eq.${enc(session.user.id)}`,
+    { method: "PATCH", body: JSON.stringify(changes) },
+    "return=representation",
+  );
+  return rows[0];
+}
+
+export async function leaveCurrentOrganization(session: Law18Session) {
+  await rest<null>(
+    session,
+    "rpc/leave_current_organization",
+    { method: "POST", body: "{}" },
+  );
 }
 
 export async function linkCurrentReferee(session: Law18Session) {

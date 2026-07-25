@@ -7,21 +7,25 @@ import { auth, type Law18Session } from "./auth-client";
 import {
   checkIn,
   importTournament,
+  leaveCurrentOrganization,
   linkCurrentReferee,
   loadEventData,
   loadEvents,
+  loadOrganization,
   loadProfile,
   parseAssignrCsv,
+  updateOwnProfile,
   type AssignmentRecord,
   type CheckInRecord,
   type EventRecord,
   type GameRecord,
   type ImportRow,
   type OfficialRecord,
+  type OrganizationRecord,
   type Profile,
 } from "./supabase-client";
 
-type View = "board" | "checkin" | "schedule" | "coaching" | "assessments" | "import";
+type View = "dashboard" | "board" | "checkin" | "schedule" | "coaching" | "assessments" | "import" | "account" | "groups";
 type EventData = {
   games: GameRecord[];
   assignments: AssignmentRecord[];
@@ -365,14 +369,131 @@ function Placeholder({ title, copy }: { title: string; copy: string }) {
   return <section className="page-section"><div className="section-title"><div><p className="eyebrow">PILOT WORKSPACE</p><h1>{title}</h1><p>{copy}</p></div></div><EmptyState>This area is ready for the next pilot iteration.</EmptyState></section>;
 }
 
+function DashboardHome({
+  profile,
+  event,
+  data,
+  events,
+  onNavigate,
+}: {
+  profile: Profile;
+  event?: EventRecord;
+  data: EventData;
+  events: EventRecord[];
+  onNavigate: (view: View) => void;
+}) {
+  const checkedIn = new Set(data.checkIns.filter((item) => item.status === "checked_in").map((item) => item.official_id)).size;
+  const roleLabel = profile.role === "admin" ? "Administrator" : profile.role === "assignor" ? "Assignor" : profile.role === "coach" ? "Referee coach" : "Referee";
+  return <section className="page-section dashboard-home">
+    <div className="welcome">
+      <div><p className="eyebrow">DASHBOARD</p><h1>Welcome, {profile.full_name.split(" ")[0]}.</h1><p>Your events, assignments, and tournament-day tools in one place.</p></div>
+    </div>
+    <div className="metrics dashboard-metrics">
+      <article><span className="metric-icon green">◇</span><div><strong>{events.length}</strong><p>Available events</p></div></article>
+      <article><span className="metric-icon blue">☷</span><div><strong>{data.games.length}</strong><p>Games in active event</p></div></article>
+      <article><span className="metric-icon green">✓</span><div><strong>{checkedIn}</strong><p>Officials checked in</p></div></article>
+      <article><span className="metric-icon blue">◎</span><div><strong className="role-metric">{roleLabel}</strong><p>Your account role</p></div></article>
+    </div>
+    <div className="dashboard-grid">
+      <article className="panel dashboard-event">
+        <div className="panel-head"><div><p className="eyebrow">ACTIVE EVENT</p><h2>{event?.name || "No event selected"}</h2></div></div>
+        {event ? <div className="dashboard-event-body">
+          <p><strong>{event.venue_name}</strong><span>{formatDate(event.starts_on)} through {formatDate(event.ends_on)}</span></p>
+          <div className="dashboard-actions">
+            <button className="primary" onClick={() => onNavigate(profile.role === "referee" ? "board" : "schedule")}>{profile.role === "referee" ? "Open my day" : "View schedule"}</button>
+            <button className="secondary" onClick={() => onNavigate("checkin")}>Check-in tools</button>
+          </div>
+        </div> : <div className="empty-dashboard"><p>No tournament is available yet.</p>{profile.role !== "referee" && <button className="primary" onClick={() => onNavigate("import")}>Import an event</button>}</div>}
+      </article>
+      <article className="panel dashboard-quick">
+        <div className="panel-head"><div><p className="eyebrow">QUICK ACCESS</p><h2>Account and organization</h2></div></div>
+        <button onClick={() => onNavigate("account")}><span>Personal details</span><b>Account settings →</b></button>
+        <button onClick={() => onNavigate("groups")}><span>Membership</span><b>View my groups →</b></button>
+      </article>
+    </div>
+  </section>;
+}
+
+function AccountSettings({
+  session,
+  profile,
+  onUpdated,
+}: {
+  session: Law18Session;
+  profile: Profile;
+  onUpdated: (profile: Profile) => void;
+}) {
+  const [fullName, setFullName] = useState(profile.full_name);
+  const [phone, setPhone] = useState(profile.phone || "");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function save() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const updated = await updateOwnProfile(session, { full_name: fullName.trim(), phone: phone.trim() || null });
+      if (updated) onUpdated(updated);
+      setMessage("Your account details were saved.");
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to save your account.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <section className="page-section settings-page">
+    <div className="section-title"><div><p className="eyebrow">ACCOUNT SETTINGS</p><h1>Personal information</h1><p>Keep the details your organizations may need current.</p></div></div>
+    <article className="panel settings-card">
+      <label>Full name<input value={fullName} onChange={(event) => setFullName(event.target.value)} /></label>
+      <label>Email address<input value={profile.email} disabled /></label>
+      <label>Phone number<input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Optional" /></label>
+      <label>Role<input value={profile.role} disabled /></label>
+      {message && <p className="pilot-message">{message}</p>}
+      <button className="primary" disabled={busy || !fullName.trim()} onClick={save}>{busy ? "Saving…" : "Save account details"}</button>
+    </article>
+  </section>;
+}
+
+function GroupsSettings({
+  session,
+  organization,
+}: {
+  session: Law18Session;
+  organization: OrganizationRecord | null;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  async function leave() {
+    if (!window.confirm(`Leave ${organization?.name || "this group"}? You will lose access to its events and schedules.`)) return;
+    setBusy(true);
+    try {
+      await leaveCurrentOrganization(session);
+      auth.signOut();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to leave this group.");
+      setBusy(false);
+    }
+  }
+  return <section className="page-section settings-page">
+    <div className="section-title"><div><p className="eyebrow">GROUPS</p><h1>Organization membership</h1><p>Review the organizations connected to your account.</p></div></div>
+    <article className="panel group-card">
+      <span className="group-mark">{organization?.name?.[0] || "L"}</span>
+      <div><h2>{organization?.name || "Current organization"}</h2><p>Your events and assignments from this organization appear in Law18Ref.</p></div>
+      <button className="danger-button" disabled={busy} onClick={leave}>{busy ? "Leaving…" : "Leave group"}</button>
+      {message && <p className="group-message">{message}</p>}
+    </article>
+  </section>;
+}
+
 function Dashboard({ session }: { session: Law18Session }) {
-  const [view, setView] = useState<View>("board");
+  const [view, setView] = useState<View>("dashboard");
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [organization, setOrganization] = useState<OrganizationRecord | null>(null);
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [eventId, setEventId] = useState("");
   const [data, setData] = useState<EventData>({ games: [], assignments: [], officials: [], checkIns: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [accountOpen, setAccountOpen] = useState(false);
   const isStaff = profile?.role === "admin" || profile?.role === "assignor";
   const isCoach = profile?.role === "coach";
   const event = events.find((item) => item.id === eventId);
@@ -388,6 +509,7 @@ function Dashboard({ session }: { session: Law18Session }) {
         await linkCurrentReferee(session);
         const [currentProfile, availableEvents] = await Promise.all([loadProfile(session), loadEvents(session)]);
         setProfile(currentProfile);
+        if (currentProfile) setOrganization(await loadOrganization(session, currentProfile.organization_id));
         setEvents(availableEvents);
         const slug = new URLSearchParams(window.location.search).get("event");
         const selected = availableEvents.find((item) => item.check_in_slug === slug)?.id || availableEvents[0]?.id || "";
@@ -406,7 +528,6 @@ function Dashboard({ session }: { session: Law18Session }) {
     setLoading(true);
     try {
       setData(await loadEventData(session, nextId));
-      setView(isStaff ? "board" : "schedule");
     } finally {
       setLoading(false);
     }
@@ -419,34 +540,45 @@ function Dashboard({ session }: { session: Law18Session }) {
   }
 
   const nav: [View, string][] = isStaff
-    ? [["board", "Assignment board"], ["checkin", "Check-in"], ["schedule", "Schedule"], ["coaching", "Coaching"], ["assessments", "Assessments"], ["import", "Import"]]
+    ? [["dashboard", "Dashboard"], ["board", "Assignment board"], ["checkin", "Check-in"], ["schedule", "Schedule"], ["coaching", "Coaching"], ["assessments", "Assessments"], ["import", "Import"]]
     : isCoach
-      ? [["schedule", "Schedule"], ["coaching", "Coaching"], ["assessments", "Assessments"]]
-      : [["board", "My day"], ["checkin", "QR check-in"], ["schedule", "Schedule"], ["assessments", "My feedback"]];
+      ? [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["coaching", "Coaching"], ["assessments", "Assessments"]]
+      : [["dashboard", "Dashboard"], ["board", "My day"], ["checkin", "QR check-in"], ["schedule", "Schedule"], ["assessments", "My feedback"]];
 
   if (loading) return <main className="auth-page"><p className="auth-loading">Loading tournament data…</p></main>;
   if (error) return <main className="auth-page"><section className="auth-card"><h1>Setup needed</h1><p className="auth-intro">{error}</p><p>Run the latest Law18Referee Management Supabase migration, then reload this page.</p><button className="secondary wide" onClick={() => auth.signOut()}>Sign out</button></section></main>;
 
   return <main>
     <header className="topbar">
-      <button className="brand" aria-label="Law18Referee Management home" onClick={() => setView(isStaff ? "board" : "schedule")}><Mark /></button>
+      <button className="brand" aria-label="Law18Referee Management dashboard" onClick={() => setView("dashboard")}><Mark /></button>
       <nav>{nav.map(([id, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}>{label}</button>)}</nav>
-      <button className="avatar account-avatar" aria-label="Sign out" title="Sign out" onClick={() => auth.signOut()}>{initials(profile?.full_name || session.user.email || "RH")}</button>
+      <div className="account-menu">
+        <button className="avatar account-avatar" aria-label="Open account menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((open) => !open)}>{initials(profile?.full_name || session.user.email || "RH")}</button>
+        {accountOpen && <div className="account-popover">
+          <div className="account-identity"><strong>{profile?.full_name}</strong><span>{profile?.email}</span></div>
+          <button onClick={() => { setView("account"); setAccountOpen(false); }}><span>⚙</span><div><strong>Account settings</strong><small>Personal information</small></div></button>
+          <button onClick={() => { setView("groups"); setAccountOpen(false); }}><span>♙</span><div><strong>Groups</strong><small>Organization membership</small></div></button>
+          <button className="signout-menu" onClick={() => auth.signOut()}><span>↪</span><div><strong>Sign out</strong></div></button>
+        </div>}
+      </div>
     </header>
     <div className="eventbar">
       <div><span className="event-mark">{event?.name[0] || "R"}</span><label><span>{isStaff ? "Active event" : "My event"}</span><select value={eventId} onChange={(event) => switchEvent(event.target.value)} disabled={!events.length}>{events.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label></div>
       <span>{event ? `${event.venue_name} · ${formatDate(event.starts_on)}` : "No event imported"}</span>
     </div>
     <div className="shell">
-      {!event && isStaff && <ImportView session={session} profile={profile!} events={events} onImported={handleImported} />}
+      {profile && view === "dashboard" && <DashboardHome profile={profile} event={event} data={data} events={events} onNavigate={setView} />}
+      {!event && isStaff && view === "import" && <ImportView session={session} profile={profile!} events={events} onImported={handleImported} />}
       {event && view === "board" && (isStaff ? <AssignmentBoard data={data} /> : <RefereeDay event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} />)}
       {event && view === "checkin" && <CheckInView event={event} data={data} isStaff={Boolean(isStaff)} />}
       {event && view === "schedule" && <ScheduleView data={data} />}
       {event && view === "coaching" && <Placeholder title="Coaching assignments" copy="Assign coaches to this event and its matches." />}
       {event && view === "assessments" && <Placeholder title="Assessment center" copy="Complete and review structured referee feedback." />}
       {isStaff && view === "import" && profile && <ImportView session={session} profile={profile} events={events} onImported={handleImported} />}
+      {profile && view === "account" && <AccountSettings session={session} profile={profile} onUpdated={setProfile} />}
+      {view === "groups" && <GroupsSettings session={session} organization={organization} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><p>Better prepared. Better supported. Better officiating.</p><span>© 2026 FalkSports</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref</span></footer>
   </main>;
 }
 

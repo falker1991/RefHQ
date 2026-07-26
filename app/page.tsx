@@ -8,6 +8,8 @@ import {
   checkIn,
   beginOrganizationAction,
   completeOrganizationAction,
+  createGame,
+  createOfficial,
   createOrganization,
   createAppearanceCampaign,
   importTournament,
@@ -27,6 +29,7 @@ import {
   saveAssessment,
   restoreDefaultAppearance,
   reactivateOrganization,
+  updateOrganizationName,
   updateOwnProfile,
   type AssignmentRecord,
   type CheckInRecord,
@@ -268,9 +271,31 @@ function CheckInView({ event, data, isStaff }: { event: EventRecord; data: Event
   </section>;
 }
 
-function ScheduleView({ data }: { data: EventData }) {
+function ScheduleView({ session, event, data, onCreated }: { session: Law18Session; event: EventRecord; data: EventData; onCreated: () => void }) {
   const officials = new Map(data.officials.map((official) => [official.id, official]));
+  const [adding, setAdding] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [game, setGame] = useState({ starts_at: "", field_name: "", home_team: "", away_team: "", division: "" });
+  async function addGame() {
+    setBusy(true);
+    setMessage("");
+    try {
+      await createGame(session, event.id, { ...game, starts_at: new Date(game.starts_at).toISOString() });
+      setGame({ starts_at: "", field_name: "", home_team: "", away_team: "", division: "" });
+      setAdding(false);
+      setMessage("Game added to this event.");
+      onCreated();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to add the game.");
+    } finally {
+      setBusy(false);
+    }
+  }
   return <section className="page-section"><div className="section-title"><div><p className="eyebrow">EVENT SCHEDULE</p><h1>Games and crews</h1><p>{data.games.length} imported games</p></div></div>
+    <div className="manual-toolbar"><button className="secondary" onClick={() => setAdding((value) => !value)}>{adding ? "Cancel" : "Add game manually"}</button></div>
+    {adding && <article className="panel manual-entry-form"><h2>Add a game to {event.name}</h2><div className="manual-form-grid"><label>Date and time<input type="datetime-local" value={game.starts_at} onChange={(e) => setGame({ ...game, starts_at: e.target.value })} /></label><label>Field<input value={game.field_name} onChange={(e) => setGame({ ...game, field_name: e.target.value })} /></label><label>Home team<input value={game.home_team} onChange={(e) => setGame({ ...game, home_team: e.target.value })} /></label><label>Away team<input value={game.away_team} onChange={(e) => setGame({ ...game, away_team: e.target.value })} /></label><label>Division or competition<input value={game.division} onChange={(e) => setGame({ ...game, division: e.target.value })} /></label></div><button className="primary" disabled={busy || !game.starts_at || !game.field_name.trim() || !game.home_team.trim() || !game.away_team.trim()} onClick={addGame}>{busy ? "Adding…" : "Add game"}</button></article>}
+    {message && <p className="pilot-message">{message}</p>}
     <div className="schedule-list">{data.games.map((game) => {
       const crew = data.assignments.filter((assignment) => assignment.game_id === game.id);
       return <article className="panel schedule-card" key={game.id}><div className="timebox"><strong>{formatTime(game.starts_at)}</strong><span>{game.field_name}</span></div><div><h2>{game.home_team} vs. {game.away_team}</h2><p>{game.division}</p><span className="crew-line">{crew.map((assignment) => `${positionLabel(assignment.position)}: ${officials.get(assignment.official_id)?.full_name || "Open"}`).join(" · ")}</span></div></article>;
@@ -281,11 +306,13 @@ function ScheduleView({ data }: { data: EventData }) {
 function ImportView({
   session,
   profile,
+  organizationId,
   events,
   onImported,
 }: {
   session: Law18Session;
   profile: Profile;
+  organizationId: string;
   events: EventRecord[];
   onImported: (event: EventRecord) => void;
 }) {
@@ -370,7 +397,7 @@ function ImportView({
     setBusy(true);
     setMessage("Importing officials…");
     try {
-      const result = await importOfficials(session, profile, fileName, officialRows);
+      const result = await importOfficials(session, profile, organizationId, fileName, officialRows);
       setOfficialResult(result);
       setMessage(`${result.created} officials added and ${result.updated} updated. ${result.conflicts.length} need review.`);
     } catch (error) {
@@ -388,6 +415,7 @@ function ImportView({
       const event = await importTournament(
         session,
         profile,
+        organizationId,
         { ...details, fileName, eventId: destinationEventId || undefined },
         rows,
       );
@@ -442,26 +470,54 @@ function ImportView({
 }
 
 function OfficialsDirectory({
+  session,
+  organizationId,
   officials,
   data,
+  onCreated,
 }: {
+  session: Law18Session;
+  organizationId: string;
   officials: OfficialRecord[];
   data: EventData;
+  onCreated: () => void;
 }) {
   const [query, setQuery] = useState("");
   const eventOfficialIds = new Set(data.assignments.map((assignment) => assignment.official_id));
   const [scope, setScope] = useState<"organization" | "event">("organization");
+  const [adding, setAdding] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [official, setOfficial] = useState({ full_name: "", email: "", secondary_email: "", phone: "", badge_level: "" });
   const filtered = officials.filter((official) => {
     if (scope === "event" && !eventOfficialIds.has(official.id)) return false;
     const haystack = `${official.full_name} ${official.email || ""} ${official.badge_level || ""}`.toLowerCase();
     return haystack.includes(query.toLowerCase());
   });
+  async function addOfficial() {
+    setBusy(true);
+    setMessage("");
+    try {
+      await createOfficial(session, organizationId, official);
+      setOfficial({ full_name: "", email: "", secondary_email: "", phone: "", badge_level: "" });
+      setAdding(false);
+      setMessage("Official added to this organization. No login account or email was created.");
+      onCreated();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to add the official.");
+    } finally {
+      setBusy(false);
+    }
+  }
   return <section className="page-section">
     <div className="section-title"><div><p className="eyebrow">OFFICIALS</p><h1>Referee directory</h1><p>Organization officials and the active event roster.</p></div></div>
     <div className="directory-tools">
       <div className="segmented"><button className={scope === "organization" ? "active" : ""} onClick={() => setScope("organization")}>Organization</button><button className={scope === "event" ? "active" : ""} onClick={() => setScope("event")}>Active event</button></div>
       <input className="search" type="search" placeholder="Search name, email, or badge…" value={query} onChange={(event) => setQuery(event.target.value)} />
+      <button className="secondary" onClick={() => setAdding((value) => !value)}>{adding ? "Cancel" : "Add official"}</button>
     </div>
+    {adding && <article className="panel manual-entry-form"><h2>Add an official</h2><div className="manual-form-grid"><label>Full name<input value={official.full_name} onChange={(e) => setOfficial({ ...official, full_name: e.target.value })} /></label><label>Primary email<input type="email" value={official.email} onChange={(e) => setOfficial({ ...official, email: e.target.value })} /></label><label>Secondary email<input type="email" value={official.secondary_email} onChange={(e) => setOfficial({ ...official, secondary_email: e.target.value })} /></label><label>Phone<input value={official.phone} onChange={(e) => setOfficial({ ...official, phone: e.target.value })} /></label><label>Badge or level<input value={official.badge_level} onChange={(e) => setOfficial({ ...official, badge_level: e.target.value })} /></label></div><button className="primary" disabled={busy || !official.full_name.trim()} onClick={addOfficial}>{busy ? "Adding…" : "Add official"}</button></article>}
+    {message && <p className="pilot-message">{message}</p>}
     <article className="panel directory-list">
       <div className="directory-row directory-head"><span>Official</span><span>Contact</span><span>Identity</span><span>Event</span></div>
       {filtered.map((official) => <div className="directory-row" key={official.id}>
@@ -478,12 +534,14 @@ function OfficialsDirectory({
 function AssessmentCenter({
   session,
   profile,
+  organizationId,
   data,
   canSubmit,
   onSaved,
 }: {
   session: Law18Session;
   profile: Profile;
+  organizationId: string;
   data: EventData;
   canSubmit: boolean;
   onSaved: () => void;
@@ -500,9 +558,9 @@ function AssessmentCenter({
   const officialMap = new Map(data.officials.map((official) => [official.id, official]));
   const gameMap = new Map(data.games.map((game) => [game.id, game]));
   async function submit(status: "draft" | "submitted") {
-    if (!profile.organization_id || !gameId || !officialId) return;
+    if (!organizationId || !gameId || !officialId) return;
     try {
-      await saveAssessment(session, profile.organization_id, {
+      await saveAssessment(session, organizationId, {
         game_id: gameId,
         official_id: officialId,
         visibility,
@@ -732,7 +790,7 @@ function GroupsSettings({
   </section>;
 }
 
-function SiteGroupsAdmin({ session, ownerEmail }: { session: Law18Session; ownerEmail: string }) {
+function SiteGroupsAdmin({ session, ownerEmail, onOpen }: { session: Law18Session; ownerEmail: string; onOpen: (organizationId: string) => void }) {
   const [organizations, setOrganizations] = useState<OrganizationRecord[]>([]);
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
@@ -740,6 +798,8 @@ function SiteGroupsAdmin({ session, ownerEmail }: { session: Law18Session; owner
   const [pending, setPending] = useState<{ organization: OrganizationRecord; action: "deactivate" | "delete" } | null>(null);
   const [password, setPassword] = useState("");
   const [confirmName, setConfirmName] = useState("");
+  const [editing, setEditing] = useState<OrganizationRecord | null>(null);
+  const [editingName, setEditingName] = useState("");
   const refreshOrganizations = useCallback(async () => {
     setOrganizations(await loadOrganizations(session));
   }, [session]);
@@ -772,6 +832,22 @@ function SiteGroupsAdmin({ session, ownerEmail }: { session: Law18Session; owner
       setMessage(`${organization.name} is active again.`);
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "Unable to reactivate the organization.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveOrganizationSettings() {
+    if (!editing) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      await updateOrganizationName(session, editing.id, editingName);
+      setEditing(null);
+      await refreshOrganizations();
+      setMessage("Organization settings saved.");
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to save organization settings.");
     } finally {
       setBusy(false);
     }
@@ -822,6 +898,8 @@ function SiteGroupsAdmin({ session, ownerEmail }: { session: Law18Session; owner
           <span className="group-mark">{item.name[0]}</span>
           <div><h2>{item.name}</h2><p>{item.slug}</p><span className={`status ${item.active === false ? "missing" : "ready"}`}><b />{item.active === false ? "Deactivated" : "Active"}</span></div>
           <div className="organization-actions">
+            {item.active !== false && <button className="primary" onClick={() => onOpen(item.id)}>Open organization</button>}
+            <button className="secondary" onClick={() => { setEditing(item); setEditingName(item.name); }}>Settings</button>
             {item.active === false
               ? <>
                 <button className="secondary" disabled={busy} onClick={() => reactivate(item)}>Reactivate</button>
@@ -847,6 +925,7 @@ function SiteGroupsAdmin({ session, ownerEmail }: { session: Law18Session; owner
         <div><button className="secondary" disabled={busy} onClick={() => { setPending(null); setPassword(""); setConfirmName(""); }}>Cancel</button><button className="danger-button" disabled={busy || !password} onClick={requestVerification}>{busy ? "Verifying…" : "Email verification link"}</button></div>
       </section>
     </div>}
+    {editing && <div className="confirmation-backdrop" role="presentation"><section className="confirmation-dialog" role="dialog" aria-modal="true"><p className="eyebrow">ORGANIZATION SETTINGS</p><h2>{editing.name}</h2><label>Organization name<input value={editingName} maxLength={120} onChange={(event) => setEditingName(event.target.value)} /></label><p className="verification-note">The internal organization address remains unchanged so imports and existing links continue working.</p><div><button className="secondary" onClick={() => setEditing(null)}>Cancel</button><button className="primary" disabled={busy || editingName.trim().length < 2} onClick={saveOrganizationSettings}>{busy ? "Saving…" : "Save settings"}</button></div></section></div>}
   </section>;
 }
 
@@ -854,9 +933,11 @@ function Dashboard({ session }: { session: Law18Session }) {
   const [view, setView] = useState<View>("dashboard");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [organization, setOrganization] = useState<OrganizationRecord | null>(null);
+  const [organizations, setOrganizations] = useState<OrganizationRecord[]>([]);
   const [organizationRoles, setOrganizationRoles] = useState<MembershipRole[]>([]);
   const [eventRoles, setEventRoles] = useState<MembershipRole[]>([]);
   const [organizationOfficials, setOrganizationOfficials] = useState<OfficialRecord[]>([]);
+  const [allEvents, setAllEvents] = useState<EventRecord[]>([]);
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [eventId, setEventId] = useState("");
   const [data, setData] = useState<EventData>({ games: [], assignments: [], officials: [], checkIns: [], assessments: [] });
@@ -883,18 +964,28 @@ function Dashboard({ session }: { session: Law18Session }) {
     (async () => {
       try {
         await linkCurrentReferee(session);
-        const [currentProfile, availableEvents, memberships] = await Promise.all([loadProfile(session), loadEvents(session), loadMemberships(session)]);
+        const [currentProfile, availableEvents, memberships, availableOrganizations] = await Promise.all([loadProfile(session), loadEvents(session), loadMemberships(session), loadOrganizations(session)]);
         setProfile(currentProfile);
-        const organizationId = memberships.organizations[0]?.organization_id || currentProfile?.organization_id;
+        setOrganizations(availableOrganizations.filter((item) => item.active !== false));
+        setAllEvents(availableEvents);
+        const eventSlug = new URLSearchParams(window.location.search).get("event");
+        const linkedEvent = availableEvents.find((item) => item.check_in_slug === eventSlug);
+        const storedOrganizationId = localStorage.getItem("law18ref-active-organization");
+        const organizationId = linkedEvent?.organization_id
+          || (availableOrganizations.some((item) => item.id === storedOrganizationId && item.active !== false) ? storedOrganizationId : null)
+          || memberships.organizations[0]?.organization_id
+          || currentProfile?.organization_id
+          || availableOrganizations.find((item) => item.active !== false)?.id;
         if (currentProfile && organizationId) {
-          setOrganization(await loadOrganization(session, organizationId));
+          setOrganization(availableOrganizations.find((item) => item.id === organizationId) || await loadOrganization(session, organizationId));
           setOrganizationOfficials(await loadOrganizationOfficials(session, organizationId));
+          localStorage.setItem("law18ref-active-organization", organizationId);
         }
         setOrganizationRoles(memberships.organizations.map((membership) => membership.role));
         setEventRoles(memberships.events.map((membership) => membership.role));
-        setEvents(availableEvents);
-        const slug = new URLSearchParams(window.location.search).get("event");
-        const selected = availableEvents.find((item) => item.check_in_slug === slug)?.id || availableEvents[0]?.id || "";
+        const organizationEvents = availableEvents.filter((item) => item.organization_id === organizationId);
+        setEvents(organizationEvents);
+        const selected = organizationEvents.find((item) => item.check_in_slug === eventSlug)?.id || organizationEvents[0]?.id || "";
         setEventId(selected);
         if (selected) setData(await loadEventData(session, selected));
       } catch (reason) {
@@ -940,9 +1031,34 @@ function Dashboard({ session }: { session: Law18Session }) {
     }
   }
 
+  async function switchOrganization(nextId: string, nextView?: View) {
+    let nextOrganization = organizations.find((item) => item.id === nextId);
+    if (!nextOrganization) {
+      const refreshedOrganizations = (await loadOrganizations(session)).filter((item) => item.active !== false);
+      setOrganizations(refreshedOrganizations);
+      nextOrganization = refreshedOrganizations.find((item) => item.id === nextId);
+    }
+    if (!nextOrganization) return;
+    setLoading(true);
+    try {
+      localStorage.setItem("law18ref-active-organization", nextId);
+      setOrganization(nextOrganization);
+      const nextEvents = allEvents.filter((item) => item.organization_id === nextId);
+      setEvents(nextEvents);
+      setOrganizationOfficials(await loadOrganizationOfficials(session, nextId));
+      const nextEventId = nextEvents[0]?.id || "";
+      setEventId(nextEventId);
+      setData(nextEventId ? await loadEventData(session, nextEventId) : { games: [], assignments: [], officials: [], checkIns: [], assessments: [] });
+      if (nextView) setView(nextView);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleImported(newEvent: EventRecord) {
     const nextEvents = await loadEvents(session);
-    setEvents(nextEvents);
+    setAllEvents(nextEvents);
+    setEvents(nextEvents.filter((item) => item.organization_id === organization?.id));
     await switchEvent(newEvent.id);
   }
 
@@ -972,27 +1088,26 @@ function Dashboard({ session }: { session: Law18Session }) {
       </div>
     </header>
     <div className="eventbar">
-      <div><span className="event-mark">{event?.name[0] || "R"}</span><label><span>{isStaff ? "Active event" : "My event"}</span><select value={eventId} onChange={(event) => switchEvent(event.target.value)} disabled={!events.length}>{events.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label></div>
+      <div><span className="event-mark">{organization?.name[0] || "R"}</span>{organizations.length > 1 && <label><span>Active organization</span><select value={organization?.id || ""} onChange={(event) => switchOrganization(event.target.value)}>{organizations.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>}<label><span>{isStaff ? "Active event" : "My event"}</span><select value={eventId} onChange={(event) => switchEvent(event.target.value)} disabled={!events.length}><option value="">{events.length ? "Select event" : "No events yet"}</option>{events.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label></div>
       <span>{event ? formatDate(event.starts_on) : "No event imported"}</span>
     </div>
     <div className="shell">
       {organizationActionMessage && <p className="pilot-message organization-message">{organizationActionMessage}</p>}
       {profile && view === "dashboard" && <DashboardHome profile={profile} event={event} data={data} events={events} onNavigate={setView} />}
-      {!event && isStaff && view === "import" && <ImportView session={session} profile={profile!} events={events} onImported={handleImported} />}
       {event && view === "board" && (isStaff ? <AssignmentBoard data={data} /> : <RefereeDay event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} />)}
       {event && view === "checkin" && <CheckInView event={event} data={data} isStaff={Boolean(isStaff)} />}
-      {event && view === "schedule" && <ScheduleView data={data} />}
-      {profile && view === "officials" && <OfficialsDirectory officials={organizationOfficials} data={data} />}
+      {event && view === "schedule" && <ScheduleView session={session} event={event} data={data} onCreated={() => refresh(event.id)} />}
+      {profile && organization && view === "officials" && <OfficialsDirectory session={session} organizationId={organization.id} officials={organizationOfficials} data={data} onCreated={() => loadOrganizationOfficials(session, organization.id).then(setOrganizationOfficials)} />}
       {event && view === "coaching" && <Placeholder title="Coaching assignments" copy="Assign coaches to this event and its matches." />}
-      {event && view === "assessments" && profile && <AssessmentCenter session={session} profile={profile} data={data} canSubmit={canAssess} onSaved={() => refresh(event.id)} />}
-      {isStaff && view === "import" && profile && <ImportView session={session} profile={profile} events={events} onImported={handleImported} />}
+      {event && organization && view === "assessments" && profile && <AssessmentCenter session={session} profile={profile} organizationId={organization.id} data={data} canSubmit={canAssess} onSaved={() => refresh(event.id)} />}
+      {isStaff && organization && view === "import" && profile && <ImportView session={session} profile={profile} organizationId={organization.id} events={events} onImported={handleImported} />}
       {profile && view === "account" && <AccountSettings session={session} profile={profile} onUpdated={setProfile} />}
       {view === "groups" && (allRoles.has("site_owner")
-        ? <SiteGroupsAdmin session={session} ownerEmail={profile?.primary_email || profile?.email || session.user.email || ""} />
+        ? <SiteGroupsAdmin session={session} ownerEmail={profile?.primary_email || profile?.email || session.user.email || ""} onOpen={(organizationId) => switchOrganization(organizationId, "dashboard")} />
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.2.1</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.2.2</span></footer>
   </main>;
 }
 

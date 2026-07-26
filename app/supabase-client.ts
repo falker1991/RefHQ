@@ -191,6 +191,16 @@ export async function reactivateOrganization(session: Law18Session, organization
   });
 }
 
+export async function updateOrganizationName(session: Law18Session, organizationId: string, name: string) {
+  const rows = await rest<OrganizationRecord[]>(
+    session,
+    `organizations?id=eq.${enc(organizationId)}`,
+    { method: "PATCH", body: JSON.stringify({ name: name.trim() }) },
+    "return=representation",
+  );
+  return rows[0];
+}
+
 export async function beginOrganizationAction(
   session: Law18Session,
   organizationId: string,
@@ -528,11 +538,12 @@ export async function loadOrganizationOfficials(session: Law18Session, organizat
 export async function importOfficials(
   session: Law18Session,
   profile: Profile,
+  organizationId: string,
   fileName: string,
   rows: OfficialImportRow[],
 ): Promise<OfficialImportResult> {
-  if (!profile.organization_id) throw new Error("Select an organization before importing officials.");
-  const existing = await loadOrganizationOfficials(session, profile.organization_id);
+  if (!organizationId) throw new Error("Select an organization before importing officials.");
+  const existing = await loadOrganizationOfficials(session, organizationId);
   const bySource = new Map(existing.filter((item) => item.source_official_id).map((item) => [item.source_official_id!, item]));
   const byEmail = new Map(existing.filter((item) => item.email).map((item) => [item.email!.trim().toLowerCase(), item]));
   const provisionalByName = new Map<string, OfficialRecord[]>();
@@ -581,7 +592,7 @@ export async function importOfficials(
     };
     if (match) updates.push({ id: match.id, changes });
     else createPayload.push({
-      organization_id: profile.organization_id,
+      organization_id: organizationId,
       identity_status: "provisional",
       ...changes,
     });
@@ -602,7 +613,7 @@ export async function importOfficials(
   await rest(session, "import_jobs", {
     method: "POST",
     body: JSON.stringify({
-      organization_id: profile.organization_id,
+      organization_id: organizationId,
       uploaded_by: profile.id,
       source: "assignr_officials_csv",
       file_name: fileName,
@@ -645,6 +656,7 @@ export async function saveAssessment(
 export async function importTournament(
   session: Law18Session,
   profile: Profile,
+  organizationId: string,
   details: {
     name: string;
     venue: string;
@@ -655,12 +667,12 @@ export async function importTournament(
   },
   rows: ImportRow[],
 ) {
-  if (!profile.organization_id) throw new Error("Select an organization before importing a schedule.");
+  if (!organizationId) throw new Error("Select an organization before importing a schedule.");
   let event: EventRecord;
   if (details.eventId) {
     const existingEvents = await rest<EventRecord[]>(
       session,
-      `events?id=eq.${enc(details.eventId)}&organization_id=eq.${enc(profile.organization_id)}&select=*`,
+      `events?id=eq.${enc(details.eventId)}&organization_id=eq.${enc(organizationId)}&select=*`,
     );
     const existingEvent = existingEvents[0];
     if (!existingEvent) throw new Error("The selected event is no longer available.");
@@ -685,7 +697,7 @@ export async function importTournament(
       {
         method: "POST",
         body: JSON.stringify({
-          organization_id: profile.organization_id,
+          organization_id: organizationId,
           name: details.name,
           venue_name: details.venue,
           starts_on: details.startsOn,
@@ -699,7 +711,7 @@ export async function importTournament(
     event = events[0];
   }
 
-  const existingOfficials = await loadOrganizationOfficials(session, profile.organization_id);
+  const existingOfficials = await loadOrganizationOfficials(session, organizationId);
   const byName = new Map<string, OfficialRecord[]>();
   existingOfficials.forEach((official) => {
     const key = normalizeOfficialName(official.source_display_name || official.full_name);
@@ -712,7 +724,7 @@ export async function importTournament(
     await rest(session, "officials", {
       method: "POST",
       body: JSON.stringify(newNames.map((key) => ({
-        organization_id: profile.organization_id,
+        organization_id: organizationId,
         full_name: displayByName.get(key),
         email: null,
         source: "assignr_schedule_name",
@@ -722,7 +734,7 @@ export async function importTournament(
       }))),
     }, "return=minimal");
   }
-  const officials = await loadOrganizationOfficials(session, profile.organization_id);
+  const officials = await loadOrganizationOfficials(session, organizationId);
   const officialByEmail = new Map(officials.filter((official) => official.email)
     .map((official) => [official.email!.trim().toLowerCase(), official]));
   const officialByName = new Map<string, OfficialRecord[]>();
@@ -787,7 +799,7 @@ export async function importTournament(
     {
       method: "POST",
       body: JSON.stringify({
-        organization_id: profile.organization_id,
+        organization_id: organizationId,
         event_id: event.id,
         uploaded_by: profile.id,
         file_name: details.fileName,
@@ -798,4 +810,46 @@ export async function importTournament(
     "return=minimal",
   );
   return event;
+}
+
+export async function createOfficial(
+  session: Law18Session,
+  organizationId: string,
+  values: { full_name: string; email?: string | null; secondary_email?: string | null; phone?: string | null; badge_level?: string | null },
+) {
+  const rows = await rest<OfficialRecord[]>(session, "officials", {
+    method: "POST",
+    body: JSON.stringify({
+      organization_id: organizationId,
+      full_name: values.full_name.trim(),
+      email: values.email?.trim().toLowerCase() || null,
+      secondary_email: values.secondary_email?.trim().toLowerCase() || null,
+      phone: values.phone?.trim() || null,
+      badge_level: values.badge_level?.trim() || null,
+      source: "manual",
+      source_display_name: values.full_name.trim(),
+      identity_status: "provisional",
+    }),
+  }, "return=representation");
+  return rows[0];
+}
+
+export async function createGame(
+  session: Law18Session,
+  eventId: string,
+  values: { starts_at: string; field_name: string; home_team: string; away_team: string; division?: string },
+) {
+  const rows = await rest<GameRecord[]>(session, "games", {
+    method: "POST",
+    body: JSON.stringify({
+      event_id: eventId,
+      external_id: `manual-${Date.now().toString(36)}`,
+      starts_at: values.starts_at,
+      field_name: values.field_name.trim(),
+      home_team: values.home_team.trim(),
+      away_team: values.away_team.trim(),
+      division: values.division?.trim() || "",
+    }),
+  }, "return=representation");
+  return rows[0];
 }

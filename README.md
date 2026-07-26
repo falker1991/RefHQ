@@ -44,6 +44,7 @@ Open the local address shown in the terminal.
    - `supabase/migrations/202607240004_account_membership.sql`
    - `supabase/migrations/202607250005_tournament_operations_v020.sql`
    - `supabase/migrations/202607250006_remove_v010_checkin_compat.sql`
+   - `supabase/migrations/202607250007_fix_event_policy_recursion.sql`
 3. Create at least one user in **Authentication → Users**.
 4. Add that user to `public.profiles`, using the auth user ID and the demo organization ID.
 5. Optionally run `supabase/seed.sql` for the Capital Cup event and demo games.

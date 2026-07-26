@@ -3,7 +3,7 @@ import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
   const title = "Law18Referee Management — Tournament referee operations";
-  const description = "Referee check-in, coaching, assessments, and tournament operations. Provided by FalkSports.";
+  const description = "Referee check-in, coaching, ratings, and tournament operations. Provided by FalkSports.";
   return {
     title,
     description,

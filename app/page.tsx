@@ -33,6 +33,7 @@ import {
   saveAppearanceTheme,
   reactivateOrganization,
   updateOrganizationName,
+  updateEventRatingSettings,
   updateOwnProfile,
   type AssignmentRecord,
   type CheckInRecord,
@@ -534,70 +535,154 @@ function OfficialsDirectory({
   </section>;
 }
 
+type CrewRatingDraft = {
+  overall_rating: number;
+  positioning: number;
+  decision_making: number;
+  communication: number;
+  match_control: number;
+  strengths: string;
+  development_focus: string;
+  coach_notes: string;
+};
+
+const blankCrewRating = (): CrewRatingDraft => ({
+  overall_rating: 3,
+  positioning: 3,
+  decision_making: 3,
+  communication: 3,
+  match_control: 3,
+  strengths: "",
+  development_focus: "",
+  coach_notes: "",
+});
+
 function AssessmentCenter({
   session,
-  profile,
+  event,
   organizationId,
   data,
   canSubmit,
+  canConfigure,
   onSaved,
+  onEventUpdated,
 }: {
   session: Law18Session;
-  profile: Profile;
+  event: EventRecord;
   organizationId: string;
   data: EventData;
   canSubmit: boolean;
+  canConfigure: boolean;
   onSaved: () => void;
+  onEventUpdated: (event: EventRecord) => void;
 }) {
   const [gameId, setGameId] = useState("");
-  const [officialId, setOfficialId] = useState("");
-  const [visibility, setVisibility] = useState<"public" | "private">("private");
-  const [ratings, setRatings] = useState({ positioning: 3, decision_making: 3, communication: 3, match_control: 3 });
-  const [strengths, setStrengths] = useState("");
-  const [development, setDevelopment] = useState("");
-  const [notes, setNotes] = useState("");
+  const [visibility, setVisibility] = useState<"public" | "private">(event.ratings_admin_only ? "private" : "public");
+  const [drafts, setDrafts] = useState<Record<string, CrewRatingDraft>>({});
   const [message, setMessage] = useState("");
-  const gameAssignments = data.assignments.filter((assignment) => assignment.game_id === gameId);
+  const [busy, setBusy] = useState(false);
   const officialMap = new Map(data.officials.map((official) => [official.id, official]));
   const gameMap = new Map(data.games.map((game) => [game.id, game]));
-  async function submit(status: "draft" | "submitted") {
-    if (!organizationId || !gameId || !officialId) return;
+  const gameAssignments = [...new Map(data.assignments.filter((assignment) => assignment.game_id === gameId).map((assignment) => [assignment.official_id, assignment])).values()];
+
+  function chooseGame(nextGameId: string) {
+    setGameId(nextGameId);
+    const nextDrafts: Record<string, CrewRatingDraft> = {};
+    data.assignments.filter((assignment) => assignment.game_id === nextGameId).forEach((assignment) => {
+      const saved = data.assessments.find((assessment) => assessment.game_id === nextGameId && assessment.official_id === assignment.official_id && assessment.coach_id === session.user.id);
+      nextDrafts[assignment.official_id] = saved ? {
+        overall_rating: saved.overall_rating || 3,
+        positioning: saved.positioning || 3,
+        decision_making: saved.decision_making || 3,
+        communication: saved.communication || 3,
+        match_control: saved.match_control || 3,
+        strengths: saved.strengths || "",
+        development_focus: saved.development_focus || "",
+        coach_notes: saved.coach_notes || "",
+      } : blankCrewRating();
+    });
+    setDrafts(nextDrafts);
+  }
+
+  function updateDraft(officialId: string, changes: Partial<CrewRatingDraft>) {
+    setDrafts((current) => ({ ...current, [officialId]: { ...(current[officialId] || blankCrewRating()), ...changes } }));
+  }
+
+  async function submitCrew(status: "draft" | "submitted") {
+    if (!organizationId || !gameId || !gameAssignments.length) return;
+    setBusy(true);
+    setMessage("");
     try {
-      await saveAssessment(session, organizationId, {
-        game_id: gameId,
-        official_id: officialId,
-        visibility,
-        status,
-        ...ratings,
-        strengths: strengths || null,
-        development_focus: development || null,
-        coach_notes: notes || null,
-      });
-      setMessage(status === "draft" ? "Draft saved." : "Assessment submitted.");
+      await Promise.all(gameAssignments.map((assignment) => {
+        const rating = drafts[assignment.official_id] || blankCrewRating();
+        return saveAssessment(session, organizationId, {
+          game_id: gameId,
+          official_id: assignment.official_id,
+          visibility: event.ratings_admin_only ? "private" : visibility,
+          status,
+          evaluation_type: event.rating_type,
+          overall_rating: event.rating_type === "basic_eval" ? rating.overall_rating : null,
+          positioning: event.rating_type === "skills_eval" ? rating.positioning : null,
+          decision_making: event.rating_type === "skills_eval" ? rating.decision_making : null,
+          communication: event.rating_type === "skills_eval" ? rating.communication : null,
+          match_control: event.rating_type === "skills_eval" ? rating.match_control : null,
+          strengths: event.rating_type === "skills_eval" ? rating.strengths || null : null,
+          development_focus: event.rating_type === "skills_eval" ? rating.development_focus || null : null,
+          coach_notes: event.rating_type === "skills_eval" ? rating.coach_notes || null : null,
+        });
+      }));
+      setMessage(status === "draft" ? `Draft ratings saved for ${gameAssignments.length} officials.` : `Ratings submitted for ${gameAssignments.length} officials.`);
       onSaved();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to save the assessment.");
+      setMessage(error instanceof Error ? error.message : "Unable to save the ratings.");
+    } finally {
+      setBusy(false);
     }
   }
-  if (!canSubmit) return <section className="page-section"><div className="section-title"><div><p className="eyebrow">MY FEEDBACK</p><h1>Assessment history</h1><p>Public feedback shared with you appears here.</p></div></div><EmptyState>No public assessments are available yet.</EmptyState></section>;
-  return <section className="page-section">
-    <div className="section-title"><div><p className="eyebrow">REFEREE DEVELOPMENT</p><h1>Assessment center</h1><p>Submit structured public or private coaching feedback.</p></div></div>
-    <div className="assessment-grid">
-      <article className="panel assessment-form">
-        <div className="panel-head"><div><p className="eyebrow">NEW ASSESSMENT</p><h2>Game and referee</h2></div></div>
-        <div className="assessment-selects"><label>Game<select value={gameId} onChange={(event) => { setGameId(event.target.value); setOfficialId(""); }}><option value="">Choose a game</option>{data.games.map((game) => <option value={game.id} key={game.id}>{formatTime(game.starts_at)} · {game.field_name} · {game.home_team} vs. {game.away_team}</option>)}</select></label><label>Referee<select value={officialId} disabled={!gameId} onChange={(event) => setOfficialId(event.target.value)}><option value="">Choose an official</option>{gameAssignments.map((assignment) => <option value={assignment.official_id} key={assignment.id}>{officialMap.get(assignment.official_id)?.full_name} · {positionLabel(assignment.position)}</option>)}</select></label><label>Visibility<select value={visibility} onChange={(event) => setVisibility(event.target.value as "public" | "private")}><option value="private">Private — event staff and submitting coach</option><option value="public">Public — visible to the referee</option></select></label></div>
-        {Object.entries(ratings).map(([key, value]) => <label className="rating" key={key}><span><strong>{key.replace("_", " ")}</strong><small>1 developing · 5 excellent</small></span><select value={value} onChange={(event) => setRatings({ ...ratings, [key]: Number(event.target.value) })}>{[1,2,3,4,5].map((score) => <option key={score}>{score}</option>)}</select></label>)}
-        <label className="notes">Strengths<textarea value={strengths} onChange={(event) => setStrengths(event.target.value)} /></label>
-        <label className="notes">Development focus<textarea value={development} onChange={(event) => setDevelopment(event.target.value)} /></label>
-        <label className="notes">Private coach notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
-        {message && <p className="pilot-message assessment-message">{message}</p>}
-        <div className="assessment-actions"><button className="secondary" disabled={!gameId || !officialId} onClick={() => submit("draft")}>Save draft</button><button className="primary" disabled={!gameId || !officialId} onClick={() => submit("submitted")}>Submit assessment</button></div>
-      </article>
-      <article className="panel history"><div className="panel-head"><div><p className="eyebrow">HISTORY</p><h2>{data.assessments.length} assessments</h2></div></div>{data.assessments.map((assessment) => {
-        const average = [assessment.positioning, assessment.decision_making, assessment.communication, assessment.match_control].filter((item): item is number => item !== null).reduce((sum, item, _, all) => sum + item / all.length, 0);
-        return <article key={assessment.id}><div><strong>{officialMap.get(assessment.official_id)?.full_name || "Referee"}</strong><p>{gameMap.get(assessment.game_id)?.home_team} vs. {gameMap.get(assessment.game_id)?.away_team}</p><small>{assessment.visibility === "public" ? "Public feedback" : "Private assessment"}</small></div><span className="score">{average ? average.toFixed(1) : "—"}</span><span className={`identity-pill ${assessment.status !== "draft" ? "linked" : ""}`}>{assessment.status}</span></article>;
-      })}{!data.assessments.length && <EmptyState>No assessments have been saved for this event.</EmptyState>}</article>
-    </div>
+
+  async function configure(ratingType: EventRecord["rating_type"], adminOnly: boolean) {
+    setBusy(true);
+    setMessage("");
+    try {
+      const updated = await updateEventRatingSettings(session, event.id, ratingType, adminOnly);
+      onEventUpdated(updated);
+      setVisibility(adminOnly ? "private" : visibility);
+      setMessage("Event rating settings updated.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update event rating settings.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!canSubmit) return <section className="page-section"><div className="section-title"><div><p className="eyebrow">MY FEEDBACK</p><h1>Ratings history</h1><p>Ratings shared with you appear here.</p></div></div><EmptyState>No public ratings are available yet.</EmptyState></section>;
+  return <section className="page-section ratings-page">
+    <div className="section-title"><div><p className="eyebrow">REFEREE DEVELOPMENT</p><h1>Ratings</h1><p>Rate every official assigned to a game in one view.</p></div></div>
+    {canConfigure && <article className="panel rating-settings"><div><p className="eyebrow">EVENT SETTINGS</p><h2>Rating configuration</h2><p>These settings apply to every game in {event.name}.</p></div><label>Evaluation type<select value={event.rating_type} disabled={busy} onChange={(e) => configure(e.target.value as EventRecord["rating_type"], event.ratings_admin_only)}><option value="skills_eval">Skills Eval</option><option value="basic_eval">Basic Eval</option></select></label><label className="visibility-lock"><input type="checkbox" checked={event.ratings_admin_only} disabled={busy} onChange={(e) => configure(event.rating_type, e.target.checked)} /><span><strong>Lock visibility to event staff</strong><small>Only administrators, event/game assignors, and referee coaches can view ratings.</small></span></label></article>}
+    <article className="panel crew-rating-workspace">
+      <div className="panel-head"><div><p className="eyebrow">{event.rating_type === "skills_eval" ? "SKILLS EVAL" : "BASIC EVAL"}</p><h2>Select a game</h2></div></div>
+      <div className="assessment-selects"><label>Game<select value={gameId} onChange={(e) => chooseGame(e.target.value)}><option value="">Choose a game</option>{data.games.map((game) => <option value={game.id} key={game.id}>{formatTime(game.starts_at)} · {game.field_name} · {game.home_team} vs. {game.away_team}</option>)}</select></label><label>Visibility<select value={event.ratings_admin_only ? "private" : visibility} disabled={event.ratings_admin_only} onChange={(e) => setVisibility(e.target.value as "public" | "private")}><option value="private">Private — event staff and referee coaches</option><option value="public">Public — visible to each referee</option></select></label>{event.ratings_admin_only && <p className="import-note">Visibility is locked to event staff for this event.</p>}</div>
+      <div className="crew-rating-list">{gameAssignments.map((assignment) => {
+        const rating = drafts[assignment.official_id] || blankCrewRating();
+        return <section className="crew-rating-card" key={assignment.official_id}><div className="crew-rating-heading"><span className="avatar">{initials(officialMap.get(assignment.official_id)?.full_name || "R")}</span><div><h3>{officialMap.get(assignment.official_id)?.full_name || "Official"}</h3><p>{positionLabel(assignment.position)}</p></div></div>
+          {event.rating_type === "basic_eval"
+            ? <label className="basic-rating"><span><strong>Overall Rating</strong><small>1 developing · 5 excellent</small></span><select value={rating.overall_rating} onChange={(e) => updateDraft(assignment.official_id, { overall_rating: Number(e.target.value) })}>{[1,2,3,4,5].map((score) => <option key={score}>{score}</option>)}</select></label>
+            : <><div className="skill-rating-grid">{([
+              ["positioning", "Positioning"],
+              ["decision_making", "Decision Making"],
+              ["communication", "Communication"],
+              ["match_control", "Match Control"],
+            ] as const).map(([key, label]) => <label key={key}><span>{label}</span><select value={rating[key]} onChange={(e) => updateDraft(assignment.official_id, { [key]: Number(e.target.value) })}>{[1,2,3,4,5].map((score) => <option key={score}>{score}</option>)}</select></label>)}</div><div className="crew-notes-grid"><label>Strengths<textarea value={rating.strengths} onChange={(e) => updateDraft(assignment.official_id, { strengths: e.target.value })} /></label><label>Development Focus<textarea value={rating.development_focus} onChange={(e) => updateDraft(assignment.official_id, { development_focus: e.target.value })} /></label><label>Private Coach Notes<textarea value={rating.coach_notes} onChange={(e) => updateDraft(assignment.official_id, { coach_notes: e.target.value })} /></label></div></>}
+        </section>;
+      })}{gameId && !gameAssignments.length && <EmptyState>No officials are assigned to this game.</EmptyState>}</div>
+      {message && <p className="pilot-message assessment-message">{message}</p>}
+      <div className="assessment-actions"><button className="secondary" disabled={busy || !gameAssignments.length} onClick={() => submitCrew("draft")}>Save crew draft</button><button className="primary" disabled={busy || !gameAssignments.length} onClick={() => submitCrew("submitted")}>Submit all ratings</button></div>
+    </article>
+    <article className="panel history ratings-history"><div className="panel-head"><div><p className="eyebrow">HISTORY</p><h2>{data.assessments.length} ratings</h2></div></div>{data.assessments.map((assessment) => {
+      const skillAverage = [assessment.positioning, assessment.decision_making, assessment.communication, assessment.match_control].filter((item): item is number => item !== null).reduce((sum, item, _, all) => sum + item / all.length, 0);
+      const score = assessment.evaluation_type === "basic_eval" ? assessment.overall_rating : skillAverage;
+      return <article key={assessment.id}><div><strong>{officialMap.get(assessment.official_id)?.full_name || "Referee"}</strong><p>{gameMap.get(assessment.game_id)?.home_team} vs. {gameMap.get(assessment.game_id)?.away_team}</p><small>{assessment.evaluation_type === "basic_eval" ? "Basic Eval" : "Skills Eval"} · {assessment.visibility === "public" ? "Public" : "Admin only"}</small></div><span className="score">{score ? Number(score).toFixed(1) : "—"}</span><span className={`identity-pill ${assessment.status !== "draft" ? "linked" : ""}`}>{assessment.status}</span></article>;
+    })}{!data.assessments.length && <EmptyState>No ratings have been saved for this event.</EmptyState>}</article>
   </section>;
 }
 
@@ -963,7 +1048,7 @@ function SiteGroupsAdmin({ session, ownerEmail, onOpen }: { session: Law18Sessio
         <p className="eyebrow">{pending.action === "delete" ? "PERMANENT ACTION" : "SECURITY CONFIRMATION"}</p>
         <h2 id="organization-confirm-title">{pending.action === "delete" ? "Permanently delete" : "Deactivate"} {pending.organization.name}?</h2>
         <p>{pending.action === "delete"
-          ? "This permanently removes the organization and all connected events, schedules, officials, assessments, and history. It cannot be recovered."
+          ? "This permanently removes the organization and all connected events, schedules, officials, ratings, and history. It cannot be recovered."
           : "Members will lose access and event operations will stop. All data remains stored and the organization can be reactivated."}</p>
         {pending.action === "delete" && <label>Type the organization name<input value={confirmName} onChange={(event) => setConfirmName(event.target.value)} /></label>}
         <label>Confirm your password<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
@@ -999,6 +1084,7 @@ function Dashboard({ session }: { session: Law18Session }) {
   const isStaff = ["site_owner", "organization_admin", "event_admin", "assignor"].some((role) => allRoles.has(role as MembershipRole));
   const isCoach = allRoles.has("referee_coach");
   const canAssess = isCoach || isStaff;
+  const canConfigureRatings = ["site_owner", "organization_admin", "event_admin"].some((role) => allRoles.has(role as MembershipRole));
   const event = events.find((item) => item.id === eventId);
 
   const refresh = useCallback(async (selectedId = eventId) => {
@@ -1108,11 +1194,16 @@ function Dashboard({ session }: { session: Law18Session }) {
     await switchEvent(newEvent.id);
   }
 
+  function handleEventUpdated(updated: EventRecord) {
+    setEvents((current) => current.map((item) => item.id === updated.id ? updated : item));
+    setAllEvents((current) => current.map((item) => item.id === updated.id ? updated : item));
+  }
+
   const nav: [View, string][] = isStaff
-    ? [["dashboard", "Dashboard"], ["board", "Assignment board"], ["checkin", "Check-in"], ["schedule", "Schedule"], ["officials", "Officials"], ["coaching", "Coaching"], ["assessments", "Assessments"], ["import", "Import"]]
+    ? [["dashboard", "Dashboard"], ["board", "Assignment board"], ["checkin", "Check-in"], ["schedule", "Schedule"], ["officials", "Officials"], ["coaching", "Coaching"], ["assessments", "Ratings"], ["import", "Import"]]
     : isCoach
-      ? [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["coaching", "Coaching"], ["assessments", "Assessments"]]
-      : [["dashboard", "Dashboard"], ["board", "My day"], ["checkin", "QR check-in"], ["schedule", "Schedule"], ["assessments", "My feedback"]];
+      ? [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["coaching", "Coaching"], ["assessments", "Ratings"]]
+      : [["dashboard", "Dashboard"], ["board", "My day"], ["checkin", "QR check-in"], ["schedule", "Schedule"], ["assessments", "My ratings"]];
 
   if (loading) return <main className="auth-page"><p className="auth-loading">Loading tournament data…</p></main>;
   if (error) return <main className="auth-page"><section className="auth-card"><h1>Setup needed</h1><p className="auth-intro">{error}</p><p>Run the latest Law18Referee Management Supabase migration, then reload this page.</p><button className="secondary wide" onClick={() => auth.signOut()}>Sign out</button></section></main>;
@@ -1145,7 +1236,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {event && view === "schedule" && <ScheduleView session={session} event={event} data={data} onCreated={() => refresh(event.id)} />}
       {profile && organization && view === "officials" && <OfficialsDirectory session={session} organizationId={organization.id} officials={organizationOfficials} data={data} onCreated={() => loadOrganizationOfficials(session, organization.id).then(setOrganizationOfficials)} />}
       {event && view === "coaching" && <Placeholder title="Coaching assignments" copy="Assign coaches to this event and its matches." />}
-      {event && organization && view === "assessments" && profile && <AssessmentCenter session={session} profile={profile} organizationId={organization.id} data={data} canSubmit={canAssess} onSaved={() => refresh(event.id)} />}
+      {event && organization && view === "assessments" && <AssessmentCenter session={session} event={event} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={canConfigureRatings} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
       {isStaff && organization && view === "import" && profile && <ImportView session={session} profile={profile} organizationId={organization.id} events={events} onImported={handleImported} />}
       {profile && view === "account" && <AccountSettings session={session} profile={profile} onUpdated={setProfile} />}
       {view === "groups" && (allRoles.has("site_owner")
@@ -1153,7 +1244,7 @@ function Dashboard({ session }: { session: Law18Session }) {
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.2.3</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.3.0</span></footer>
   </main>;
 }
 

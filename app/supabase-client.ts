@@ -54,6 +54,8 @@ export type EventRecord = {
   ends_on: string;
   timezone: string;
   check_in_slug: string;
+  rating_type: "skills_eval" | "basic_eval";
+  ratings_admin_only: boolean;
 };
 
 export type GameRecord = {
@@ -107,6 +109,8 @@ export type AssessmentRecord = {
   coach_id: string;
   visibility: "public" | "private";
   status: "draft" | "submitted" | "shared";
+  evaluation_type: "skills_eval" | "basic_eval";
+  overall_rating: number | null;
   positioning: number | null;
   decision_making: number | null;
   communication: number | null;
@@ -346,6 +350,21 @@ export async function loadEventData(session: Law18Session, eventId: string) {
     `assessments?game_id=in.(${gameIds})&select=*`,
   );
   return { games, assignments, officials, checkIns, assessments };
+}
+
+export async function updateEventRatingSettings(
+  session: Law18Session,
+  eventId: string,
+  ratingType: EventRecord["rating_type"],
+  ratingsAdminOnly: boolean,
+) {
+  const rows = await rest<EventRecord[]>(
+    session,
+    `events?id=eq.${enc(eventId)}`,
+    { method: "PATCH", body: JSON.stringify({ rating_type: ratingType, ratings_admin_only: ratingsAdminOnly }) },
+    "return=representation",
+  );
+  return rows[0];
 }
 
 export async function checkIn(

@@ -94,7 +94,7 @@ export function AuthPanel({ onSession, recovery = false }: AuthPanelProps) {
             ? "Choose a secure password to finish setting up your account."
             : mode === "signup"
               ? "Use the same email address your assignor imported from Assignr."
-              : "Access tournament check-in, schedules, coaching, and assessments."}
+              : "Access tournament check-in, schedules, coaching, and ratings."}
         </p>
         <form onSubmit={mode === "recovery" ? updatePassword : mode === "signup" ? createAccount : signIn}>
           {mode === "signup" && <label>Full name<input value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" required /></label>}

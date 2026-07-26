@@ -263,6 +263,12 @@ export async function restoreDefaultAppearance(session: Law18Session) {
   }, "return=minimal");
 }
 
+export async function deleteAppearanceCampaign(session: Law18Session, campaignId: string) {
+  await rest(session, `site_appearance_campaigns?id=eq.${enc(campaignId)}`, {
+    method: "DELETE",
+  }, "return=minimal");
+}
+
 export async function loadAppearanceThemes(session: Law18Session) {
   return rest<AppearanceTheme[]>(session, "site_appearance_themes?select=*&order=name.asc");
 }

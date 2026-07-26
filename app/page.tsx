@@ -12,6 +12,7 @@ import {
   createOfficial,
   createOrganization,
   createAppearanceCampaign,
+  deleteAppearanceCampaign,
   deleteAppearanceTheme,
   importTournament,
   importOfficials,
@@ -60,6 +61,22 @@ type EventData = {
 
 function Mark() {
   return <span className="logo-lockup"><img src="/logo-draft-law18referee-management-v4.png" alt="Law18Referee Management" /></span>;
+}
+
+const defaultLogoUrl = "/logo-draft-law18referee-management-v4.png";
+
+function displayAppearance(campaign?: { primary_color: string | null; accent_color: string | null; logo_url: string | null }) {
+  const primaryVariables = ["--green", "--chrome", "--footer", "--nav-active"];
+  const accentVariables = ["--berry", "--nav-underline", "--event-mark"];
+  primaryVariables.forEach((variable) => campaign?.primary_color
+    ? document.documentElement.style.setProperty(variable, campaign.primary_color)
+    : document.documentElement.style.removeProperty(variable));
+  accentVariables.forEach((variable) => campaign?.accent_color
+    ? document.documentElement.style.setProperty(variable, campaign.accent_color)
+    : document.documentElement.style.removeProperty(variable));
+  document.querySelectorAll<HTMLImageElement>(".logo-lockup img").forEach((image) => {
+    image.src = campaign?.logo_url || defaultLogoUrl;
+  });
 }
 
 function initials(name: string) {
@@ -712,7 +729,10 @@ function AppearanceSettings({ session }: { session: Law18Session }) {
         ends_at: new Date(form.ends_at).toISOString(),
         active: true,
       });
-      setCampaigns(await loadAppearanceCampaigns(session));
+      const nextCampaigns = await loadAppearanceCampaigns(session);
+      setCampaigns(nextCampaigns);
+      const now = Date.now();
+      displayAppearance(nextCampaigns.find((item) => item.active && new Date(item.starts_at).getTime() <= now && new Date(item.ends_at).getTime() > now));
       setMessage("Appearance campaign scheduled.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to schedule this appearance.");
@@ -721,9 +741,21 @@ function AppearanceSettings({ session }: { session: Law18Session }) {
   async function restore() {
     await restoreDefaultAppearance(session);
     setCampaigns(await loadAppearanceCampaigns(session));
-    document.documentElement.style.removeProperty("--green");
-    document.documentElement.style.removeProperty("--berry");
+    displayAppearance();
     setMessage("The default Law18Ref appearance has been restored.");
+  }
+  async function unschedule(campaignId: string, campaignName: string) {
+    if (!window.confirm(`Unschedule and delete “${campaignName}”? This does not delete a saved reusable theme.`)) return;
+    try {
+      await deleteAppearanceCampaign(session, campaignId);
+      const nextCampaigns = await loadAppearanceCampaigns(session);
+      setCampaigns(nextCampaigns);
+      const now = Date.now();
+      displayAppearance(nextCampaigns.find((item) => item.active && new Date(item.starts_at).getTime() <= now && new Date(item.ends_at).getTime() > now));
+      setMessage(`${campaignName} was unscheduled.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to unschedule this appearance.");
+    }
   }
   async function saveTheme() {
     try {
@@ -747,6 +779,7 @@ function AppearanceSettings({ session }: { session: Law18Session }) {
       primary_color: theme.primary_color,
       accent_color: theme.accent_color,
     });
+    displayAppearance(theme);
     setMessage(`${theme.name} loaded. Choose dates to schedule it, or adjust it and save as another theme.`);
   }
   async function removeTheme(themeId: string, themeName: string) {
@@ -774,9 +807,13 @@ function AppearanceSettings({ session }: { session: Law18Session }) {
         <label>Starts<input type="datetime-local" value={form.starts_at} onChange={(event) => setForm({ ...form, starts_at: event.target.value })} /></label>
         <label>Ends<input type="datetime-local" value={form.ends_at} onChange={(event) => setForm({ ...form, ends_at: event.target.value })} /></label>
         {message && <p className="pilot-message">{message}</p>}
-        <div className="appearance-form-actions"><button className="secondary" disabled={form.name.trim().length < 2} onClick={saveTheme}>Save to theme library</button><button className="primary" disabled={!form.name || !form.starts_at || !form.ends_at} onClick={schedule}>Schedule appearance</button></div>
+        <div className="appearance-form-actions"><button className="secondary" onClick={() => displayAppearance({ primary_color: form.primary_color, accent_color: form.accent_color, logo_url: form.logo_url || null })}>Preview</button><button className="secondary" disabled={form.name.trim().length < 2} onClick={saveTheme}>Save to theme library</button><button className="primary" disabled={!form.name || !form.starts_at || !form.ends_at} onClick={schedule}>Schedule appearance</button></div>
       </article>
-      <article className="panel campaign-list"><div className="panel-head"><div><p className="eyebrow">SCHEDULE</p><h2>Appearance campaigns</h2></div></div>{campaigns.map((campaign) => <div className="campaign-row" key={campaign.id}><span style={{ background: campaign.primary_color || undefined }} /><div><strong>{campaign.name}</strong><small>{new Date(campaign.starts_at).toLocaleString()} – {new Date(campaign.ends_at).toLocaleString()}</small></div><b>{campaign.active ? "Scheduled" : "Ended"}</b></div>)}{!campaigns.length && <EmptyState>No appearance campaigns are scheduled.</EmptyState>}</article>
+      <article className="panel campaign-list"><div className="panel-head"><div><p className="eyebrow">SCHEDULE</p><h2>Appearance campaigns</h2></div></div>{campaigns.map((campaign) => {
+        const now = Date.now();
+        const status = !campaign.active || new Date(campaign.ends_at).getTime() <= now ? "Ended" : new Date(campaign.starts_at).getTime() <= now ? "Active" : "Scheduled";
+        return <div className="campaign-row" key={campaign.id}><span style={{ background: campaign.primary_color || undefined }} /><div><strong>{campaign.name}</strong><small>{new Date(campaign.starts_at).toLocaleString()} – {new Date(campaign.ends_at).toLocaleString()}</small></div><b>{status}</b><button className="text-button campaign-delete" onClick={() => unschedule(campaign.id, campaign.name)}>Unschedule</button></div>;
+      })}{!campaigns.length && <EmptyState>No appearance campaigns are scheduled.</EmptyState>}</article>
     </div>
   </section>;
 }
@@ -1146,10 +1183,7 @@ function Dashboard({ session }: { session: Law18Session }) {
     loadAppearanceCampaigns(session).then((campaigns) => {
       const now = Date.now();
       const active = campaigns.find((campaign) => campaign.active && new Date(campaign.starts_at).getTime() <= now && new Date(campaign.ends_at).getTime() > now);
-      if (!active) return;
-      if (active.primary_color) document.documentElement.style.setProperty("--green", active.primary_color);
-      if (active.accent_color) document.documentElement.style.setProperty("--berry", active.accent_color);
-      if (active.logo_url) document.querySelectorAll<HTMLImageElement>(".logo-lockup img").forEach((image) => { image.src = active.logo_url!; });
+      displayAppearance(active);
     }).catch(() => undefined);
   }, [session, view]);
 
@@ -1244,7 +1278,7 @@ function Dashboard({ session }: { session: Law18Session }) {
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.3.0</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.3.1</span></footer>
   </main>;
 }
 

@@ -178,12 +178,10 @@ function RefereeDay({
   event,
   data,
   session,
-  onCheckedIn,
 }: {
   event: EventRecord;
   data: EventData;
   session: Law18Session;
-  onCheckedIn: () => void;
 }) {
   const email = session.user.email?.toLowerCase();
   const official = data.officials.find((item) => item.email?.toLowerCase() === email || item.linked_user_id === session.user.id);
@@ -196,22 +194,6 @@ function RefereeDay({
     || games[0]?.game.starts_at.slice(0, 10)
     || new Date().toISOString().slice(0, 10);
   const isChecked = Boolean(official && data.checkIns.some((item) => item.official_id === official.id && item.event_date === checkInDate && item.status === "checked_in"));
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-
-  async function handleCheckIn(method: "qr" | "app" = "app") {
-    if (!official) return;
-    setBusy(true);
-    try {
-      await checkIn(session, event.id, official.id, method, checkInDate);
-      setMessage("You’re checked in. Have a great day!");
-      onCheckedIn();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to check in.");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   if (!official || !games.length) return <EmptyState>No imported assignments match {session.user.email}. Ask your assignor to confirm the email in the CSV.</EmptyState>;
   return <section className="referee-home">
@@ -219,15 +201,12 @@ function RefereeDay({
       <p className="eyebrow">MY TOURNAMENT DAY</p>
       <h1>Hi, {official.full_name.split(" ")[0]}.</h1>
       <p>{event.name} · {event.venue_name}</p>
-      <button className="primary checkin-cta" disabled={busy || isChecked} onClick={() => handleCheckIn("app")}>
-        {isChecked ? "✓ Checked in" : busy ? "Checking in…" : "Check in now"}
-      </button>
+      <p className="pilot-message">{isChecked ? "✓ You are checked in for this event day." : "Scan the on-site QR code from the Check-in section when you arrive."}</p>
       {message && <p className="pilot-message">{message}</p>}
     </div>
     <section className="mobile-actions">
       <a href="#my-schedule"><span>☷</span><strong>My schedule</strong></a>
-      <a href="#scan"><span>⌗</span><strong>Scan QR</strong></a>
-      <button onClick={() => handleCheckIn("app")} disabled={isChecked}><span>✓</span><strong>Check in</strong></button>
+      <span><span>⌗</span><strong>On-site QR required</strong></span>
     </section>
     <section className="panel my-games" id="my-schedule">
       <div className="panel-head"><div><p className="eyebrow">ASSIGNED — NO ACCEPTANCE REQUIRED</p><h2>Today’s games</h2></div></div>
@@ -237,11 +216,10 @@ function RefereeDay({
         <Status checked={isChecked} />
       </article>)}
     </section>
-    <QrScanner onFound={() => handleCheckIn("qr")} />
   </section>;
 }
 
-function QrScanner({ onFound }: { onFound: () => void }) {
+function QrScanner({ onFound }: { onFound: (rawValue: string) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -249,7 +227,7 @@ function QrScanner({ onFound }: { onFound: () => void }) {
 
   async function start() {
     if (!navigator.mediaDevices?.getUserMedia || !("BarcodeDetector" in window)) {
-      setMessage("Use your phone’s Camera app to scan the event QR, or tap Check in.");
+      setMessage("This browser cannot open the in-app scanner. Try the latest version of your mobile browser.");
       return;
     }
     try {
@@ -266,14 +244,14 @@ function QrScanner({ onFound }: { onFound: () => void }) {
           streamRef.current.getTracks().forEach((track) => track.stop());
           streamRef.current = null;
           setScanning(false);
-          onFound();
+          onFound(codes[0].rawValue);
           return;
         }
         window.setTimeout(scan, 350);
       };
       window.setTimeout(scan, 600);
     } catch {
-      setMessage("Camera access was not available. You can still tap Check in.");
+      setMessage("Camera access was not available. Allow camera permission and try again.");
     }
   }
 
@@ -286,7 +264,33 @@ function QrScanner({ onFound }: { onFound: () => void }) {
   </section>;
 }
 
-function CheckInView({ event, data, isStaff }: { event: EventRecord; data: EventData; isStaff: boolean }) {
+function RefereeCheckIn({ event, data, session, onCheckedIn }: { event: EventRecord; data: EventData; session: Law18Session; onCheckedIn: () => void }) {
+  const email = session.user.email?.toLowerCase();
+  const official = data.officials.find((item) => item.email?.toLowerCase() === email || item.linked_user_id === session.user.id);
+  const assignmentDates = new Set((official ? data.assignments.filter((item) => item.official_id === official.id) : [])
+    .map((assignment) => data.games.find((game) => game.id === assignment.game_id)?.starts_at.slice(0, 10)).filter(Boolean));
+  const [message, setMessage] = useState("");
+  async function scanned(rawValue: string) {
+    if (!official) return;
+    try {
+      const scannedUrl = new URL(rawValue);
+      const scannedEvent = scannedUrl.searchParams.get("event");
+      const scannedDate = scannedUrl.searchParams.get("date");
+      const today = new Intl.DateTimeFormat("en-CA", { timeZone: event.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+      if (scannedUrl.origin !== window.location.origin || scannedEvent !== event.check_in_slug || !scannedDate || scannedDate < today || !assignmentDates.has(scannedDate)) {
+        throw new Error("This QR code does not match one of your assigned event days.");
+      }
+      await checkIn(session, event.id, official.id, "qr", scannedDate);
+      setMessage("You’re checked in. Have a great day!");
+      onCheckedIn();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "That QR code could not be verified.");
+    }
+  }
+  return <section className="page-section referee-checkin"><div className="section-title"><div><p className="eyebrow">OFFICIAL CHECK-IN</p><h1>Scan the on-site code</h1><p>The check-in QR is displayed or printed by event staff at the venue.</p></div></div><QrScanner onFound={scanned} />{message && <p className="pilot-message">{message}</p>}</section>;
+}
+
+function CheckInView({ event, data }: { event: EventRecord; data: EventData }) {
   const eventDates = [...new Set(data.games.map((game) => game.starts_at.slice(0, 10)))].sort();
   const [eventDate, setEventDate] = useState(eventDates[0] || event.starts_on);
   const url = `${window.location.origin}/?event=${event.check_in_slug}&date=${eventDate}`;
@@ -296,13 +300,12 @@ function CheckInView({ event, data, isStaff }: { event: EventRecord; data: Event
   return <section className="page-section">
     <div className="section-title"><div><p className="eyebrow">TOURNAMENT CHECK-IN</p><h1>Arrival station</h1><p>Each event day has its own printable QR code and attendance roster.</p></div><label className="day-picker">Event day<select value={eventDate} onChange={(event) => setEventDate(event.target.value)}>{eventDates.map((date) => <option value={date} key={date}>{formatDate(date)}</option>)}</select></label></div>
     <div className="checkin-grid">
-      <article className="panel qr-panel print-qr"><div className="qr"><QRCodeSVG value={url} size={210} /></div><h2>{event.name}</h2><strong>{formatDate(eventDate)}</strong><p>{url}</p>{isStaff && <button className="secondary print-button" onClick={() => window.print()}>Print daily QR</button>}</article>
+      <article className="panel qr-panel print-qr"><div className="qr"><QRCodeSVG value={url} size={210} /></div><h2>{event.name}</h2><strong>{formatDate(eventDate)}</strong><p>{url}</p><button className="secondary print-button" onClick={() => window.print()}>Print daily QR</button></article>
       <article className="panel roster-panel"><div className="panel-head"><div><p className="eyebrow">LIVE ROSTER</p><h2>{checked.size} checked in</h2></div></div>
         {roster.map((official) => <div className="official-row" key={official.id}><span className="avatar">{initials(official.full_name)}</span><div className="official-name"><strong>{official.full_name}</strong><span>{official.email || "Email not yet supplied"}</span></div><Status checked={checked.has(official.id)} /></div>)}
         {!roster.length && <EmptyState>No officials are assigned on this date.</EmptyState>}
       </article>
     </div>
-    {!isStaff && <p className="pilot-message">Your personal check-in button is on My day.</p>}
   </section>;
 }
 
@@ -1356,11 +1359,23 @@ function Dashboard({ session }: { session: Law18Session }) {
     setAllEvents((current) => current.map((item) => item.id === updated.id ? updated : item));
   }
 
+  const refereeOfficial = data.officials.find((item) => item.linked_user_id === session.user.id || item.email?.toLowerCase() === session.user.email?.toLowerCase());
+  const todayInEvent = event
+    ? new Intl.DateTimeFormat("en-CA", { timeZone: event.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date())
+    : "";
+  const refereeHasCurrentOrFutureAssignment = Boolean(refereeOfficial && data.assignments.some((assignment) => {
+    if (assignment.official_id !== refereeOfficial.id) return false;
+    const game = data.games.find((item) => item.id === assignment.game_id);
+    if (!game || !event) return false;
+    const gameDate = new Intl.DateTimeFormat("en-CA", { timeZone: event.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(game.starts_at));
+    return gameDate >= todayInEvent;
+  }));
+
   const nav: [View, string][] = isStaff
     ? [["dashboard", "Dashboard"], ["board", "Assignment board"], ["checkin", "Check-in"], ["schedule", "Schedule"], ["officials", "Officials"], ["coaching", "Coaching"], ["assessments", "Ratings"], ["import", "Import"]]
     : isCoach
       ? [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["coaching", "Coaching"], ["assessments", "Ratings"]]
-      : [["dashboard", "Dashboard"], ["board", "My day"], ["checkin", "QR check-in"], ["schedule", "Schedule"], ["assessments", "My ratings"]];
+      : [["dashboard", "Dashboard"], ["board", "My assignments"], ...(refereeHasCurrentOrFutureAssignment ? [["checkin", "Check-in"] as [View, string]] : []), ["assessments", "My ratings"]];
 
   if (loading) return <main className="auth-page"><p className="auth-loading">Loading tournament data…</p></main>;
   if (error) return <main className="auth-page"><section className="auth-card"><h1>Setup needed</h1><p className="auth-intro">{error}</p><p>Run the latest Law18Referee Management Supabase migration, then reload this page.</p><button className="secondary wide" onClick={() => auth.signOut()}>Sign out</button></section></main>;
@@ -1388,9 +1403,9 @@ function Dashboard({ session }: { session: Law18Session }) {
     <div className="shell">
       {organizationActionMessage && <p className="pilot-message organization-message">{organizationActionMessage}</p>}
       {profile && view === "dashboard" && <DashboardHome profile={profile} event={event} data={data} events={events} onNavigate={setView} />}
-      {event && view === "board" && (isStaff ? <AssignmentBoard data={data} /> : <RefereeDay event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} />)}
-      {event && view === "checkin" && <CheckInView event={event} data={data} isStaff={Boolean(isStaff)} />}
-      {event && view === "schedule" && <ScheduleView session={session} event={event} data={data} onCreated={() => refresh(event.id)} />}
+      {event && view === "board" && (isStaff ? <AssignmentBoard data={data} /> : <RefereeDay event={event} data={data} session={session} />)}
+      {event && view === "checkin" && (isStaff ? <CheckInView event={event} data={data} /> : refereeHasCurrentOrFutureAssignment ? <RefereeCheckIn event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} /> : null)}
+      {event && view === "schedule" && (isStaff || isCoach) && <ScheduleView session={session} event={event} data={data} onCreated={() => refresh(event.id)} />}
       {profile && organization && view === "officials" && <OfficialsDirectory session={session} organizationId={organization.id} officials={organizationOfficials} data={data} event={event} events={events} onCreated={() => loadOrganizationOfficials(session, organization.id).then(setOrganizationOfficials)} />}
       {event && view === "coaching" && <Placeholder title="Coaching assignments" copy="Assign coaches to this event and its matches." />}
       {event && organization && view === "assessments" && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={canConfigureRatings} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
@@ -1401,7 +1416,7 @@ function Dashboard({ session }: { session: Law18Session }) {
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.4.0</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.4.1</span></footer>
   </main>;
 }
 

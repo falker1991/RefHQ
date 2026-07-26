@@ -1375,7 +1375,7 @@ function Dashboard({ session }: { session: Law18Session }) {
     ? [["dashboard", "Dashboard"], ["board", "Assignment board"], ["checkin", "Check-in"], ["schedule", "Schedule"], ["officials", "Officials"], ["coaching", "Coaching"], ["assessments", "Ratings"], ["import", "Import"]]
     : isCoach
       ? [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["coaching", "Coaching"], ["assessments", "Ratings"]]
-      : [["dashboard", "Dashboard"], ["board", "My assignments"], ...(refereeHasCurrentOrFutureAssignment ? [["checkin", "Check-in"] as [View, string]] : []), ["assessments", "My ratings"]];
+      : [["dashboard", "Dashboard"], ["board", "My assignments"], ...(refereeHasCurrentOrFutureAssignment ? [["checkin", "Check-in"] as [View, string]] : []), ["assessments", "My Evals"]];
 
   if (loading) return <main className="auth-page"><p className="auth-loading">Loading tournament data…</p></main>;
   if (error) return <main className="auth-page"><section className="auth-card"><h1>Setup needed</h1><p className="auth-intro">{error}</p><p>Run the latest Law18Referee Management Supabase migration, then reload this page.</p><button className="secondary wide" onClick={() => auth.signOut()}>Sign out</button></section></main>;

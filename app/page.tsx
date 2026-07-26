@@ -103,12 +103,18 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat([], { weekday: "long", month: "short", day: "numeric" }).format(date);
 }
 
-function positionLabel(position: AssignmentRecord["position"]) {
+function positionLabel(position: AssignmentRecord["position"], importedTitle?: string | null) {
+  if (importedTitle?.trim()) return importedTitle.trim();
   return {
     referee: "Referee",
-    assistant_referee: "Assistant referee",
-    fourth_official: "Fourth official",
+    assistant_referee: "Assistant Referee",
+    fourth_official: "Fourth Official",
     mentor: "Mentor",
+    referee_coach: "Referee Coach",
+    site_coordinator: "Site Coordinator",
+    site_supervisor: "Site Supervisor",
+    standby: "Standby",
+    other: "Official",
   }[position];
 }
 
@@ -147,10 +153,10 @@ function AssignmentBoard({ data }: { data: EventData }) {
                     const official = officials.get(assignment.official_id);
                     const gameDate = game.starts_at.slice(0, 10);
                     const isChecked = data.checkIns.some((item) => item.official_id === assignment.official_id && item.event_date === gameDate && item.status === "checked_in");
-                    return <span className={isChecked ? "crew-chip arrived" : "crew-chip"} key={assignment.id} title={positionLabel(assignment.position)}>
+                    return <span className={isChecked ? "crew-chip arrived" : "crew-chip"} key={assignment.id} title={positionLabel(assignment.position, assignment.position_title)}>
                       <b>{official ? initials(official.full_name) : "?"}</b>
                       <span>{official?.full_name || "Unassigned"}</span>
-                      <small>{positionLabel(assignment.position)}</small>
+                      <small>{positionLabel(assignment.position, assignment.position_title)}</small>
                     </span>;
                   })}</div>
                 </article>
@@ -222,7 +228,7 @@ function RefereeDay({
       <div className="panel-head"><div><p className="eyebrow">ASSIGNED — NO ACCEPTANCE REQUIRED</p><h2>Today’s games</h2></div></div>
       {games.map(({ assignment, game }) => <article key={assignment.id}>
         <time>{formatTime(game.starts_at)}</time>
-        <div><strong>{game.home_team} vs. {game.away_team}</strong><p>{game.field_name} · {positionLabel(assignment.position)}</p></div>
+        <div><strong>{game.home_team} vs. {game.away_team}</strong><p>{game.field_name} · {positionLabel(assignment.position, assignment.position_title)}</p></div>
         <Status checked={isChecked} />
       </article>)}
     </section>
@@ -322,7 +328,7 @@ function ScheduleView({ session, event, data, onCreated }: { session: Law18Sessi
     {message && <p className="pilot-message">{message}</p>}
     <div className="schedule-list">{data.games.map((game) => {
       const crew = data.assignments.filter((assignment) => assignment.game_id === game.id);
-      return <article className="panel schedule-card" key={game.id}><div className="timebox"><time>{formatDate(game.starts_at)}</time><strong>{formatTime(game.starts_at)}</strong><span>{game.field_name}</span></div><div><h2>{game.home_team} vs. {game.away_team}</h2><p>{game.division}</p><span className="crew-line">{crew.map((assignment) => `${positionLabel(assignment.position)}: ${officials.get(assignment.official_id)?.full_name || "Open"}`).join(" · ")}</span></div></article>;
+      return <article className="panel schedule-card" key={game.id}><div className="timebox"><time>{formatDate(game.starts_at)}</time><strong>{formatTime(game.starts_at)}</strong><span>{game.field_name}</span></div><div><h2>{game.home_team} vs. {game.away_team}</h2><p>{game.division}</p><span className="crew-line">{crew.map((assignment) => `${positionLabel(assignment.position, assignment.position_title)}: ${officials.get(assignment.official_id)?.full_name || "Open"}`).join(" · ")}</span></div></article>;
     })}</div>
   </section>;
 }
@@ -684,7 +690,7 @@ function AssessmentCenter({
       <div className="assessment-selects"><label>Game<select value={gameId} onChange={(e) => chooseGame(e.target.value)}><option value="">Choose a game</option>{data.games.map((game) => <option value={game.id} key={game.id}>{formatTime(game.starts_at)} · {game.field_name} · {game.home_team} vs. {game.away_team}</option>)}</select></label><label>Visibility<select value={event.ratings_admin_only ? "private" : visibility} disabled={event.ratings_admin_only} onChange={(e) => setVisibility(e.target.value as "public" | "private")}><option value="private">Private — event staff and referee coaches</option><option value="public">Public — visible to each referee</option></select></label>{event.ratings_admin_only && <p className="import-note">Visibility is locked to event staff for this event.</p>}</div>
       <div className="crew-rating-list">{gameAssignments.map((assignment) => {
         const rating = drafts[assignment.official_id] || blankCrewRating();
-        return <section className="crew-rating-card" key={assignment.official_id}><div className="crew-rating-heading"><span className="avatar">{initials(officialMap.get(assignment.official_id)?.full_name || "R")}</span><div><h3>{officialMap.get(assignment.official_id)?.full_name || "Official"}</h3><p>{positionLabel(assignment.position)}</p></div></div>
+        return <section className="crew-rating-card" key={assignment.official_id}><div className="crew-rating-heading"><span className="avatar">{initials(officialMap.get(assignment.official_id)?.full_name || "R")}</span><div><h3>{officialMap.get(assignment.official_id)?.full_name || "Official"}</h3><p>{positionLabel(assignment.position, assignment.position_title)}</p></div></div>
           {event.rating_type === "basic_eval"
             ? <label className="basic-rating"><span><strong>Overall Rating</strong><small>1 developing · 5 excellent</small></span><select value={rating.overall_rating} onChange={(e) => updateDraft(assignment.official_id, { overall_rating: Number(e.target.value) })}>{[1,2,3,4,5].map((score) => <option key={score}>{score}</option>)}</select></label>
             : <><div className="skill-rating-grid">{([

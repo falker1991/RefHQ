@@ -89,7 +89,17 @@ export type AssignmentRecord = {
   id: string;
   game_id: string;
   official_id: string;
-  position: "referee" | "assistant_referee" | "fourth_official" | "mentor";
+  position:
+    | "referee"
+    | "assistant_referee"
+    | "fourth_official"
+    | "mentor"
+    | "referee_coach"
+    | "site_coordinator"
+    | "site_supervisor"
+    | "standby"
+    | "other";
+  position_title: string | null;
 };
 
 export type CheckInRecord = {
@@ -576,12 +586,23 @@ export function parseAssignrOfficialsCsv(text: string): OfficialImportRow[] {
     .filter((row) => row.full_name);
 }
 
-function normalizePosition(position: string): AssignmentRecord["position"] {
+export function normalizePosition(position: string): AssignmentRecord["position"] {
+  const rawValue = position.toLowerCase();
   const value = position.toLowerCase().replace(/[^a-z]+/g, "_").replace(/^_|_$/g, "");
-  if (value === "ar" || value.includes("assistant")) return "assistant_referee";
-  if (value.includes("fourth")) return "fourth_official";
+  if (value === "ar" || value.startsWith("asst") || value.includes("assistant")) return "assistant_referee";
+  if (rawValue.includes("4th") || value.includes("fourth")) return "fourth_official";
+  if (
+    value.includes("referee_coach")
+    || value.includes("ref_coach")
+    || value.includes("ref_coord")
+    || value.includes("referee_coord")
+  ) return "referee_coach";
+  if (value.includes("site_supervisor")) return "site_supervisor";
+  if (value.includes("site_coord")) return "site_coordinator";
+  if (value.includes("standby")) return "standby";
   if (value.includes("mentor")) return "mentor";
-  return "referee";
+  if (value === "ref" || value.includes("referee")) return "referee";
+  return "other";
 }
 
 export async function loadOrganizationOfficials(session: Law18Session, organizationId: string) {
@@ -828,17 +849,15 @@ export async function importTournament(
       game_id: gameId,
       official_id: officialId,
       position: normalizePosition(row.position),
+      position_title: row.position.trim() || "Official",
       accepted: true,
     };
   });
   if (details.eventId) {
-    const importedSlots = [...new Map(assignmentPayload.map((assignment) => [
-      `${assignment.game_id}:${assignment.position}`,
-      { gameId: assignment.game_id, position: assignment.position },
-    ])).values()];
-    await Promise.all(importedSlots.map(({ gameId, position }) => rest(
+    const importedGameIds = [...new Set(assignmentPayload.map((assignment) => assignment.game_id))];
+    await Promise.all(importedGameIds.map((gameId) => rest(
       session,
-      `assignments?game_id=eq.${enc(gameId)}&position=eq.${enc(position)}`,
+      `assignments?game_id=eq.${enc(gameId)}`,
       { method: "DELETE" },
       "return=minimal",
     )));

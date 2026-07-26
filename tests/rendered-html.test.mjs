@@ -35,7 +35,7 @@ test("repeat imports target an existing event without replacing other days", asy
 
   assert.match(client, /eventId\?: string/);
   assert.match(client, /games\?on_conflict=event_id,external_id/);
-  assert.match(client, /assignments\?game_id=eq\.\$\{enc\(gameId\)\}&position=eq\.\$\{enc\(position\)\}/);
+  assert.match(client, /assignments\?game_id=eq\.\$\{enc\(gameId\)\}/);
   assert.match(client, /import_jobs/);
   assert.match(page, /Create a new event/);
   assert.match(page, /Add schedule to event/);

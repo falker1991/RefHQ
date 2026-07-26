@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseAssignrCsv, parseAssignrOfficialsCsv } from "../app/supabase-client.ts";
+import { normalizePosition, parseAssignrCsv, parseAssignrOfficialsCsv } from "../app/supabase-client.ts";
 
 test("parses an actual Assignr games export layout", () => {
   const csv = [
@@ -16,6 +16,17 @@ test("parses an actual Assignr games export layout", () => {
   assert.equal(rows[0].official_email, null);
 });
 
+test("preserves Assignr assignment role categories", () => {
+  assert.equal(normalizePosition("Referee"), "referee");
+  assert.equal(normalizePosition("Asst. Referee"), "assistant_referee");
+  assert.equal(normalizePosition("4th Official"), "fourth_official");
+  assert.equal(normalizePosition("Ref Coord"), "referee_coach");
+  assert.equal(normalizePosition("Referee Coach"), "referee_coach");
+  assert.equal(normalizePosition("Site Coord"), "site_coordinator");
+  assert.equal(normalizePosition("Site Supervisor"), "site_supervisor");
+  assert.equal(normalizePosition("Standby"), "standby");
+});
+
 test("parses an actual Assignr users export layout", () => {
   const csv = [
     "Last Name,First Name,Grade/Badge Level,Mobile Phone,Primary Email,Secondary Email,Is an Official?,USSF Referee Certification,Assignr Database ID",
@@ -27,4 +38,3 @@ test("parses an actual Assignr users export layout", () => {
   assert.equal(rows[0].primary_email, "olivia@example.com");
   assert.equal(rows[0].source_official_id, "2171650");
 });
-

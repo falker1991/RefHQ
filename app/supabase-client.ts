@@ -128,6 +128,16 @@ export type AppearanceCampaign = {
   active: boolean;
 };
 
+export type AppearanceTheme = {
+  id: string;
+  name: string;
+  logo_url: string | null;
+  primary_color: string;
+  accent_color: string;
+  created_at: string;
+  updated_at: string;
+};
+
 function configuration() {
   if (!baseUrl || !anonKey) throw new Error("Supabase is not configured.");
   return { baseUrl, anonKey };
@@ -246,6 +256,27 @@ export async function restoreDefaultAppearance(session: Law18Session) {
   await rest(session, "site_appearance_campaigns?active=eq.true", {
     method: "PATCH",
     body: JSON.stringify({ active: false }),
+  }, "return=minimal");
+}
+
+export async function loadAppearanceThemes(session: Law18Session) {
+  return rest<AppearanceTheme[]>(session, "site_appearance_themes?select=*&order=name.asc");
+}
+
+export async function saveAppearanceTheme(
+  session: Law18Session,
+  values: Pick<AppearanceTheme, "name" | "logo_url" | "primary_color" | "accent_color">,
+) {
+  const rows = await rest<AppearanceTheme[]>(session, "site_appearance_themes", {
+    method: "POST",
+    body: JSON.stringify({ ...values, created_by: session.user.id }),
+  }, "return=representation");
+  return rows[0];
+}
+
+export async function deleteAppearanceTheme(session: Law18Session, themeId: string) {
+  await rest(session, `site_appearance_themes?id=eq.${enc(themeId)}`, {
+    method: "DELETE",
   }, "return=minimal");
 }
 

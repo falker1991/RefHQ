@@ -12,6 +12,7 @@ import {
   createOfficial,
   createOrganization,
   createAppearanceCampaign,
+  deleteAppearanceTheme,
   importTournament,
   importOfficials,
   leaveCurrentOrganization,
@@ -19,6 +20,7 @@ import {
   loadEventData,
   loadEvents,
   loadAppearanceCampaigns,
+  loadAppearanceThemes,
   loadOrganization,
   loadOrganizations,
   loadOrganizationOfficials,
@@ -28,6 +30,7 @@ import {
   parseAssignrOfficialsCsv,
   saveAssessment,
   restoreDefaultAppearance,
+  saveAppearanceTheme,
   reactivateOrganization,
   updateOrganizationName,
   updateOwnProfile,
@@ -600,6 +603,7 @@ function AssessmentCenter({
 
 function AppearanceSettings({ session }: { session: Law18Session }) {
   const [campaigns, setCampaigns] = useState<Awaited<ReturnType<typeof loadAppearanceCampaigns>>>([]);
+  const [themes, setThemes] = useState<Awaited<ReturnType<typeof loadAppearanceThemes>>>([]);
   const [form, setForm] = useState({
     name: "",
     logo_url: "",
@@ -609,7 +613,11 @@ function AppearanceSettings({ session }: { session: Law18Session }) {
     ends_at: "",
   });
   const [message, setMessage] = useState("");
-  useEffect(() => { loadAppearanceCampaigns(session).then(setCampaigns).catch(() => undefined); }, [session]);
+  useEffect(() => {
+    Promise.all([loadAppearanceCampaigns(session), loadAppearanceThemes(session)])
+      .then(([nextCampaigns, nextThemes]) => { setCampaigns(nextCampaigns); setThemes(nextThemes); })
+      .catch(() => undefined);
+  }, [session]);
   async function schedule() {
     try {
       await createAppearanceCampaign(session, {
@@ -632,18 +640,56 @@ function AppearanceSettings({ session }: { session: Law18Session }) {
     document.documentElement.style.removeProperty("--berry");
     setMessage("The default Law18Ref appearance has been restored.");
   }
+  async function saveTheme() {
+    try {
+      await saveAppearanceTheme(session, {
+        name: form.name.trim(),
+        logo_url: form.logo_url.trim() || null,
+        primary_color: form.primary_color,
+        accent_color: form.accent_color,
+      });
+      setThemes(await loadAppearanceThemes(session));
+      setMessage(`${form.name.trim()} was saved to your theme library.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to save this theme.");
+    }
+  }
+  function loadTheme(theme: Awaited<ReturnType<typeof loadAppearanceThemes>>[number]) {
+    setForm({
+      ...form,
+      name: theme.name,
+      logo_url: theme.logo_url || "",
+      primary_color: theme.primary_color,
+      accent_color: theme.accent_color,
+    });
+    setMessage(`${theme.name} loaded. Choose dates to schedule it, or adjust it and save as another theme.`);
+  }
+  async function removeTheme(themeId: string, themeName: string) {
+    if (!window.confirm(`Delete the saved theme “${themeName}”? Existing scheduled campaigns will not be changed.`)) return;
+    try {
+      await deleteAppearanceTheme(session, themeId);
+      setThemes(await loadAppearanceThemes(session));
+      setMessage(`${themeName} was removed from the theme library.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to delete this theme.");
+    }
+  }
   return <section className="page-section settings-page">
-    <div className="section-title"><div><p className="eyebrow">SITE OWNER</p><h1>Appearance scheduler</h1><p>Schedule a temporary logo and color scheme for every user, with automatic start and end dates.</p></div><button className="secondary" onClick={restore}>Restore default view</button></div>
+    <div className="section-title"><div><p className="eyebrow">SITE OWNER</p><h1>Site appearance</h1><p>Save reusable themes or schedule a temporary appearance for every user.</p></div><button className="secondary" onClick={restore}>Restore default view</button></div>
+    <article className="panel theme-library">
+      <div className="panel-head"><div><p className="eyebrow">SAVED THEMES</p><h2>Theme library</h2><p>Load a saved logo and color scheme into the scheduler whenever you need it.</p></div></div>
+      <div className="theme-library-grid">{themes.map((theme) => <div className="theme-card" key={theme.id}><div className="theme-swatches"><span style={{ background: theme.primary_color }} /><span style={{ background: theme.accent_color }} /></div><div><strong>{theme.name}</strong><small>{theme.logo_url ? "Custom logo included" : "Default logo"}</small></div><button className="secondary" onClick={() => loadTheme(theme)}>Load</button><button className="text-button theme-delete" onClick={() => removeTheme(theme.id, theme.name)}>Delete</button></div>)}{!themes.length && <p className="empty-theme-library">No saved themes yet. Configure one below and choose “Save to theme library.”</p>}</div>
+    </article>
     <div className="appearance-grid">
       <article className="panel settings-card appearance-form">
-        <label>Campaign name<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
+        <label>Theme or campaign name<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
         <label>Temporary logo URL<input type="url" value={form.logo_url} onChange={(event) => setForm({ ...form, logo_url: event.target.value })} placeholder="Optional HTTPS image URL" /></label>
         <label>Primary color<input type="color" value={form.primary_color} onChange={(event) => setForm({ ...form, primary_color: event.target.value })} /></label>
         <label>Accent color<input type="color" value={form.accent_color} onChange={(event) => setForm({ ...form, accent_color: event.target.value })} /></label>
         <label>Starts<input type="datetime-local" value={form.starts_at} onChange={(event) => setForm({ ...form, starts_at: event.target.value })} /></label>
         <label>Ends<input type="datetime-local" value={form.ends_at} onChange={(event) => setForm({ ...form, ends_at: event.target.value })} /></label>
         {message && <p className="pilot-message">{message}</p>}
-        <button className="primary" disabled={!form.name || !form.starts_at || !form.ends_at} onClick={schedule}>Schedule appearance</button>
+        <div className="appearance-form-actions"><button className="secondary" disabled={form.name.trim().length < 2} onClick={saveTheme}>Save to theme library</button><button className="primary" disabled={!form.name || !form.starts_at || !form.ends_at} onClick={schedule}>Schedule appearance</button></div>
       </article>
       <article className="panel campaign-list"><div className="panel-head"><div><p className="eyebrow">SCHEDULE</p><h2>Appearance campaigns</h2></div></div>{campaigns.map((campaign) => <div className="campaign-row" key={campaign.id}><span style={{ background: campaign.primary_color || undefined }} /><div><strong>{campaign.name}</strong><small>{new Date(campaign.starts_at).toLocaleString()} – {new Date(campaign.ends_at).toLocaleString()}</small></div><b>{campaign.active ? "Scheduled" : "Ended"}</b></div>)}{!campaigns.length && <EmptyState>No appearance campaigns are scheduled.</EmptyState>}</article>
     </div>
@@ -1107,7 +1153,7 @@ function Dashboard({ session }: { session: Law18Session }) {
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.2.2</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.2.3</span></footer>
   </main>;
 }
 

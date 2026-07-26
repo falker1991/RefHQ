@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizePosition, parseAssignrCsv, parseAssignrOfficialsCsv, positionAliasKey } from "../app/supabase-client.ts";
+import { isOperationalGame, normalizePosition, parseAssignrCsv, parseAssignrOfficialsCsv, positionAliasKey } from "../app/supabase-client.ts";
 
 test("parses an actual Assignr games export layout", () => {
   const csv = [
@@ -14,6 +14,7 @@ test("parses an actual Assignr games export layout", () => {
   assert.equal(rows[0].official_name, "Jessica Chamberlain");
   assert.equal(rows[1].position, "Asst. Referee");
   assert.equal(rows[0].official_email, null);
+  assert.equal(rows[0].age_group, "U14");
 });
 
 test("preserves Assignr assignment role categories", () => {
@@ -29,6 +30,11 @@ test("preserves Assignr assignment role categories", () => {
 
 test("matches position aliases without case or spacing differences", () => {
   assert.equal(positionAliasKey("  Asst.   Referee "), "asst. referee");
+});
+
+test("classifies non-match operational records", () => {
+  assert.equal(isOperationalGame({ field: "REF HQ PDA RC", home_team: "Ref Coach", away_team: "Ref Coach", game_type: "Ref Coach" }), true);
+  assert.equal(isOperationalGame({ field: "Field 3", home_team: "Home FC", away_team: "Away FC", game_type: "League" }), false);
 });
 
 test("parses an actual Assignr users export layout", () => {

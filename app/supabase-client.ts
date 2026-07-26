@@ -34,6 +34,8 @@ export type EventMembership = {
   role: MembershipRole;
   full_schedule_access: boolean;
   coaching_tools_enabled: boolean;
+  ratings_history_scope: "none" | "specific" | "all";
+  ratings_event_ids: string[];
 };
 
 export type OrganizationRecord = {
@@ -69,6 +71,11 @@ export type GameRecord = {
   home_team: string;
   away_team: string;
   division: string;
+  venue_name: string | null;
+  age_group: string | null;
+  gender: string | null;
+  game_type: string | null;
+  operational: boolean;
 };
 
 export type OfficialRecord = {
@@ -85,6 +92,7 @@ export type OfficialRecord = {
   source_display_name?: string | null;
   linked_user_id?: string | null;
   identity_status?: string;
+  pending_org_role?: MembershipRole;
 };
 
 export type AssignmentRecord = {
@@ -391,6 +399,22 @@ export async function loadEventData(session: Law18Session, eventId: string) {
   return { games, assignments, officials, checkIns, assessments };
 }
 
+export async function loadAuthorizedRatingHistory(session: Law18Session) {
+  const assessments = await rest<AssessmentRecord[]>(session, "assessments?select=*&order=created_at.desc");
+  const gameIds = [...new Set(assessments.map((item) => item.game_id))];
+  const games = gameIds.length
+    ? await rest<GameRecord[]>(session, `games?id=in.(${gameIds.join(",")})&select=*`)
+    : [];
+  const assignments = gameIds.length
+    ? await rest<AssignmentRecord[]>(session, `assignments?game_id=in.(${gameIds.join(",")})&select=*`)
+    : [];
+  const officialIds = [...new Set(assessments.map((item) => item.official_id))];
+  const officials = officialIds.length
+    ? await rest<OfficialRecord[]>(session, `officials?id=in.(${officialIds.join(",")})&select=*`)
+    : [];
+  return { assessments, games, assignments, officials };
+}
+
 export async function updateEventRatingSettings(
   session: Law18Session,
   eventId: string,
@@ -442,6 +466,9 @@ export type ImportRow = {
   home_team: string;
   away_team: string;
   division: string;
+  age_group: string;
+  gender: string;
+  game_type: string;
   official_name: string;
   official_email: string | null;
   position: string;
@@ -528,6 +555,16 @@ export function normalizeOfficialName(value: string) {
     .trim();
 }
 
+export function isOperationalGame(row: Pick<ImportRow, "field" | "home_team" | "away_team" | "game_type">) {
+  const values = [row.field, row.home_team, row.away_team, row.game_type].map((value) => (value || "").toLowerCase());
+  const operationalTitles = [
+    "standby", "ref coordinator", "ref coord", "ref coach", "referee coach",
+    "site coordinator", "site coord", "site supervisor",
+  ];
+  return values.some((value) => value.includes("hq"))
+    || values.some((value) => operationalTitles.some((title) => value.trim() === title));
+}
+
 export function parseAssignrCsv(text: string): ImportRow[] {
   const records = csvRecords(text);
   if (records.length < 2) throw new Error("The CSV does not contain schedule rows.");
@@ -559,6 +596,9 @@ export function parseAssignrCsv(text: string): ImportRow[] {
           home_team: cell(record, headers, "home team") || "TBD",
           away_team: cell(record, headers, "away team") || "TBD",
           division: [cell(record, headers, "age group"), cell(record, headers, "league")].filter(Boolean).join(" · "),
+          age_group: cell(record, headers, "age group"),
+          gender: cell(record, headers, "gender"),
+          game_type: cell(record, headers, "game type"),
           official_name: displayName(name),
           official_email: null,
           position: position || "Official",
@@ -850,9 +890,14 @@ export async function importTournament(
       external_id: row.external_id,
       starts_at: `${row.date}T${row.start_time}`,
       field_name: row.field,
+      venue_name: row.venue,
       home_team: row.home_team,
       away_team: row.away_team,
       division: row.division,
+      age_group: row.age_group || null,
+      gender: row.gender || null,
+      game_type: row.game_type || null,
+      operational: isOperationalGame(row),
     },
   ])).values()];
   const games = await rest<GameRecord[]>(
@@ -922,7 +967,7 @@ export async function importTournament(
 export async function createOfficial(
   session: Law18Session,
   organizationId: string,
-  values: { full_name: string; email?: string | null; secondary_email?: string | null; phone?: string | null; badge_level?: string | null },
+  values: { full_name: string; email?: string | null; secondary_email?: string | null; phone?: string | null; badge_level?: string | null; pending_org_role?: MembershipRole },
 ) {
   const rows = await rest<OfficialRecord[]>(session, "officials", {
     method: "POST",
@@ -959,4 +1004,25 @@ export async function createGame(
     }),
   }, "return=representation");
   return rows[0];
+}
+
+export async function assignEventRole(
+  session: Law18Session,
+  eventId: string,
+  userId: string,
+  role: "event_admin" | "assignor" | "referee_coach" | "referee",
+  ratingsHistoryScope: "none" | "specific" | "all" = "none",
+  ratingsEventIds: string[] = [],
+) {
+  return rest<EventMembership[]>(session, "event_memberships?on_conflict=event_id,user_id,role", {
+    method: "POST",
+    body: JSON.stringify({
+      event_id: eventId,
+      user_id: userId,
+      role,
+      ratings_history_scope: ratingsHistoryScope,
+      ratings_event_ids: ratingsEventIds,
+      created_by: session.user.id,
+    }),
+  }, "resolution=merge-duplicates,return=representation");
 }

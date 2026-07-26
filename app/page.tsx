@@ -103,6 +103,13 @@ function formatTime(value: string) {
   return new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
 
+function timeSortValue(value: string) {
+  const parts = new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(value));
+  const hour = Number(parts.find((part) => part.type === "hour")?.value || 0);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value || 0);
+  return hour * 60 + minute;
+}
+
 function formatDate(value: string) {
   const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
   const date = new Date(dateOnly ? `${value}T12:00:00` : value);
@@ -136,7 +143,9 @@ function EmptyState({ children }: { children: React.ReactNode }) {
 function AssignmentBoard({ data }: { data: EventData }) {
   const officials = useMemo(() => new Map(data.officials.map((official) => [official.id, official])), [data.officials]);
   const fields = [...new Set(data.games.map((game) => game.field_name))];
-  const times = [...new Set(data.games.map((game) => formatTime(game.starts_at)))];
+  const times = [...new Map(data.games.map((game) => [formatTime(game.starts_at), timeSortValue(game.starts_at)])).entries()]
+    .sort((a, b) => a[1] - b[1])
+    .map(([label]) => label);
   if (!data.games.length) return <EmptyState>Import a schedule to populate the assignment board.</EmptyState>;
   return (
     <section className="page-section">
@@ -343,7 +352,10 @@ function ScheduleView({ session, event, data, onCreated }: { session: Law18Sessi
     if (sortBy === "gender") return item.gender || "Unspecified gender";
     return item.division || "Unspecified competition";
   };
-  const groupedGames = [...data.games].sort((a, b) => groupLabel(a).localeCompare(groupLabel(b)) || a.starts_at.localeCompare(b.starts_at))
+  const compareGroups = (a: GameRecord, b: GameRecord) => sortBy === "time"
+    ? timeSortValue(a.starts_at) - timeSortValue(b.starts_at)
+    : groupLabel(a).localeCompare(groupLabel(b), undefined, { numeric: true });
+  const groupedGames = [...data.games].sort((a, b) => compareGroups(a, b) || a.starts_at.localeCompare(b.starts_at))
     .reduce<Record<string, GameRecord[]>>((groups, item) => ({ ...groups, [groupLabel(item)]: [...(groups[groupLabel(item)] || []), item] }), {});
   return <section className="page-section"><div className="section-title"><div><p className="eyebrow">EVENT SCHEDULE</p><h1>Games and crews</h1><p>{data.games.length} imported games</p></div></div>
     <div className="schedule-tools"><label>Sort and group by<select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}><option value="date">Date</option><option value="time">Time</option><option value="site">Site</option><option value="field">Field</option><option value="age_group">Age group</option><option value="gender">Gender</option><option value="competition">Competition</option></select></label><button className="secondary" onClick={() => setAdding((value) => !value)}>{adding ? "Cancel" : "Add game manually"}</button></div>
@@ -1484,7 +1496,7 @@ function Dashboard({ session }: { session: Law18Session }) {
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.4.1</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.4.2</span></footer>
   </main>;
 }
 

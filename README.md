@@ -127,3 +127,27 @@ The hosted pilot uses Supabase as its source of truth. Do not use it as the sole
 - Add offline queuing for check-ins when tournament connectivity is unreliable.
 - Set the assessment visibility/approval policy with pilot organizations.
 - Add audit-log retention, privacy terms, backups, and monitoring before handling real youth-referee or assessment data.
+
+## Future tournament-operations roadmap
+
+### Configurable QR, NFC, and manual check-in
+
+- Let each organization choose between daily event QR check-in and reusable NFC check-in links.
+- Give organizations a set of stable, opaque NFC tag links that can be written to physical tags before an event.
+- Let an event administrator assign a registered tag to an entire event or to a particular event site.
+- Keep the daily QR code available as a fallback even when NFC is the primary method.
+- Keep audited administrator and site-coordinator manual check-in available for device, account, or connectivity problems.
+- Do not store a permanent event or referee identifier directly on an NFC tag. Resolve the tag's revocable token on the server to the currently assigned organization, event, site, and valid check-in window.
+- Allow administrators to name, deactivate, replace, and rotate NFC tag links if a tag is lost or copied.
+- Record the check-in method, tag, site, event day, time, checking user, and any administrator override in the attendance audit history.
+
+### Multi-site events and site coordinators
+
+- Add event sites as first-class records, with venues, fields, schedules, daily check-in settings, and assigned NFC tags.
+- Add a site-coordinator role beneath assignor. By default, a site coordinator can view and manage only their assigned site.
+- Give site coordinators a site-scoped dashboard showing that site's games, crews, expected officials, check-ins, missing officials, replacements, and operational alerts.
+- Let event administrators optionally grant a site coordinator read access to other sites or the full event while retaining management rights only for assigned sites.
+- Support granular optional permissions for viewing other schedules, attendance, referee contact information, coaching activity, and ratings.
+- Map imported venues and fields to event sites, with an administrator review screen for unmatched or ambiguous locations.
+- Allow an authorized administrator to move a game, official, or coordinator between sites while preserving an audit trail.
+- Ensure database access policies enforce site scope rather than relying only on hidden interface controls.

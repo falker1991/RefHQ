@@ -1314,6 +1314,7 @@ function Dashboard({ session }: { session: Law18Session }) {
   const [error, setError] = useState("");
   const [accountOpen, setAccountOpen] = useState(false);
   const [organizationActionMessage, setOrganizationActionMessage] = useState("");
+  const [qrCheckInMessage, setQrCheckInMessage] = useState("");
   const allRoles = new Set<MembershipRole>([
     ...(profile?.is_site_owner ? ["site_owner" as MembershipRole] : []),
     ...organizationRoles,
@@ -1357,7 +1358,33 @@ function Dashboard({ session }: { session: Law18Session }) {
         setOrganizationRoles(memberships.organizations.filter((membership) => membership.organization_id === organizationId).map((membership) => membership.role));
         setEventRoles(memberships.events.filter((membership) => membership.event_id === selected).map((membership) => membership.role));
         setEventId(selected);
-        if (selected) setData(await loadEventData(session, selected));
+        if (selected) {
+          let selectedData = await loadEventData(session, selected);
+          const scannedDate = new URLSearchParams(window.location.search).get("date");
+          if (eventSlug && scannedDate) {
+            setView("checkin");
+            const selectedEvent = organizationEvents.find((item) => item.id === selected);
+            const official = selectedData.officials.find((item) => item.linked_user_id === session.user.id || item.email?.toLowerCase() === session.user.email?.toLowerCase());
+            const assignedThatDay = Boolean(official && selectedData.assignments.some((assignment) =>
+              assignment.official_id === official.id
+              && selectedData.games.some((game) => game.id === assignment.game_id && game.starts_at.startsWith(scannedDate))));
+            const today = selectedEvent
+              ? new Intl.DateTimeFormat("en-CA", { timeZone: selectedEvent.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date())
+              : "";
+            if (!selectedEvent || selectedEvent.check_in_slug !== eventSlug || scannedDate < today || !official || !assignedThatDay) {
+              setQrCheckInMessage("This QR code does not match one of your assigned event days.");
+            } else {
+              try {
+                await checkIn(session, selectedEvent.id, official.id, "qr", scannedDate);
+                selectedData = await loadEventData(session, selected);
+                setQrCheckInMessage(`You are checked in for ${formatDate(scannedDate)} as ${official.full_name}.`);
+              } catch (reason) {
+                setQrCheckInMessage(reason instanceof Error ? reason.message : "The QR code was valid, but check-in could not be recorded.");
+              }
+            }
+          }
+          setData(selectedData);
+        }
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "Unable to load Law18Referee Management.");
       } finally {
@@ -1482,6 +1509,7 @@ function Dashboard({ session }: { session: Law18Session }) {
     </div>
     <div className="shell">
       {organizationActionMessage && <p className="pilot-message organization-message">{organizationActionMessage}</p>}
+      {qrCheckInMessage && <p className="pilot-message qr-checkin-message">{qrCheckInMessage}</p>}
       {profile && view === "dashboard" && <DashboardHome profile={profile} event={event} data={data} events={events} onNavigate={setView} />}
       {event && view === "board" && (isStaff ? <AssignmentBoard data={data} /> : <RefereeDay event={event} data={data} session={session} />)}
       {event && view === "checkin" && (isStaff ? <CheckInView event={event} data={data} /> : refereeHasCurrentOrFutureAssignment ? <RefereeCheckIn event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} /> : null)}
@@ -1496,7 +1524,7 @@ function Dashboard({ session }: { session: Law18Session }) {
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.4.2</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.4.3</span></footer>
   </main>;
 }
 

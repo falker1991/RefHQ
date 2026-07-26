@@ -6,14 +6,22 @@ import { AuthPanel } from "./auth-panel";
 import { auth, type Law18Session } from "./auth-client";
 import {
   checkIn,
+  createAppearanceCampaign,
   importTournament,
+  importOfficials,
   leaveCurrentOrganization,
   linkCurrentReferee,
   loadEventData,
   loadEvents,
+  loadAppearanceCampaigns,
   loadOrganization,
+  loadOrganizationOfficials,
   loadProfile,
+  loadMemberships,
   parseAssignrCsv,
+  parseAssignrOfficialsCsv,
+  saveAssessment,
+  restoreDefaultAppearance,
   updateOwnProfile,
   type AssignmentRecord,
   type CheckInRecord,
@@ -21,16 +29,21 @@ import {
   type GameRecord,
   type ImportRow,
   type OfficialRecord,
+  type OfficialImportRow,
+  type OfficialImportResult,
+  type AssessmentRecord,
+  type MembershipRole,
   type OrganizationRecord,
   type Profile,
 } from "./supabase-client";
 
-type View = "dashboard" | "board" | "checkin" | "schedule" | "coaching" | "assessments" | "import" | "account" | "groups";
+type View = "dashboard" | "board" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "appearance" | "account" | "groups";
 type EventData = {
   games: GameRecord[];
   assignments: AssignmentRecord[];
   officials: OfficialRecord[];
   checkIns: CheckInRecord[];
+  assessments: AssessmentRecord[];
 };
 
 function Mark() {
@@ -40,6 +53,15 @@ function Mark() {
 function initials(name: string) {
   return name.split(/\s+/).map((word) => word[0]).join("").slice(0, 2).toUpperCase();
 }
+
+const roleNames: Record<MembershipRole, string> = {
+  site_owner: "Site owner",
+  organization_admin: "Organization admin",
+  event_admin: "Event admin",
+  assignor: "Assignor",
+  referee_coach: "Referee coach",
+  referee: "Referee",
+};
 
 function formatTime(value: string) {
   return new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" }).format(new Date(value));
@@ -68,7 +90,6 @@ function EmptyState({ children }: { children: React.ReactNode }) {
 
 function AssignmentBoard({ data }: { data: EventData }) {
   const officials = useMemo(() => new Map(data.officials.map((official) => [official.id, official])), [data.officials]);
-  const checked = useMemo(() => new Set(data.checkIns.filter((item) => item.status === "checked_in").map((item) => item.official_id)), [data.checkIns]);
   const fields = [...new Set(data.games.map((game) => game.field_name))];
   const times = [...new Set(data.games.map((game) => formatTime(game.starts_at)))];
   if (!data.games.length) return <EmptyState>Import a schedule to populate the assignment board.</EmptyState>;
@@ -92,7 +113,8 @@ function AssignmentBoard({ data }: { data: EventData }) {
                   <small>{game.division || "Tournament match"}</small>
                   <div className="crew-chips">{crew.map((assignment) => {
                     const official = officials.get(assignment.official_id);
-                    const isChecked = checked.has(assignment.official_id);
+                    const gameDate = game.starts_at.slice(0, 10);
+                    const isChecked = data.checkIns.some((item) => item.official_id === assignment.official_id && item.event_date === gameDate && item.status === "checked_in");
                     return <span className={isChecked ? "crew-chip arrived" : "crew-chip"} key={assignment.id} title={positionLabel(assignment.position)}>
                       <b>{official ? initials(official.full_name) : "?"}</b>
                       <span>{official?.full_name || "Unassigned"}</span>
@@ -121,13 +143,16 @@ function RefereeDay({
   onCheckedIn: () => void;
 }) {
   const email = session.user.email?.toLowerCase();
-  const official = data.officials.find((item) => item.email.toLowerCase() === email);
+  const official = data.officials.find((item) => item.email?.toLowerCase() === email || item.linked_user_id === session.user.id);
   const assignments = official ? data.assignments.filter((item) => item.official_id === official.id) : [];
   const games = assignments.map((assignment) => ({
     assignment,
     game: data.games.find((game) => game.id === assignment.game_id),
   })).filter((item): item is { assignment: AssignmentRecord; game: GameRecord } => Boolean(item.game));
-  const isChecked = Boolean(official && data.checkIns.some((item) => item.official_id === official.id && item.status === "checked_in"));
+  const checkInDate = new URLSearchParams(window.location.search).get("date")
+    || games[0]?.game.starts_at.slice(0, 10)
+    || new Date().toISOString().slice(0, 10);
+  const isChecked = Boolean(official && data.checkIns.some((item) => item.official_id === official.id && item.event_date === checkInDate && item.status === "checked_in"));
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -135,7 +160,7 @@ function RefereeDay({
     if (!official) return;
     setBusy(true);
     try {
-      await checkIn(session, event.id, official.id, method);
+      await checkIn(session, event.id, official.id, method, checkInDate);
       setMessage("You’re checked in. Have a great day!");
       onCheckedIn();
     } catch (error) {
@@ -219,15 +244,19 @@ function QrScanner({ onFound }: { onFound: () => void }) {
 }
 
 function CheckInView({ event, data, isStaff }: { event: EventRecord; data: EventData; isStaff: boolean }) {
-  const url = `${window.location.origin}/?event=${event.check_in_slug}`;
-  const checked = new Set(data.checkIns.map((item) => item.official_id));
+  const eventDates = [...new Set(data.games.map((game) => game.starts_at.slice(0, 10)))].sort();
+  const [eventDate, setEventDate] = useState(eventDates[0] || event.starts_on);
+  const url = `${window.location.origin}/?event=${event.check_in_slug}&date=${eventDate}`;
+  const checked = new Set(data.checkIns.filter((item) => item.event_date === eventDate).map((item) => item.official_id));
+  const assignedToday = new Set(data.assignments.filter((assignment) => data.games.some((game) => game.id === assignment.game_id && game.starts_at.startsWith(eventDate))).map((assignment) => assignment.official_id));
+  const roster = data.officials.filter((official) => assignedToday.has(official.id));
   return <section className="page-section">
-    <div className="section-title"><div><p className="eyebrow">TOURNAMENT CHECK-IN</p><h1>Arrival station</h1><p>Display or print this code at referee headquarters.</p></div></div>
+    <div className="section-title"><div><p className="eyebrow">TOURNAMENT CHECK-IN</p><h1>Arrival station</h1><p>Each event day has its own printable QR code and attendance roster.</p></div><label className="day-picker">Event day<select value={eventDate} onChange={(event) => setEventDate(event.target.value)}>{eventDates.map((date) => <option value={date} key={date}>{formatDate(date)}</option>)}</select></label></div>
     <div className="checkin-grid">
-      <article className="panel qr-panel"><div className="qr"><QRCodeSVG value={url} size={210} /></div><h2>{event.name}</h2><p>{url}</p></article>
+      <article className="panel qr-panel print-qr"><div className="qr"><QRCodeSVG value={url} size={210} /></div><h2>{event.name}</h2><strong>{formatDate(eventDate)}</strong><p>{url}</p>{isStaff && <button className="secondary print-button" onClick={() => window.print()}>Print daily QR</button>}</article>
       <article className="panel roster-panel"><div className="panel-head"><div><p className="eyebrow">LIVE ROSTER</p><h2>{checked.size} checked in</h2></div></div>
-        {data.officials.map((official) => <div className="official-row" key={official.id}><span className="avatar">{initials(official.full_name)}</span><div className="official-name"><strong>{official.full_name}</strong><span>{official.email}</span></div><Status checked={checked.has(official.id)} /></div>)}
-        {!data.officials.length && <EmptyState>No officials have been imported.</EmptyState>}
+        {roster.map((official) => <div className="official-row" key={official.id}><span className="avatar">{initials(official.full_name)}</span><div className="official-name"><strong>{official.full_name}</strong><span>{official.email || "Email not yet supplied"}</span></div><Status checked={checked.has(official.id)} /></div>)}
+        {!roster.length && <EmptyState>No officials are assigned on this date.</EmptyState>}
       </article>
     </div>
     {!isStaff && <p className="pilot-message">Your personal check-in button is on My day.</p>}
@@ -255,7 +284,10 @@ function ImportView({
   events: EventRecord[];
   onImported: (event: EventRecord) => void;
 }) {
+  const [mode, setMode] = useState<"schedule" | "officials">("schedule");
   const [rows, setRows] = useState<ImportRow[]>([]);
+  const [officialRows, setOfficialRows] = useState<OfficialImportRow[]>([]);
+  const [officialResult, setOfficialResult] = useState<OfficialImportResult | null>(null);
   const [fileName, setFileName] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -291,8 +323,19 @@ function ImportView({
   async function readFile(file?: File) {
     if (!file) return;
     try {
-      const parsed = parseAssignrCsv(await file.text());
+      const contents = await file.text();
+      if (mode === "officials") {
+        const parsedOfficials = parseAssignrOfficialsCsv(contents);
+        setOfficialRows(parsedOfficials);
+        setRows([]);
+        setFileName(file.name);
+        setOfficialResult(null);
+        setMessage(`${parsedOfficials.length} officials are ready for review. No invitation emails will be sent.`);
+        return;
+      }
+      const parsed = parseAssignrCsv(contents);
       setRows(parsed);
+      setOfficialRows([]);
       setFileName(file.name);
       const dates = parsed.map((row) => row.date).sort();
       setDetails(destinationEvent
@@ -314,6 +357,21 @@ function ImportView({
     } catch (error) {
       setRows([]);
       setMessage(error instanceof Error ? error.message : "Unable to read that CSV.");
+    }
+  }
+
+  async function confirmOfficialImport() {
+    if (!officialRows.length) return;
+    setBusy(true);
+    setMessage("Importing officials…");
+    try {
+      const result = await importOfficials(session, profile, fileName, officialRows);
+      setOfficialResult(result);
+      setMessage(`${result.created} officials added and ${result.updated} updated. ${result.conflicts.length} need review.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Officials import failed.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -342,26 +400,190 @@ function ImportView({
   const games = new Set(rows.map((row) => row.external_id)).size;
   const referees = new Set(rows.map((row) => row.official_email)).size;
   return <section className="page-section">
-    <div className="section-title"><div><p className="eyebrow">ASSIGNR BRIDGE</p><h1>Import a tournament</h1><p>Assignments arrive confirmed; referees only need to sign in and check in.</p></div></div>
+    <div className="section-title"><div><p className="eyebrow">ASSIGNR BRIDGE</p><h1>Import center</h1><p>Import the official directory separately, then add one or more schedule days to an event.</p></div></div>
+    <div className="segmented import-tabs">
+      <button className={mode === "schedule" ? "active" : ""} onClick={() => { setMode("schedule"); setRows([]); setOfficialRows([]); setMessage(""); }}>Schedule export</button>
+      <button className={mode === "officials" ? "active" : ""} onClick={() => { setMode("officials"); setRows([]); setOfficialRows([]); setMessage(""); }}>Officials export</button>
+    </div>
     <div className="import-grid">
       <article className="panel import-card">
-        <span className="upload-icon">↑</span><h2>{fileName || "Choose an Assignr CSV"}</h2>
-        <p>Expected columns match the downloadable Law18Referee Management template.</p>
+        <span className="upload-icon">↑</span><h2>{fileName || `Choose an Assignr ${mode === "schedule" ? "games" : "users"} CSV`}</h2>
+        <p>{mode === "schedule" ? "Uses Assignr’s Games export with Position 1 / Official 1 crew columns." : "Uses Assignr’s Users export. Imported officials remain provisional until they create and verify their account."}</p>
         <label className="primary file-button">Choose CSV<input type="file" accept=".csv,text/csv" onChange={(event) => readFile(event.target.files?.[0])} /></label>
-        <a className="text-button sample-link" href="/assignr-schedule.csv" download>Download sample CSV</a>
+        {mode === "schedule" && <a className="text-button sample-link" href="/assignr-schedule.csv" download>Download sample CSV</a>}
       </article>
       <article className="panel import-review">
-        <p className="eyebrow">IMPORT REVIEW</p><h2>{rows.length ? `${games} games · ${referees} referees` : "Select a file to begin"}</h2>
+        <p className="eyebrow">IMPORT REVIEW</p>
+        {mode === "officials" ? <>
+          <h2>{officialRows.length ? `${officialRows.length} officials` : "Select a users export"}</h2>
+          <p className="import-note">This import never creates login accounts and never sends email. Existing Assignr IDs are updated; duplicate primary emails are removed from the imported record and reported for review.</p>
+          {message && <p className="pilot-message">{message}</p>}
+          <button className="primary wide" disabled={busy || !officialRows.length} onClick={confirmOfficialImport}>{busy ? "Importing…" : "Import officials"}</button>
+        </> : <>
+        <h2>{rows.length ? `${games} games · ${referees} assigned officials` : "Select a games export"}</h2>
         <label>Import destination<select value={destinationEventId} onChange={(event) => chooseDestination(event.target.value)}><option value="">Create a new event</option>{events.map((event) => <option value={event.id} key={event.id}>Add to {event.name}</option>)}</select></label>
         <label>Event name<input value={details.name} disabled={Boolean(destinationEvent)} onChange={(event) => setDetails({ ...details, name: event.target.value })} /></label>
-        <label>Primary venue<input value={details.venue} disabled={Boolean(destinationEvent)} onChange={(event) => setDetails({ ...details, venue: event.target.value })} /></label>
+        <label>Default venue<input value={details.venue} disabled={Boolean(destinationEvent)} onChange={(event) => setDetails({ ...details, venue: event.target.value })} /></label>
         <div className="date-fields"><label>Starts<input type="date" value={details.startsOn} onChange={(event) => setDetails({ ...details, startsOn: event.target.value })} /></label><label>Ends<input type="date" value={details.endsOn} onChange={(event) => setDetails({ ...details, endsOn: event.target.value })} /></label></div>
         {destinationEvent && <p className="import-note">Games with new Assignr IDs will be added. Matching game IDs and their imported referee crews will be updated. Existing check-ins and other event days stay in place.</p>}
         {message && <p className="pilot-message">{message}</p>}
         <button className="primary wide" disabled={busy || !rows.length} onClick={confirmImport}>{busy ? "Importing…" : destinationEvent ? "Add schedule to event" : "Create event"}</button>
+        </>}
       </article>
     </div>
-    {rows.length > 0 && <div className="panel preview-table"><table><thead><tr><th>Game</th><th>Date/time</th><th>Field</th><th>Official</th><th>Position</th></tr></thead><tbody>{rows.slice(0, 12).map((row, index) => <tr key={`${row.external_id}-${row.official_email}-${index}`}><td>{row.home_team} vs. {row.away_team}</td><td>{row.date} {row.start_time}</td><td>{row.field}</td><td>{row.official_name}<small>{row.official_email}</small></td><td>{row.position}</td></tr>)}</tbody></table>{rows.length > 12 && <p>Showing 12 of {rows.length} rows.</p>}</div>}
+    {mode === "schedule" && rows.length > 0 && <div className="panel preview-table"><table><thead><tr><th>Game</th><th>Date/time</th><th>Field</th><th>Official</th><th>Position</th></tr></thead><tbody>{rows.slice(0, 12).map((row, index) => <tr key={`${row.external_id}-${row.official_name}-${index}`}><td>{row.home_team} vs. {row.away_team}</td><td>{row.date} {row.start_time}</td><td>{row.field}</td><td>{row.official_name}<small>{row.official_email || "Matched from officials directory"}</small></td><td>{row.position}</td></tr>)}</tbody></table>{rows.length > 12 && <p>Showing 12 of {rows.length} assignment rows.</p>}</div>}
+    {mode === "officials" && officialRows.length > 0 && <div className="panel preview-table"><table><thead><tr><th>Official</th><th>Primary email</th><th>Secondary email</th><th>Assignr ID</th><th>Badge</th></tr></thead><tbody>{officialRows.slice(0, 12).map((row, index) => <tr key={`${row.source_official_id}-${index}`}><td>{row.full_name}</td><td>{row.primary_email || "Missing"}</td><td>{row.secondary_email || "—"}</td><td>{row.source_official_id || "—"}</td><td>{row.badge_level || "—"}</td></tr>)}</tbody></table>{officialRows.length > 12 && <p>Showing 12 of {officialRows.length} officials.</p>}{officialResult?.conflicts.length ? <div className="import-conflicts"><strong>Needs review</strong>{officialResult.conflicts.slice(0, 10).map((conflict) => <p key={`${conflict.name}-${conflict.email}`}>{conflict.name}: {conflict.reason}</p>)}</div> : null}</div>}
+  </section>;
+}
+
+function OfficialsDirectory({
+  officials,
+  data,
+}: {
+  officials: OfficialRecord[];
+  data: EventData;
+}) {
+  const [query, setQuery] = useState("");
+  const eventOfficialIds = new Set(data.assignments.map((assignment) => assignment.official_id));
+  const [scope, setScope] = useState<"organization" | "event">("organization");
+  const filtered = officials.filter((official) => {
+    if (scope === "event" && !eventOfficialIds.has(official.id)) return false;
+    const haystack = `${official.full_name} ${official.email || ""} ${official.badge_level || ""}`.toLowerCase();
+    return haystack.includes(query.toLowerCase());
+  });
+  return <section className="page-section">
+    <div className="section-title"><div><p className="eyebrow">OFFICIALS</p><h1>Referee directory</h1><p>Organization officials and the active event roster.</p></div></div>
+    <div className="directory-tools">
+      <div className="segmented"><button className={scope === "organization" ? "active" : ""} onClick={() => setScope("organization")}>Organization</button><button className={scope === "event" ? "active" : ""} onClick={() => setScope("event")}>Active event</button></div>
+      <input className="search" type="search" placeholder="Search name, email, or badge…" value={query} onChange={(event) => setQuery(event.target.value)} />
+    </div>
+    <article className="panel directory-list">
+      <div className="directory-row directory-head"><span>Official</span><span>Contact</span><span>Identity</span><span>Event</span></div>
+      {filtered.map((official) => <div className="directory-row" key={official.id}>
+        <div className="official-name-cell"><span className="avatar">{initials(official.full_name)}</span><div><strong>{official.full_name}</strong><small>{official.badge_level || "Badge not supplied"}</small></div></div>
+        <div><span>{official.email || "Email required"}</span><small>{official.phone || "No phone imported"}</small></div>
+        <span className={`identity-pill ${official.linked_user_id ? "linked" : ""}`}>{official.linked_user_id ? "Account linked" : "Provisional"}</span>
+        <span>{eventOfficialIds.has(official.id) ? "Assigned" : "—"}</span>
+      </div>)}
+      {!filtered.length && <EmptyState>No officials match this view.</EmptyState>}
+    </article>
+  </section>;
+}
+
+function AssessmentCenter({
+  session,
+  profile,
+  data,
+  canSubmit,
+  onSaved,
+}: {
+  session: Law18Session;
+  profile: Profile;
+  data: EventData;
+  canSubmit: boolean;
+  onSaved: () => void;
+}) {
+  const [gameId, setGameId] = useState("");
+  const [officialId, setOfficialId] = useState("");
+  const [visibility, setVisibility] = useState<"public" | "private">("private");
+  const [ratings, setRatings] = useState({ positioning: 3, decision_making: 3, communication: 3, match_control: 3 });
+  const [strengths, setStrengths] = useState("");
+  const [development, setDevelopment] = useState("");
+  const [notes, setNotes] = useState("");
+  const [message, setMessage] = useState("");
+  const gameAssignments = data.assignments.filter((assignment) => assignment.game_id === gameId);
+  const officialMap = new Map(data.officials.map((official) => [official.id, official]));
+  const gameMap = new Map(data.games.map((game) => [game.id, game]));
+  async function submit(status: "draft" | "submitted") {
+    if (!profile.organization_id || !gameId || !officialId) return;
+    try {
+      await saveAssessment(session, profile.organization_id, {
+        game_id: gameId,
+        official_id: officialId,
+        visibility,
+        status,
+        ...ratings,
+        strengths: strengths || null,
+        development_focus: development || null,
+        coach_notes: notes || null,
+      });
+      setMessage(status === "draft" ? "Draft saved." : "Assessment submitted.");
+      onSaved();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to save the assessment.");
+    }
+  }
+  if (!canSubmit) return <section className="page-section"><div className="section-title"><div><p className="eyebrow">MY FEEDBACK</p><h1>Assessment history</h1><p>Public feedback shared with you appears here.</p></div></div><EmptyState>No public assessments are available yet.</EmptyState></section>;
+  return <section className="page-section">
+    <div className="section-title"><div><p className="eyebrow">REFEREE DEVELOPMENT</p><h1>Assessment center</h1><p>Submit structured public or private coaching feedback.</p></div></div>
+    <div className="assessment-grid">
+      <article className="panel assessment-form">
+        <div className="panel-head"><div><p className="eyebrow">NEW ASSESSMENT</p><h2>Game and referee</h2></div></div>
+        <div className="assessment-selects"><label>Game<select value={gameId} onChange={(event) => { setGameId(event.target.value); setOfficialId(""); }}><option value="">Choose a game</option>{data.games.map((game) => <option value={game.id} key={game.id}>{formatTime(game.starts_at)} · {game.field_name} · {game.home_team} vs. {game.away_team}</option>)}</select></label><label>Referee<select value={officialId} disabled={!gameId} onChange={(event) => setOfficialId(event.target.value)}><option value="">Choose an official</option>{gameAssignments.map((assignment) => <option value={assignment.official_id} key={assignment.id}>{officialMap.get(assignment.official_id)?.full_name} · {positionLabel(assignment.position)}</option>)}</select></label><label>Visibility<select value={visibility} onChange={(event) => setVisibility(event.target.value as "public" | "private")}><option value="private">Private — event staff and submitting coach</option><option value="public">Public — visible to the referee</option></select></label></div>
+        {Object.entries(ratings).map(([key, value]) => <label className="rating" key={key}><span><strong>{key.replace("_", " ")}</strong><small>1 developing · 5 excellent</small></span><select value={value} onChange={(event) => setRatings({ ...ratings, [key]: Number(event.target.value) })}>{[1,2,3,4,5].map((score) => <option key={score}>{score}</option>)}</select></label>)}
+        <label className="notes">Strengths<textarea value={strengths} onChange={(event) => setStrengths(event.target.value)} /></label>
+        <label className="notes">Development focus<textarea value={development} onChange={(event) => setDevelopment(event.target.value)} /></label>
+        <label className="notes">Private coach notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
+        {message && <p className="pilot-message assessment-message">{message}</p>}
+        <div className="assessment-actions"><button className="secondary" disabled={!gameId || !officialId} onClick={() => submit("draft")}>Save draft</button><button className="primary" disabled={!gameId || !officialId} onClick={() => submit("submitted")}>Submit assessment</button></div>
+      </article>
+      <article className="panel history"><div className="panel-head"><div><p className="eyebrow">HISTORY</p><h2>{data.assessments.length} assessments</h2></div></div>{data.assessments.map((assessment) => {
+        const average = [assessment.positioning, assessment.decision_making, assessment.communication, assessment.match_control].filter((item): item is number => item !== null).reduce((sum, item, _, all) => sum + item / all.length, 0);
+        return <article key={assessment.id}><div><strong>{officialMap.get(assessment.official_id)?.full_name || "Referee"}</strong><p>{gameMap.get(assessment.game_id)?.home_team} vs. {gameMap.get(assessment.game_id)?.away_team}</p><small>{assessment.visibility === "public" ? "Public feedback" : "Private assessment"}</small></div><span className="score">{average ? average.toFixed(1) : "—"}</span><span className={`identity-pill ${assessment.status !== "draft" ? "linked" : ""}`}>{assessment.status}</span></article>;
+      })}{!data.assessments.length && <EmptyState>No assessments have been saved for this event.</EmptyState>}</article>
+    </div>
+  </section>;
+}
+
+function AppearanceSettings({ session }: { session: Law18Session }) {
+  const [campaigns, setCampaigns] = useState<Awaited<ReturnType<typeof loadAppearanceCampaigns>>>([]);
+  const [form, setForm] = useState({
+    name: "",
+    logo_url: "",
+    primary_color: "#315f8d",
+    accent_color: "#b53367",
+    starts_at: "",
+    ends_at: "",
+  });
+  const [message, setMessage] = useState("");
+  useEffect(() => { loadAppearanceCampaigns(session).then(setCampaigns).catch(() => undefined); }, [session]);
+  async function schedule() {
+    try {
+      await createAppearanceCampaign(session, {
+        ...form,
+        logo_url: form.logo_url || null,
+        starts_at: new Date(form.starts_at).toISOString(),
+        ends_at: new Date(form.ends_at).toISOString(),
+        active: true,
+      });
+      setCampaigns(await loadAppearanceCampaigns(session));
+      setMessage("Appearance campaign scheduled.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to schedule this appearance.");
+    }
+  }
+  async function restore() {
+    await restoreDefaultAppearance(session);
+    setCampaigns(await loadAppearanceCampaigns(session));
+    document.documentElement.style.removeProperty("--green");
+    document.documentElement.style.removeProperty("--berry");
+    setMessage("The default Law18Ref appearance has been restored.");
+  }
+  return <section className="page-section settings-page">
+    <div className="section-title"><div><p className="eyebrow">SITE OWNER</p><h1>Appearance scheduler</h1><p>Schedule a temporary logo and color scheme for every user, with automatic start and end dates.</p></div><button className="secondary" onClick={restore}>Restore default view</button></div>
+    <div className="appearance-grid">
+      <article className="panel settings-card appearance-form">
+        <label>Campaign name<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
+        <label>Temporary logo URL<input type="url" value={form.logo_url} onChange={(event) => setForm({ ...form, logo_url: event.target.value })} placeholder="Optional HTTPS image URL" /></label>
+        <label>Primary color<input type="color" value={form.primary_color} onChange={(event) => setForm({ ...form, primary_color: event.target.value })} /></label>
+        <label>Accent color<input type="color" value={form.accent_color} onChange={(event) => setForm({ ...form, accent_color: event.target.value })} /></label>
+        <label>Starts<input type="datetime-local" value={form.starts_at} onChange={(event) => setForm({ ...form, starts_at: event.target.value })} /></label>
+        <label>Ends<input type="datetime-local" value={form.ends_at} onChange={(event) => setForm({ ...form, ends_at: event.target.value })} /></label>
+        {message && <p className="pilot-message">{message}</p>}
+        <button className="primary" disabled={!form.name || !form.starts_at || !form.ends_at} onClick={schedule}>Schedule appearance</button>
+      </article>
+      <article className="panel campaign-list"><div className="panel-head"><div><p className="eyebrow">SCHEDULE</p><h2>Appearance campaigns</h2></div></div>{campaigns.map((campaign) => <div className="campaign-row" key={campaign.id}><span style={{ background: campaign.primary_color || undefined }} /><div><strong>{campaign.name}</strong><small>{new Date(campaign.starts_at).toLocaleString()} – {new Date(campaign.ends_at).toLocaleString()}</small></div><b>{campaign.active ? "Scheduled" : "Ended"}</b></div>)}{!campaigns.length && <EmptyState>No appearance campaigns are scheduled.</EmptyState>}</article>
+    </div>
   </section>;
 }
 
@@ -424,14 +646,32 @@ function AccountSettings({
   onUpdated: (profile: Profile) => void;
 }) {
   const [fullName, setFullName] = useState(profile.full_name);
+  const [preferredName, setPreferredName] = useState(profile.preferred_name || "");
   const [phone, setPhone] = useState(profile.phone || "");
+  const [dateOfBirth, setDateOfBirth] = useState(profile.date_of_birth || "");
+  const [secondaryEmail, setSecondaryEmail] = useState(profile.secondary_email || "");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const minor = Boolean(dateOfBirth && new Date(dateOfBirth) > new Date(new Date().setFullYear(new Date().getFullYear() - 18)));
   async function save() {
+    if (minor && !secondaryEmail.trim()) {
+      setMessage("A parent or guardian email is required for referees under 18.");
+      return;
+    }
+    if (secondaryEmail.trim().toLowerCase() === profile.email.trim().toLowerCase()) {
+      setMessage("The secondary email must be different from the primary email.");
+      return;
+    }
     setBusy(true);
     setMessage("");
     try {
-      const updated = await updateOwnProfile(session, { full_name: fullName.trim(), phone: phone.trim() || null });
+      const updated = await updateOwnProfile(session, {
+        full_name: fullName.trim(),
+        preferred_name: preferredName.trim() || null,
+        phone: phone.trim() || null,
+        date_of_birth: dateOfBirth || null,
+        secondary_email: secondaryEmail.trim().toLowerCase() || null,
+      });
       if (updated) onUpdated(updated);
       setMessage("Your account details were saved.");
     } catch (reason) {
@@ -444,7 +684,10 @@ function AccountSettings({
     <div className="section-title"><div><p className="eyebrow">ACCOUNT SETTINGS</p><h1>Personal information</h1><p>Keep the details your organizations may need current.</p></div></div>
     <article className="panel settings-card">
       <label>Full name<input value={fullName} onChange={(event) => setFullName(event.target.value)} /></label>
-      <label>Email address<input value={profile.email} disabled /></label>
+      <label>Preferred name<input value={preferredName} onChange={(event) => setPreferredName(event.target.value)} placeholder="Optional" /></label>
+      <label>Primary email<input value={profile.primary_email || profile.email} disabled /></label>
+      <label>Date of birth<input type="date" required value={dateOfBirth} onChange={(event) => setDateOfBirth(event.target.value)} /></label>
+      <label>{minor ? "Parent or guardian email" : "Secondary email"}<input type="email" required={minor} value={secondaryEmail} onChange={(event) => setSecondaryEmail(event.target.value)} placeholder={minor ? "Required for referees under 18" : "Optional"} /></label>
       <label>Phone number<input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Optional" /></label>
       <label>Role<input value={profile.role} disabled /></label>
       {message && <p className="pilot-message">{message}</p>}
@@ -488,14 +731,23 @@ function Dashboard({ session }: { session: Law18Session }) {
   const [view, setView] = useState<View>("dashboard");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [organization, setOrganization] = useState<OrganizationRecord | null>(null);
+  const [organizationRoles, setOrganizationRoles] = useState<MembershipRole[]>([]);
+  const [eventRoles, setEventRoles] = useState<MembershipRole[]>([]);
+  const [organizationOfficials, setOrganizationOfficials] = useState<OfficialRecord[]>([]);
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [eventId, setEventId] = useState("");
-  const [data, setData] = useState<EventData>({ games: [], assignments: [], officials: [], checkIns: [] });
+  const [data, setData] = useState<EventData>({ games: [], assignments: [], officials: [], checkIns: [], assessments: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [accountOpen, setAccountOpen] = useState(false);
-  const isStaff = profile?.role === "admin" || profile?.role === "assignor";
-  const isCoach = profile?.role === "coach";
+  const allRoles = new Set<MembershipRole>([
+    ...(profile?.is_site_owner ? ["site_owner" as MembershipRole] : []),
+    ...organizationRoles,
+    ...eventRoles,
+  ]);
+  const isStaff = ["site_owner", "organization_admin", "event_admin", "assignor"].some((role) => allRoles.has(role as MembershipRole));
+  const isCoach = allRoles.has("referee_coach");
+  const canAssess = isCoach || isStaff;
   const event = events.find((item) => item.id === eventId);
 
   const refresh = useCallback(async (selectedId = eventId) => {
@@ -507,9 +759,15 @@ function Dashboard({ session }: { session: Law18Session }) {
     (async () => {
       try {
         await linkCurrentReferee(session);
-        const [currentProfile, availableEvents] = await Promise.all([loadProfile(session), loadEvents(session)]);
+        const [currentProfile, availableEvents, memberships] = await Promise.all([loadProfile(session), loadEvents(session), loadMemberships(session)]);
         setProfile(currentProfile);
-        if (currentProfile) setOrganization(await loadOrganization(session, currentProfile.organization_id));
+        const organizationId = memberships.organizations[0]?.organization_id || currentProfile?.organization_id;
+        if (currentProfile && organizationId) {
+          setOrganization(await loadOrganization(session, organizationId));
+          setOrganizationOfficials(await loadOrganizationOfficials(session, organizationId));
+        }
+        setOrganizationRoles(memberships.organizations.map((membership) => membership.role));
+        setEventRoles(memberships.events.map((membership) => membership.role));
         setEvents(availableEvents);
         const slug = new URLSearchParams(window.location.search).get("event");
         const selected = availableEvents.find((item) => item.check_in_slug === slug)?.id || availableEvents[0]?.id || "";
@@ -522,6 +780,17 @@ function Dashboard({ session }: { session: Law18Session }) {
       }
     })();
   }, [session]);
+
+  useEffect(() => {
+    loadAppearanceCampaigns(session).then((campaigns) => {
+      const now = Date.now();
+      const active = campaigns.find((campaign) => campaign.active && new Date(campaign.starts_at).getTime() <= now && new Date(campaign.ends_at).getTime() > now);
+      if (!active) return;
+      if (active.primary_color) document.documentElement.style.setProperty("--green", active.primary_color);
+      if (active.accent_color) document.documentElement.style.setProperty("--berry", active.accent_color);
+      if (active.logo_url) document.querySelectorAll<HTMLImageElement>(".logo-lockup img").forEach((image) => { image.src = active.logo_url!; });
+    }).catch(() => undefined);
+  }, [session, view]);
 
   async function switchEvent(nextId: string) {
     setEventId(nextId);
@@ -540,7 +809,7 @@ function Dashboard({ session }: { session: Law18Session }) {
   }
 
   const nav: [View, string][] = isStaff
-    ? [["dashboard", "Dashboard"], ["board", "Assignment board"], ["checkin", "Check-in"], ["schedule", "Schedule"], ["coaching", "Coaching"], ["assessments", "Assessments"], ["import", "Import"]]
+    ? [["dashboard", "Dashboard"], ["board", "Assignment board"], ["checkin", "Check-in"], ["schedule", "Schedule"], ["officials", "Officials"], ["coaching", "Coaching"], ["assessments", "Assessments"], ["import", "Import"]]
     : isCoach
       ? [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["coaching", "Coaching"], ["assessments", "Assessments"]]
       : [["dashboard", "Dashboard"], ["board", "My day"], ["checkin", "QR check-in"], ["schedule", "Schedule"], ["assessments", "My feedback"]];
@@ -556,15 +825,17 @@ function Dashboard({ session }: { session: Law18Session }) {
         <button className="avatar account-avatar" aria-label="Open account menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((open) => !open)}>{initials(profile?.full_name || session.user.email || "RH")}</button>
         {accountOpen && <div className="account-popover">
           <div className="account-identity"><strong>{profile?.full_name}</strong><span>{profile?.email}</span></div>
+          <div className="account-roles">{[...allRoles].map((role) => <span key={role}>{roleNames[role]}</span>)}</div>
           <button onClick={() => { setView("account"); setAccountOpen(false); }}><span>⚙</span><div><strong>Account settings</strong><small>Personal information</small></div></button>
           <button onClick={() => { setView("groups"); setAccountOpen(false); }}><span>♙</span><div><strong>Groups</strong><small>Organization membership</small></div></button>
+          {allRoles.has("site_owner") && <button onClick={() => { setView("appearance"); setAccountOpen(false); }}><span>◐</span><div><strong>Site appearance</strong><small>Theme and schedule</small></div></button>}
           <button className="signout-menu" onClick={() => auth.signOut()}><span>↪</span><div><strong>Sign out</strong></div></button>
         </div>}
       </div>
     </header>
     <div className="eventbar">
       <div><span className="event-mark">{event?.name[0] || "R"}</span><label><span>{isStaff ? "Active event" : "My event"}</span><select value={eventId} onChange={(event) => switchEvent(event.target.value)} disabled={!events.length}>{events.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label></div>
-      <span>{event ? `${event.venue_name} · ${formatDate(event.starts_on)}` : "No event imported"}</span>
+      <span>{event ? formatDate(event.starts_on) : "No event imported"}</span>
     </div>
     <div className="shell">
       {profile && view === "dashboard" && <DashboardHome profile={profile} event={event} data={data} events={events} onNavigate={setView} />}
@@ -572,13 +843,15 @@ function Dashboard({ session }: { session: Law18Session }) {
       {event && view === "board" && (isStaff ? <AssignmentBoard data={data} /> : <RefereeDay event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} />)}
       {event && view === "checkin" && <CheckInView event={event} data={data} isStaff={Boolean(isStaff)} />}
       {event && view === "schedule" && <ScheduleView data={data} />}
+      {profile && view === "officials" && <OfficialsDirectory officials={organizationOfficials} data={data} />}
       {event && view === "coaching" && <Placeholder title="Coaching assignments" copy="Assign coaches to this event and its matches." />}
-      {event && view === "assessments" && <Placeholder title="Assessment center" copy="Complete and review structured referee feedback." />}
+      {event && view === "assessments" && profile && <AssessmentCenter session={session} profile={profile} data={data} canSubmit={canAssess} onSaved={() => refresh(event.id)} />}
       {isStaff && view === "import" && profile && <ImportView session={session} profile={profile} events={events} onImported={handleImported} />}
       {profile && view === "account" && <AccountSettings session={session} profile={profile} onUpdated={setProfile} />}
       {view === "groups" && <GroupsSettings session={session} organization={organization} />}
+      {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.2.0</span></footer>
   </main>;
 }
 
@@ -592,6 +865,8 @@ export default function Home() {
   }, []);
   useEffect(() => {
     const initial = auth.initialize();
+    // Authentication is stored outside React and hydrated once on startup.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSession(initial.recovery ? null : initial.session);
     setRecovery(initial.recovery);
     setLoading(false);

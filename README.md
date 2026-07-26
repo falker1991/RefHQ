@@ -2,13 +2,13 @@
 
 Law18Referee Management is a responsive tournament referee operations MVP provided by FalkSports. It complements Assignr with QR check-in, live attendance, coach assignments, structured assessments, and development history.
 
-The future production domain is `law18ref.com`. The pilot remains on its existing Cloudflare address until it is ready for full use. A draft logo concept is stored at `public/logo-draft-law18referee-management.png`; it is not yet the approved production logo.
+The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-The current pilot is designed for a small live tournament. Assignors can import an Assignr-format CSV, switch between events, monitor the full-day staffing board, and see check-ins update. Imported referees create their own account with the same email address contained in the CSV.
+Version 0.2.0 is designed for a small live tournament. Assignors can import actual Assignr Games and Users exports, switch between events, monitor the full-day staffing board, and see daily check-ins update. Imported officials remain provisional until they create an account whose verified primary email can be linked safely.
 
 ## What is included
 
-- Supabase-backed Assignr CSV import with validation and review
+- Separate Assignr Users official-directory import and Assignr Games schedule import
 - Repeat schedule imports that append new days or update matching games in an existing event
 - Multiple-event switcher for assignors and officials
 - Full-day field/time assignment board with checked-in referees highlighted
@@ -18,6 +18,7 @@ The current pilot is designed for a small live tournament. Assignors can import 
 - Event/game schedule and crew status backed by imported records
 - Coach assignment workspace
 - Assessment form and referee history
+- Scoped organization/event membership foundation and site-owner appearance scheduler
 - Supabase schema, indexes, role-aware row-level security, and demo seed
 - Cloudflare-compatible build
 
@@ -39,6 +40,10 @@ Open the local address shown in the terminal.
 2. Open **SQL Editor** and run the migrations in filename order:
    - `supabase/migrations/202607230001_refhq_schema.sql`
    - `supabase/migrations/202607240002_tournament_pilot.sql`
+   - `supabase/migrations/202607240003_authenticated_grants.sql`
+   - `supabase/migrations/202607240004_account_membership.sql`
+   - `supabase/migrations/202607250005_tournament_operations_v020.sql`
+   - `supabase/migrations/202607250006_remove_v010_checkin_compat.sql`
 3. Create at least one user in **Authentication → Users**.
 4. Add that user to `public.profiles`, using the auth user ID and the demo organization ID.
 5. Optionally run `supabase/seed.sql` for the Capital Cup event and demo games.

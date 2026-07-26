@@ -17,6 +17,8 @@ export function AuthPanel({ onSession, recovery = false }: AuthPanelProps) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Recovery is an external authentication state transition.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMode(recovery ? "recovery" : "login"), [recovery]);
 
   async function signIn(event: FormEvent) {

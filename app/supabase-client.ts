@@ -5,17 +5,42 @@ const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 export type Profile = {
   id: string;
-  organization_id: string;
+  organization_id: string | null;
   full_name: string;
   email: string;
+  primary_email?: string | null;
+  secondary_email?: string | null;
+  date_of_birth?: string | null;
+  preferred_name?: string | null;
+  is_site_owner?: boolean;
   phone?: string | null;
   role: "admin" | "assignor" | "referee" | "coach";
+};
+
+export type MembershipRole = "site_owner" | "organization_admin" | "event_admin" | "assignor" | "referee_coach" | "referee";
+
+export type OrganizationMembership = {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  role: MembershipRole;
+  status: "pending" | "active" | "suspended" | "archived";
+};
+
+export type EventMembership = {
+  id: string;
+  event_id: string;
+  user_id: string;
+  role: MembershipRole;
+  full_schedule_access: boolean;
+  coaching_tools_enabled: boolean;
 };
 
 export type OrganizationRecord = {
   id: string;
   name: string;
   slug: string;
+  active?: boolean;
 };
 
 export type EventRecord = {
@@ -44,7 +69,16 @@ export type OfficialRecord = {
   id: string;
   organization_id: string;
   full_name: string;
-  email: string;
+  email: string | null;
+  secondary_email?: string | null;
+  date_of_birth?: string | null;
+  phone?: string | null;
+  badge_level?: string | null;
+  source?: string;
+  source_official_id?: string | null;
+  source_display_name?: string | null;
+  linked_user_id?: string | null;
+  identity_status?: string;
 };
 
 export type AssignmentRecord = {
@@ -61,6 +95,35 @@ export type CheckInRecord = {
   checked_in_at: string;
   status: "checked_in" | "late" | "missing" | "excused";
   method: string;
+  event_date: string;
+};
+
+export type AssessmentRecord = {
+  id: string;
+  game_id: string;
+  official_id: string;
+  coach_id: string;
+  visibility: "public" | "private";
+  status: "draft" | "submitted" | "shared";
+  positioning: number | null;
+  decision_making: number | null;
+  communication: number | null;
+  match_control: number | null;
+  strengths: string | null;
+  development_focus: string | null;
+  coach_notes: string | null;
+  submitted_at: string | null;
+};
+
+export type AppearanceCampaign = {
+  id: string;
+  name: string;
+  logo_url: string | null;
+  primary_color: string | null;
+  accent_color: string | null;
+  starts_at: string;
+  ends_at: string;
+  active: boolean;
 };
 
 function configuration() {
@@ -108,9 +171,43 @@ export async function loadOrganization(session: Law18Session, organizationId: st
   return rows[0] ?? null;
 }
 
+export async function loadOrganizations(session: Law18Session) {
+  return rest<OrganizationRecord[]>(session, "organizations?select=id,name,slug,active&order=name.asc");
+}
+
+export async function loadMemberships(session: Law18Session) {
+  const [organizations, events] = await Promise.all([
+    rest<OrganizationMembership[]>(session, "organization_memberships?select=*&status=eq.active"),
+    rest<EventMembership[]>(session, "event_memberships?select=*"),
+  ]);
+  return { organizations, events };
+}
+
+export async function loadAppearanceCampaigns(session: Law18Session) {
+  return rest<AppearanceCampaign[]>(session, "site_appearance_campaigns?select=*&order=starts_at.desc");
+}
+
+export async function createAppearanceCampaign(
+  session: Law18Session,
+  values: Omit<AppearanceCampaign, "id">,
+) {
+  const rows = await rest<AppearanceCampaign[]>(session, "site_appearance_campaigns", {
+    method: "POST",
+    body: JSON.stringify({ ...values, created_by: session.user.id }),
+  }, "return=representation");
+  return rows[0];
+}
+
+export async function restoreDefaultAppearance(session: Law18Session) {
+  await rest(session, "site_appearance_campaigns?active=eq.true", {
+    method: "PATCH",
+    body: JSON.stringify({ active: false }),
+  }, "return=minimal");
+}
+
 export async function updateOwnProfile(
   session: Law18Session,
-  changes: Pick<Profile, "full_name" | "phone">,
+  changes: Pick<Profile, "full_name" | "phone" | "secondary_email" | "date_of_birth" | "preferred_name">,
 ) {
   const rows = await rest<Profile[]>(
     session,
@@ -155,7 +252,7 @@ export async function loadEventData(session: Law18Session, eventId: string) {
     session,
     `games?event_id=eq.${enc(eventId)}&select=*&order=starts_at.asc`,
   );
-  if (!games.length) return { games, assignments: [], officials: [], checkIns: [] };
+  if (!games.length) return { games, assignments: [], officials: [], checkIns: [], assessments: [] };
   const gameIds = games.map((game) => game.id).join(",");
   const assignments = await rest<AssignmentRecord[]>(
     session,
@@ -169,7 +266,11 @@ export async function loadEventData(session: Law18Session, eventId: string) {
     session,
     `check_ins?event_id=eq.${enc(eventId)}&select=*`,
   );
-  return { games, assignments, officials, checkIns };
+  const assessments = await rest<AssessmentRecord[]>(
+    session,
+    `assessments?game_id=in.(${gameIds})&select=*`,
+  );
+  return { games, assignments, officials, checkIns, assessments };
 }
 
 export async function checkIn(
@@ -177,14 +278,16 @@ export async function checkIn(
   eventId: string,
   officialId: string,
   method: "qr" | "app" | "assignor" = "app",
+  eventDate = new Date().toISOString().slice(0, 10),
 ) {
   const rows = await rest<CheckInRecord[]>(
     session,
-    "check_ins?on_conflict=event_id,official_id",
+    "check_ins?on_conflict=event_id,event_date,official_id",
     {
       method: "POST",
       body: JSON.stringify({
         event_id: eventId,
+        event_date: eventDate,
         official_id: officialId,
         status: "checked_in",
         method,
@@ -207,51 +310,170 @@ export type ImportRow = {
   away_team: string;
   division: string;
   official_name: string;
-  official_email: string;
+  official_email: string | null;
   position: string;
 };
 
-function parseLine(line: string) {
-  const values: string[] = [];
+export type OfficialImportRow = {
+  full_name: string;
+  primary_email: string | null;
+  secondary_email: string | null;
+  phone: string | null;
+  date_of_birth: string | null;
+  badge_level: string | null;
+  source_official_id: string | null;
+};
+
+export type OfficialImportResult = {
+  created: number;
+  updated: number;
+  missingEmail: number;
+  conflicts: { name: string; email: string; reason: string }[];
+};
+
+function csvRecords(text: string) {
+  const records: string[][] = [];
+  let record: string[] = [];
   let value = "";
   let quoted = false;
-  for (let index = 0; index < line.length; index += 1) {
-    const character = line[index];
-    if (character === '"' && quoted && line[index + 1] === '"') {
+  const source = text.replace(/^\uFEFF/, "");
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (character === '"' && quoted && source[index + 1] === '"') {
       value += '"';
       index += 1;
     } else if (character === '"') {
       quoted = !quoted;
     } else if (character === "," && !quoted) {
-      values.push(value.trim());
+      record.push(value.trim());
+      value = "";
+    } else if ((character === "\n" || character === "\r") && !quoted) {
+      if (character === "\r" && source[index + 1] === "\n") index += 1;
+      record.push(value.trim());
+      if (record.some(Boolean)) records.push(record);
+      record = [];
       value = "";
     } else {
       value += character;
     }
   }
-  values.push(value.trim());
-  return values;
+  record.push(value.trim());
+  if (record.some(Boolean)) records.push(record);
+  return records;
+}
+
+function headerMap(headers: string[]) {
+  return new Map(headers.map((header, index) => [header.trim().toLowerCase(), index]));
+}
+
+function cell(row: string[], headers: Map<string, number>, name: string) {
+  const index = headers.get(name.toLowerCase());
+  return index === undefined ? "" : (row[index] || "").trim();
+}
+
+function toIsoTime(value: string) {
+  const match = value.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AP]M)?$/i);
+  if (!match) throw new Error(`Unrecognized start time "${value}".`);
+  let hours = Number(match[1]);
+  const minutes = match[2];
+  const seconds = match[3] || "00";
+  const period = match[4]?.toUpperCase();
+  if (period === "PM" && hours !== 12) hours += 12;
+  if (period === "AM" && hours === 12) hours = 0;
+  return `${String(hours).padStart(2, "0")}:${minutes}:${seconds}`;
+}
+
+function displayName(value: string) {
+  const parts = value.split(",").map((part) => part.trim()).filter(Boolean);
+  return parts.length === 2 ? `${parts[1]} ${parts[0]}` : value.trim();
+}
+
+export function normalizeOfficialName(value: string) {
+  return displayName(value).toLowerCase().normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 export function parseAssignrCsv(text: string): ImportRow[] {
-  const lines = text.replace(/\r/g, "").split("\n").filter((line) => line.trim());
-  if (lines.length < 2) throw new Error("The CSV does not contain schedule rows.");
-  const headers = parseLine(lines[0]).map((header) => header.trim().toLowerCase());
-  const required = [
-    "external_id", "date", "start_time", "venue", "field", "home_team", "away_team",
-    "official_name", "official_email", "position",
-  ];
-  const missing = required.filter((column) => !headers.includes(column));
-  if (missing.length) throw new Error(`Missing columns: ${missing.join(", ")}`);
-  return lines.slice(1).map((line, rowIndex) => {
-    const values = parseLine(line);
-    const row = Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""])) as ImportRow;
-    if (!row.external_id || !row.date || !row.start_time || !row.official_email) {
-      throw new Error(`Row ${rowIndex + 2} is missing a game ID, date, time, or official email.`);
+  const records = csvRecords(text);
+  if (records.length < 2) throw new Error("The CSV does not contain schedule rows.");
+  const headers = headerMap(records[0]);
+
+  // Actual Assignr games export: one game per row and Position/Official pairs.
+  if (headers.has("game id") && headers.has("official 1")) {
+    const required = ["game id", "date", "start time", "venue", "sub-venue", "home team", "away team"];
+    const missing = required.filter((name) => !headers.has(name));
+    if (missing.length) throw new Error(`This Assignr export is missing: ${missing.join(", ")}.`);
+    const rows: ImportRow[] = [];
+    records.slice(1).forEach((record, rowIndex) => {
+      const gameId = cell(record, headers, "game id");
+      const externalId = cell(record, headers, "assignr database id") || gameId;
+      const date = cell(record, headers, "date");
+      const startTime = cell(record, headers, "start time");
+      if (!gameId && !date && !startTime) return; // Assignr may include a totals/footer row.
+      if (!externalId || !date || !startTime) throw new Error(`Assignr row ${rowIndex + 2} is missing its game ID, date, or start time.`);
+      for (let slot = 1; slot <= 12; slot += 1) {
+        const name = cell(record, headers, `official ${slot}`);
+        const position = cell(record, headers, `position ${slot}`);
+        if (!name) continue;
+        rows.push({
+          external_id: externalId,
+          date,
+          start_time: toIsoTime(startTime),
+          venue: cell(record, headers, "venue"),
+          field: cell(record, headers, "sub-venue") || cell(record, headers, "venue"),
+          home_team: cell(record, headers, "home team") || "TBD",
+          away_team: cell(record, headers, "away team") || "TBD",
+          division: [cell(record, headers, "age group"), cell(record, headers, "league")].filter(Boolean).join(" · "),
+          official_name: displayName(name),
+          official_email: null,
+          position: position || "Official",
+        });
+      }
+    });
+    if (!rows.length) throw new Error("No assigned officials were found in this Assignr schedule.");
+    return rows;
+  }
+
+  // Backward-compatible Law18Ref pilot template.
+  const required = ["external_id", "date", "start_time", "venue", "field", "home_team", "away_team", "official_name", "position"];
+  const missing = required.filter((column) => !headers.has(column));
+  if (missing.length) throw new Error(`Unrecognized schedule template. Missing columns: ${missing.join(", ")}`);
+  return records.slice(1).map((record, rowIndex) => {
+    const row = Object.fromEntries([...headers].map(([header, index]) => [header, record[index] ?? ""])) as unknown as ImportRow;
+    if (!row.external_id || !row.date || !row.start_time || !row.official_name) {
+      throw new Error(`Row ${rowIndex + 2} is missing a game ID, date, time, or official.`);
     }
-    row.official_email = row.official_email.toLowerCase();
+    row.start_time = toIsoTime(row.start_time);
+    row.official_email = row.official_email?.trim().toLowerCase() || null;
     return row;
   });
+}
+
+export function parseAssignrOfficialsCsv(text: string): OfficialImportRow[] {
+  const records = csvRecords(text);
+  if (records.length < 2) throw new Error("The CSV does not contain officials.");
+  const headers = headerMap(records[0]);
+  const required = ["last name", "first name", "primary email", "assignr database id"];
+  const missing = required.filter((name) => !headers.has(name));
+  if (missing.length) throw new Error(`This is not an Assignr officials export. Missing: ${missing.join(", ")}.`);
+  return records.slice(1)
+    .filter((record) => cell(record, headers, "is an official?").toUpperCase() !== "NO")
+    .map((record) => {
+      const first = cell(record, headers, "first name");
+      const last = cell(record, headers, "last name");
+      return {
+        full_name: `${first} ${last}`.trim(),
+        primary_email: cell(record, headers, "primary email").toLowerCase() || null,
+        secondary_email: cell(record, headers, "secondary email").toLowerCase() || null,
+        phone: cell(record, headers, "mobile phone") || cell(record, headers, "home phone") || null,
+        date_of_birth: null,
+        badge_level: cell(record, headers, "grade/badge level") || cell(record, headers, "ussf referee certification") || null,
+        source_official_id: cell(record, headers, "assignr database id") || null,
+      };
+    })
+    .filter((row) => row.full_name);
 }
 
 function normalizePosition(position: string): AssignmentRecord["position"] {
@@ -260,6 +482,130 @@ function normalizePosition(position: string): AssignmentRecord["position"] {
   if (value.includes("fourth")) return "fourth_official";
   if (value.includes("mentor")) return "mentor";
   return "referee";
+}
+
+export async function loadOrganizationOfficials(session: Law18Session, organizationId: string) {
+  return rest<OfficialRecord[]>(
+    session,
+    `officials?organization_id=eq.${enc(organizationId)}&select=*&order=full_name.asc`,
+  );
+}
+
+export async function importOfficials(
+  session: Law18Session,
+  profile: Profile,
+  fileName: string,
+  rows: OfficialImportRow[],
+): Promise<OfficialImportResult> {
+  if (!profile.organization_id) throw new Error("Select an organization before importing officials.");
+  const existing = await loadOrganizationOfficials(session, profile.organization_id);
+  const bySource = new Map(existing.filter((item) => item.source_official_id).map((item) => [item.source_official_id!, item]));
+  const byEmail = new Map(existing.filter((item) => item.email).map((item) => [item.email!.trim().toLowerCase(), item]));
+  const provisionalByName = new Map<string, OfficialRecord[]>();
+  existing.filter((item) => item.identity_status === "provisional").forEach((item) => {
+    const key = normalizeOfficialName(item.source_display_name || item.full_name);
+    provisionalByName.set(key, [...(provisionalByName.get(key) || []), item]);
+  });
+  const emailsInFile = new Set<string>();
+  const conflicts: OfficialImportResult["conflicts"] = [];
+  const createPayload: Record<string, unknown>[] = [];
+  const updates: { id: string; changes: Record<string, unknown> }[] = [];
+
+  for (const row of rows) {
+    let email = row.primary_email?.trim().toLowerCase() || null;
+    if (email && emailsInFile.has(email)) {
+      conflicts.push({ name: row.full_name, email, reason: "Duplicate primary email in this import" });
+      email = null;
+    }
+    if (email) emailsInFile.add(email);
+    const directSourceMatch = row.source_official_id ? bySource.get(row.source_official_id) : undefined;
+    const nameCandidates = provisionalByName.get(normalizeOfficialName(row.full_name)) || [];
+    const sourceMatch = directSourceMatch || (nameCandidates.length === 1 ? nameCandidates[0] : undefined);
+    const emailMatch = email ? byEmail.get(email) : undefined;
+    if (emailMatch && sourceMatch && emailMatch.id !== sourceMatch.id) {
+      conflicts.push({ name: row.full_name, email: email!, reason: "Email belongs to a different existing official" });
+      email = null;
+    } else if (emailMatch && !sourceMatch) {
+      conflicts.push({ name: row.full_name, email: email!, reason: "Email already exists; administrator review required" });
+      email = null;
+    }
+    if (!directSourceMatch && !sourceMatch && nameCandidates.length > 1) {
+      conflicts.push({ name: row.full_name, email: email || "", reason: "Multiple provisional officials have this name; manual identity review required" });
+    }
+    const match = sourceMatch;
+    const changes = {
+      full_name: match?.linked_user_id ? match.full_name : row.full_name,
+      source_display_name: row.full_name,
+      email,
+      secondary_email: row.secondary_email,
+      phone: row.phone,
+      date_of_birth: row.date_of_birth,
+      badge_level: row.badge_level,
+      source: "assignr",
+      source_official_id: row.source_official_id,
+      updated_at: new Date().toISOString(),
+    };
+    if (match) updates.push({ id: match.id, changes });
+    else createPayload.push({
+      organization_id: profile.organization_id,
+      identity_status: "provisional",
+      ...changes,
+    });
+  }
+
+  for (let index = 0; index < createPayload.length; index += 250) {
+    await rest(session, "officials", {
+      method: "POST",
+      body: JSON.stringify(createPayload.slice(index, index + 250)),
+    }, "return=minimal");
+  }
+  for (const update of updates) {
+    await rest(session, `officials?id=eq.${enc(update.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(update.changes),
+    }, "return=minimal");
+  }
+  await rest(session, "import_jobs", {
+    method: "POST",
+    body: JSON.stringify({
+      organization_id: profile.organization_id,
+      uploaded_by: profile.id,
+      source: "assignr_officials_csv",
+      file_name: fileName,
+      row_count: rows.length,
+      status: conflicts.length ? "completed_with_warnings" : "completed",
+      errors: conflicts,
+    }),
+  }, "return=minimal");
+  return {
+    created: createPayload.length,
+    updated: updates.length,
+    missingEmail: rows.filter((row) => !row.primary_email).length,
+    conflicts,
+  };
+}
+
+export async function saveAssessment(
+  session: Law18Session,
+  organizationId: string,
+  values: Omit<AssessmentRecord, "id" | "coach_id" | "submitted_at">,
+) {
+  const rows = await rest<AssessmentRecord[]>(
+    session,
+    "assessments?on_conflict=game_id,official_id,coach_id",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        ...values,
+        organization_id: organizationId,
+        coach_id: session.user.id,
+        submitted_at: values.status === "draft" ? null : new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }),
+    },
+    "resolution=merge-duplicates,return=representation",
+  );
+  return rows[0];
 }
 
 export async function importTournament(
@@ -275,6 +621,7 @@ export async function importTournament(
   },
   rows: ImportRow[],
 ) {
+  if (!profile.organization_id) throw new Error("Select an organization before importing a schedule.");
   let event: EventRecord;
   if (details.eventId) {
     const existingEvents = await rest<EventRecord[]>(
@@ -318,28 +665,44 @@ export async function importTournament(
     event = events[0];
   }
 
-  const officialPayload = [...new Map(rows.map((row) => [
-    row.official_email,
-    {
-      organization_id: profile.organization_id,
-      full_name: row.official_name,
-      email: row.official_email,
-    },
-  ])).values()];
-  const officials = await rest<OfficialRecord[]>(
-    session,
-    "officials?on_conflict=organization_id,email",
-    { method: "POST", body: JSON.stringify(officialPayload) },
-    "resolution=merge-duplicates,return=representation",
-  );
-  const officialByEmail = new Map(officials.map((official) => [official.email, official]));
+  const existingOfficials = await loadOrganizationOfficials(session, profile.organization_id);
+  const byName = new Map<string, OfficialRecord[]>();
+  existingOfficials.forEach((official) => {
+    const key = normalizeOfficialName(official.source_display_name || official.full_name);
+    byName.set(key, [...(byName.get(key) || []), official]);
+  });
+  const newNames = [...new Set(rows.map((row) => normalizeOfficialName(row.official_name)))]
+    .filter((key) => (byName.get(key)?.length || 0) === 0);
+  if (newNames.length) {
+    const displayByName = new Map(rows.map((row) => [normalizeOfficialName(row.official_name), row.official_name]));
+    await rest(session, "officials", {
+      method: "POST",
+      body: JSON.stringify(newNames.map((key) => ({
+        organization_id: profile.organization_id,
+        full_name: displayByName.get(key),
+        email: null,
+        source: "assignr_schedule_name",
+        source_official_id: key,
+        source_display_name: displayByName.get(key),
+        identity_status: "provisional",
+      }))),
+    }, "return=minimal");
+  }
+  const officials = await loadOrganizationOfficials(session, profile.organization_id);
+  const officialByEmail = new Map(officials.filter((official) => official.email)
+    .map((official) => [official.email!.trim().toLowerCase(), official]));
+  const officialByName = new Map<string, OfficialRecord[]>();
+  officials.forEach((official) => {
+    const key = normalizeOfficialName(official.source_display_name || official.full_name);
+    officialByName.set(key, [...(officialByName.get(key) || []), official]);
+  });
 
   const uniqueGames = [...new Map(rows.map((row) => [
     row.external_id,
     {
       event_id: event.id,
       external_id: row.external_id,
-      starts_at: `${row.date}T${row.start_time}:00`,
+      starts_at: `${row.date}T${row.start_time}`,
       field_name: row.field,
       home_team: row.home_team,
       away_team: row.away_team,
@@ -355,7 +718,9 @@ export async function importTournament(
   const gameByExternalId = new Map(games.map((game) => [game.external_id, game]));
   const assignmentPayload = rows.map((row) => {
     const gameId = gameByExternalId.get(row.external_id)?.id;
-    const officialId = officialByEmail.get(row.official_email)?.id;
+    const emailMatch = row.official_email ? officialByEmail.get(row.official_email)?.id : undefined;
+    const nameMatches = officialByName.get(normalizeOfficialName(row.official_name)) || [];
+    const officialId = emailMatch || (nameMatches.length === 1 ? nameMatches[0].id : undefined);
     if (!gameId || !officialId) throw new Error(`Unable to match assignment for game ${row.external_id}.`);
     return {
       game_id: gameId,

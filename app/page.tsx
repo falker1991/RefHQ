@@ -36,6 +36,7 @@ import {
   saveAppearanceTheme,
   reactivateOrganization,
   updateOrganizationName,
+  updateOfficial,
   updateEventRatingSettings,
   updatePositionTitleAliases,
   positionAliasKey,
@@ -577,10 +578,12 @@ function OfficialsDirectory({
   const [message, setMessage] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "email" | "phone" | "badge" | "identity" | "role" | "event">("name");
   const [managing, setManaging] = useState<OfficialRecord | null>(null);
+  const [editing, setEditing] = useState<OfficialRecord | null>(null);
   const [eventRole, setEventRole] = useState<"event_admin" | "assignor" | "referee_coach" | "referee">("referee");
   const [ratingScope, setRatingScope] = useState<"none" | "specific" | "all">("none");
   const [ratingEventIds, setRatingEventIds] = useState<string[]>([]);
-  const [official, setOfficial] = useState({ full_name: "", email: "", secondary_email: "", phone: "", badge_level: "", pending_org_role: "referee" as MembershipRole });
+  const [official, setOfficial] = useState({ full_name: "", email: "", secondary_email: "", date_of_birth: "", phone: "", badge_level: "", pending_org_role: "referee" as MembershipRole });
+  const [editValues, setEditValues] = useState({ full_name: "", email: "", secondary_email: "", date_of_birth: "", phone: "", badge_level: "", pending_org_role: "referee" as MembershipRole });
   const filtered = officials.filter((official) => {
     if (scope === "event" && !eventOfficialIds.has(official.id)) return false;
     const haystack = `${official.full_name} ${official.email || ""} ${official.badge_level || ""}`.toLowerCase();
@@ -602,7 +605,7 @@ function OfficialsDirectory({
     setMessage("");
     try {
       await createOfficial(session, organizationId, official);
-      setOfficial({ full_name: "", email: "", secondary_email: "", phone: "", badge_level: "", pending_org_role: "referee" });
+      setOfficial({ full_name: "", email: "", secondary_email: "", date_of_birth: "", phone: "", badge_level: "", pending_org_role: "referee" });
       setAdding(false);
       setMessage("Official added to this organization. No login account or email was created.");
       onCreated();
@@ -625,6 +628,34 @@ function OfficialsDirectory({
       setBusy(false);
     }
   }
+  function beginEdit(target: OfficialRecord) {
+    setEditing(target);
+    setEditValues({
+      full_name: target.full_name,
+      email: target.email || "",
+      secondary_email: target.secondary_email || "",
+      date_of_birth: target.date_of_birth || "",
+      phone: target.phone || "",
+      badge_level: target.badge_level || "",
+      pending_org_role: target.pending_org_role || "referee",
+    });
+    setMessage("");
+  }
+  async function saveOfficial() {
+    if (!editing || !editValues.full_name.trim()) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      await updateOfficial(session, editing, editValues);
+      setMessage(`${editing.full_name}'s official record was updated.`);
+      setEditing(null);
+      onCreated();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to update the official.");
+    } finally {
+      setBusy(false);
+    }
+  }
   return <section className="page-section">
     <div className="section-title"><div><p className="eyebrow">OFFICIALS</p><h1>Referee directory</h1><p>Organization officials and the active event roster.</p></div></div>
     <div className="directory-tools">
@@ -633,7 +664,7 @@ function OfficialsDirectory({
       <label className="compact-sort">Sort by<select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}><option value="name">Name</option><option value="email">Email</option><option value="phone">Phone</option><option value="badge">Badge</option><option value="identity">Account status</option><option value="role">Organization role</option><option value="event">Event assignment</option></select></label>
       <button className="secondary" onClick={() => setAdding((value) => !value)}>{adding ? "Cancel" : "Add official"}</button>
     </div>
-    {adding && <article className="panel manual-entry-form"><h2>Add an official</h2><div className="manual-form-grid"><label>Full name<input value={official.full_name} onChange={(e) => setOfficial({ ...official, full_name: e.target.value })} /></label><label>Primary email<input type="email" value={official.email} onChange={(e) => setOfficial({ ...official, email: e.target.value })} /></label><label>Secondary email<input type="email" value={official.secondary_email} onChange={(e) => setOfficial({ ...official, secondary_email: e.target.value })} /></label><label>Phone<input value={official.phone} onChange={(e) => setOfficial({ ...official, phone: e.target.value })} /></label><label>Badge or level<input value={official.badge_level} onChange={(e) => setOfficial({ ...official, badge_level: e.target.value })} /></label><label>Intended organization role<select value={official.pending_org_role} onChange={(e) => setOfficial({ ...official, pending_org_role: e.target.value as MembershipRole })}><option value="referee">Referee</option><option value="referee_coach">Referee coach</option><option value="assignor">Assignor</option><option value="organization_admin">Organization admin</option></select></label></div><button className="primary" disabled={busy || !official.full_name.trim()} onClick={addOfficial}>{busy ? "Adding…" : "Add official"}</button></article>}
+    {adding && <article className="panel manual-entry-form"><h2>Add an official</h2><div className="manual-form-grid"><label>Full name<input value={official.full_name} onChange={(e) => setOfficial({ ...official, full_name: e.target.value })} /></label><label>Primary email<input type="email" value={official.email} onChange={(e) => setOfficial({ ...official, email: e.target.value })} /></label><label>Secondary email<input type="email" value={official.secondary_email} onChange={(e) => setOfficial({ ...official, secondary_email: e.target.value })} /></label><label>Date of birth<input type="date" value={official.date_of_birth} onChange={(e) => setOfficial({ ...official, date_of_birth: e.target.value })} /></label><label>Phone<input value={official.phone} onChange={(e) => setOfficial({ ...official, phone: e.target.value })} /></label><label>Badge or level<input value={official.badge_level} onChange={(e) => setOfficial({ ...official, badge_level: e.target.value })} /></label><label>Intended organization role<select value={official.pending_org_role} onChange={(e) => setOfficial({ ...official, pending_org_role: e.target.value as MembershipRole })}><option value="referee">Referee</option><option value="referee_coach">Referee coach</option><option value="assignor">Assignor</option><option value="organization_admin">Organization admin</option></select></label></div><button className="primary" disabled={busy || !official.full_name.trim()} onClick={addOfficial}>{busy ? "Adding…" : "Add official"}</button></article>}
     {message && <p className="pilot-message">{message}</p>}
     <article className="panel directory-list">
       <div className="directory-row directory-head"><span>Official</span><span>Contact</span><span>Identity</span><span>Event</span></div>
@@ -641,10 +672,11 @@ function OfficialsDirectory({
         <div className="official-name-cell"><span className="avatar">{initials(official.full_name)}</span><div><strong>{official.full_name}</strong><small>{official.badge_level || "Badge not supplied"}</small></div></div>
         <div><span>{official.email || "Email required"}</span><small>{official.phone || "No phone imported"}</small></div>
         <span className={`identity-pill ${official.linked_user_id ? "linked" : ""}`}>{official.linked_user_id ? "Account linked" : "Provisional"}</span>
-        <span>{eventOfficialIds.has(official.id) ? "Assigned" : "—"}{official.linked_user_id && event && <button className="text-button manage-role" onClick={() => setManaging(official)}>Manage role</button>}</span>
+        <span>{eventOfficialIds.has(official.id) ? "Assigned" : "—"}<button className="text-button manage-role" onClick={() => beginEdit(official)}>Edit</button>{official.linked_user_id && event && <button className="text-button manage-role" onClick={() => setManaging(official)}>Manage role</button>}</span>
       </div>)}
       {!filtered.length && <EmptyState>No officials match this view.</EmptyState>}
     </article>
+    {editing && <div className="confirmation-backdrop" role="presentation"><section className="confirmation-dialog role-dialog official-edit-dialog" role="dialog" aria-modal="true"><p className="eyebrow">OFFICIAL RECORD</p><h2>Edit {editing.full_name}</h2>{editing.linked_user_id && <p className="import-note">This account is linked. The user manages their name and contact information in Account Settings; organization staff can update only the badge and intended role.</p>}<div className="manual-form-grid"><label>Full name<input value={editValues.full_name} disabled={Boolean(editing.linked_user_id)} onChange={(e) => setEditValues({ ...editValues, full_name: e.target.value })} /></label><label>Primary email<input type="email" value={editValues.email} disabled={Boolean(editing.linked_user_id)} onChange={(e) => setEditValues({ ...editValues, email: e.target.value })} /></label><label>Secondary email<input type="email" value={editValues.secondary_email} disabled={Boolean(editing.linked_user_id)} onChange={(e) => setEditValues({ ...editValues, secondary_email: e.target.value })} /></label><label>Date of birth<input type="date" value={editValues.date_of_birth} disabled={Boolean(editing.linked_user_id)} onChange={(e) => setEditValues({ ...editValues, date_of_birth: e.target.value })} /></label><label>Phone<input value={editValues.phone} disabled={Boolean(editing.linked_user_id)} onChange={(e) => setEditValues({ ...editValues, phone: e.target.value })} /></label><label>Badge or level<input value={editValues.badge_level} onChange={(e) => setEditValues({ ...editValues, badge_level: e.target.value })} /></label><label>Intended organization role<select value={editValues.pending_org_role} onChange={(e) => setEditValues({ ...editValues, pending_org_role: e.target.value as MembershipRole })}><option value="referee">Referee</option><option value="referee_coach">Referee coach</option><option value="assignor">Assignor</option><option value="organization_admin">Organization admin</option></select></label></div><p className="import-note">Assignr source identifiers are preserved so future imports continue matching this official.</p><div><button className="secondary" onClick={() => setEditing(null)}>Cancel</button><button className="primary" disabled={busy || !editValues.full_name.trim()} onClick={saveOfficial}>{busy ? "Saving…" : "Save official"}</button></div></section></div>}
     {managing && event && <div className="confirmation-backdrop" role="presentation"><section className="confirmation-dialog role-dialog" role="dialog" aria-modal="true"><p className="eyebrow">EVENT ACCESS</p><h2>{managing.full_name}</h2><p>Assign access for {event.name}.</p><label>Event role<select value={eventRole} onChange={(e) => setEventRole(e.target.value as typeof eventRole)}><option value="event_admin">Event admin</option><option value="assignor">Assignor</option><option value="referee_coach">Referee coach</option><option value="referee">Referee</option></select></label><label>Previous-event ratings<select value={ratingScope} onChange={(e) => setRatingScope(e.target.value as typeof ratingScope)}><option value="none">No previous events</option><option value="specific">Selected previous events</option><option value="all">All organization events</option></select></label>{ratingScope === "specific" && <fieldset><legend>Allowed events</legend>{events.filter((item) => item.id !== event.id).map((item) => <label className="event-access-check" key={item.id}><input type="checkbox" checked={ratingEventIds.includes(item.id)} onChange={(e) => setRatingEventIds((current) => e.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))} />{item.name}</label>)}</fieldset>}<div><button className="secondary" onClick={() => setManaging(null)}>Cancel</button><button className="primary" disabled={busy} onClick={saveEventRole}>Save event access</button></div></section></div>}
   </section>;
 }

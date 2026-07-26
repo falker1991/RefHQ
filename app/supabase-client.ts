@@ -991,7 +991,7 @@ export async function importTournament(
 export async function createOfficial(
   session: Law18Session,
   organizationId: string,
-  values: { full_name: string; email?: string | null; secondary_email?: string | null; phone?: string | null; badge_level?: string | null; pending_org_role?: MembershipRole },
+  values: { full_name: string; email?: string | null; secondary_email?: string | null; date_of_birth?: string | null; phone?: string | null; badge_level?: string | null; pending_org_role?: MembershipRole },
 ) {
   const rows = await rest<OfficialRecord[]>(session, "officials", {
     method: "POST",
@@ -1000,14 +1000,61 @@ export async function createOfficial(
       full_name: values.full_name.trim(),
       email: values.email?.trim().toLowerCase() || null,
       secondary_email: values.secondary_email?.trim().toLowerCase() || null,
+      date_of_birth: values.date_of_birth || null,
       phone: values.phone?.trim() || null,
       badge_level: values.badge_level?.trim() || null,
+      pending_org_role: values.pending_org_role || "referee",
       source: "manual",
       source_display_name: values.full_name.trim(),
       identity_status: "provisional",
     }),
   }, "return=representation");
   return rows[0];
+}
+
+export async function updateOfficial(
+  session: Law18Session,
+  official: OfficialRecord,
+  values: { full_name: string; email?: string | null; secondary_email?: string | null; date_of_birth?: string | null; phone?: string | null; badge_level?: string | null; pending_org_role?: MembershipRole },
+) {
+  const email = values.email?.trim().toLowerCase() || null;
+  const existing = email
+    ? await rest<Pick<OfficialRecord, "id">[]>(
+      session,
+      `officials?organization_id=eq.${enc(official.organization_id)}&email=ilike.${enc(email)}&id=neq.${enc(official.id)}&select=id`,
+    )
+    : [];
+  if (existing.length) throw new Error("That primary email is already used by another official in this organization.");
+
+  const changes = official.linked_user_id
+    ? {
+      badge_level: values.badge_level?.trim() || null,
+      pending_org_role: values.pending_org_role || "referee",
+      updated_at: new Date().toISOString(),
+    }
+    : {
+      full_name: values.full_name.trim(),
+      email,
+      secondary_email: values.secondary_email?.trim().toLowerCase() || null,
+      date_of_birth: values.date_of_birth || null,
+      phone: values.phone?.trim() || null,
+      badge_level: values.badge_level?.trim() || null,
+      pending_org_role: values.pending_org_role || "referee",
+      updated_at: new Date().toISOString(),
+    };
+
+  try {
+    const rows = await rest<OfficialRecord[]>(session, `officials?id=eq.${enc(official.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(changes),
+    }, "return=representation");
+    return rows[0];
+  } catch (reason) {
+    if (reason instanceof Error && /unique|duplicate/i.test(reason.message)) {
+      throw new Error("That primary email is already used by another official in this organization.");
+    }
+    throw reason;
+  }
 }
 
 export async function createGame(

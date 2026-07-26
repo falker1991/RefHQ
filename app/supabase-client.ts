@@ -93,6 +93,7 @@ export type OfficialRecord = {
   linked_user_id?: string | null;
   identity_status?: string;
   pending_org_role?: MembershipRole;
+  pending_org_roles?: MembershipRole[];
 };
 
 export type AssignmentRecord = {
@@ -991,7 +992,7 @@ export async function importTournament(
 export async function createOfficial(
   session: Law18Session,
   organizationId: string,
-  values: { full_name: string; email?: string | null; secondary_email?: string | null; date_of_birth?: string | null; phone?: string | null; badge_level?: string | null; pending_org_role?: MembershipRole },
+  values: { full_name: string; email?: string | null; secondary_email?: string | null; date_of_birth?: string | null; phone?: string | null; badge_level?: string | null; pending_org_roles?: MembershipRole[] },
 ) {
   const rows = await rest<OfficialRecord[]>(session, "officials", {
     method: "POST",
@@ -1003,7 +1004,8 @@ export async function createOfficial(
       date_of_birth: values.date_of_birth || null,
       phone: values.phone?.trim() || null,
       badge_level: values.badge_level?.trim() || null,
-      pending_org_role: values.pending_org_role || "referee",
+      pending_org_role: values.pending_org_roles?.[0] || "referee",
+      pending_org_roles: values.pending_org_roles?.length ? values.pending_org_roles : ["referee"],
       source: "manual",
       source_display_name: values.full_name.trim(),
       identity_status: "provisional",
@@ -1015,7 +1017,8 @@ export async function createOfficial(
 export async function updateOfficial(
   session: Law18Session,
   official: OfficialRecord,
-  values: { full_name: string; email?: string | null; secondary_email?: string | null; date_of_birth?: string | null; phone?: string | null; badge_level?: string | null; pending_org_role?: MembershipRole },
+  values: { full_name: string; email?: string | null; secondary_email?: string | null; date_of_birth?: string | null; phone?: string | null; badge_level?: string | null; pending_org_roles?: MembershipRole[] },
+  syncMembershipRoles = false,
 ) {
   const email = values.email?.trim().toLowerCase() || null;
   const existing = email
@@ -1026,10 +1029,12 @@ export async function updateOfficial(
     : [];
   if (existing.length) throw new Error("That primary email is already used by another official in this organization.");
 
+  const intendedRoles = values.pending_org_roles?.length ? values.pending_org_roles : ["referee" as MembershipRole];
   const changes = official.linked_user_id
     ? {
       badge_level: values.badge_level?.trim() || null,
-      pending_org_role: values.pending_org_role || "referee",
+      pending_org_role: intendedRoles[0],
+      pending_org_roles: intendedRoles,
       updated_at: new Date().toISOString(),
     }
     : {
@@ -1039,7 +1044,8 @@ export async function updateOfficial(
       date_of_birth: values.date_of_birth || null,
       phone: values.phone?.trim() || null,
       badge_level: values.badge_level?.trim() || null,
-      pending_org_role: values.pending_org_role || "referee",
+      pending_org_role: intendedRoles[0],
+      pending_org_roles: intendedRoles,
       updated_at: new Date().toISOString(),
     };
 
@@ -1048,6 +1054,26 @@ export async function updateOfficial(
       method: "PATCH",
       body: JSON.stringify(changes),
     }, "return=representation");
+    if (official.linked_user_id && syncMembershipRoles) {
+      const managedRoles = ["organization_admin", "assignor", "referee_coach", "referee"];
+      const removedRoles = managedRoles.filter((role) => !intendedRoles.includes(role as MembershipRole));
+      if (removedRoles.length) {
+        await rest(session,
+          `organization_memberships?organization_id=eq.${enc(official.organization_id)}&user_id=eq.${enc(official.linked_user_id)}&role=in.(${removedRoles.join(",")})`,
+          { method: "DELETE" },
+          "return=minimal",
+        );
+      }
+      await rest(session, "organization_memberships?on_conflict=organization_id,user_id,role", {
+        method: "POST",
+        body: JSON.stringify(intendedRoles.map((role) => ({
+          organization_id: official.organization_id,
+          user_id: official.linked_user_id,
+          role,
+          status: "active",
+        }))),
+      }, "resolution=merge-duplicates,return=minimal");
+    }
     return rows[0];
   } catch (reason) {
     if (reason instanceof Error && /unique|duplicate/i.test(reason.message)) {

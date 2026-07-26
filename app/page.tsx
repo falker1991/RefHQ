@@ -97,7 +97,10 @@ function formatTime(value: string) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat([], { weekday: "long", month: "short", day: "numeric" }).format(new Date(`${value}T12:00:00`));
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const date = new Date(dateOnly ? `${value}T12:00:00` : value);
+  if (Number.isNaN(date.getTime())) return "Date unavailable";
+  return new Intl.DateTimeFormat([], { weekday: "long", month: "short", day: "numeric" }).format(date);
 }
 
 function positionLabel(position: AssignmentRecord["position"]) {
@@ -1278,7 +1281,7 @@ function Dashboard({ session }: { session: Law18Session }) {
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.3.2</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.3.3</span></footer>
   </main>;
 }
 

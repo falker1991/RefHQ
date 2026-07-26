@@ -543,6 +543,30 @@ function toIsoTime(value: string) {
   return `${String(hours).padStart(2, "0")}:${minutes}:${seconds}`;
 }
 
+export function zonedLocalDateTimeToIso(date: string, time: string, timeZone: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  const [hour, minute, second = 0] = time.split(":").map(Number);
+  if (![year, month, day, hour, minute, second].every(Number.isFinite)) {
+    throw new Error(`Invalid local date/time "${date} ${time}".`);
+  }
+  const wallTimeAsUtc = Date.UTC(year, month - 1, day, hour, minute, second);
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = Object.fromEntries(formatter.formatToParts(new Date(wallTimeAsUtc))
+    .filter((part) => part.type !== "literal")
+    .map((part) => [part.type, Number(part.value)]));
+  const representedWallTime = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  return new Date(wallTimeAsUtc - (representedWallTime - wallTimeAsUtc)).toISOString();
+}
+
 function displayName(value: string) {
   const parts = value.split(",").map((part) => part.trim()).filter(Boolean);
   return parts.length === 2 ? `${parts[1]} ${parts[0]}` : value.trim();
@@ -888,7 +912,7 @@ export async function importTournament(
     {
       event_id: event.id,
       external_id: row.external_id,
-      starts_at: `${row.date}T${row.start_time}`,
+      starts_at: zonedLocalDateTimeToIso(row.date, row.start_time, event.timezone || "America/New_York"),
       field_name: row.field,
       venue_name: row.venue,
       home_team: row.home_team,

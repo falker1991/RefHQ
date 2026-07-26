@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isOperationalGame, normalizePosition, parseAssignrCsv, parseAssignrOfficialsCsv, positionAliasKey } from "../app/supabase-client.ts";
+import { isOperationalGame, normalizePosition, parseAssignrCsv, parseAssignrOfficialsCsv, positionAliasKey, zonedLocalDateTimeToIso } from "../app/supabase-client.ts";
 
 test("parses an actual Assignr games export layout", () => {
   const csv = [
@@ -35,6 +35,11 @@ test("matches position aliases without case or spacing differences", () => {
 test("classifies non-match operational records", () => {
   assert.equal(isOperationalGame({ field: "REF HQ PDA RC", home_team: "Ref Coach", away_team: "Ref Coach", game_type: "Ref Coach" }), true);
   assert.equal(isOperationalGame({ field: "Field 3", home_team: "Home FC", away_team: "Away FC", game_type: "League" }), false);
+});
+
+test("interprets imported wall times in the event timezone", () => {
+  assert.equal(zonedLocalDateTimeToIso("2026-06-30", "08:00:00", "America/New_York"), "2026-06-30T12:00:00.000Z");
+  assert.equal(zonedLocalDateTimeToIso("2026-01-30", "08:00:00", "America/New_York"), "2026-01-30T13:00:00.000Z");
 });
 
 test("parses an actual Assignr users export layout", () => {

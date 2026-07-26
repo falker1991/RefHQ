@@ -40,6 +40,7 @@ import {
   updatePositionTitleAliases,
   positionAliasKey,
   updateOwnProfile,
+  zonedLocalDateTimeToIso,
   type AssignmentRecord,
   type CheckInRecord,
   type EventRecord,
@@ -316,7 +317,8 @@ function ScheduleView({ session, event, data, onCreated }: { session: Law18Sessi
     setBusy(true);
     setMessage("");
     try {
-      await createGame(session, event.id, { ...game, starts_at: new Date(game.starts_at).toISOString() });
+      const [date, time] = game.starts_at.split("T");
+      await createGame(session, event.id, { ...game, starts_at: zonedLocalDateTimeToIso(date, `${time}:00`, event.timezone) });
       setGame({ starts_at: "", field_name: "", home_team: "", away_team: "", division: "" });
       setAdding(false);
       setMessage("Game added to this event.");

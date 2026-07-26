@@ -43,6 +43,7 @@ export type OrganizationRecord = {
   active?: boolean;
   deactivated_at?: string | null;
   deactivated_by?: string | null;
+  position_title_aliases: Record<string, string>;
 };
 
 export type EventRecord = {
@@ -56,6 +57,7 @@ export type EventRecord = {
   check_in_slug: string;
   rating_type: "skills_eval" | "basic_eval";
   ratings_admin_only: boolean;
+  position_title_aliases: Record<string, string>;
 };
 
 export type GameRecord = {
@@ -100,6 +102,7 @@ export type AssignmentRecord = {
     | "standby"
     | "other";
   position_title: string | null;
+  source_position_title: string | null;
 };
 
 export type CheckInRecord = {
@@ -192,13 +195,33 @@ export async function loadProfile(session: Law18Session) {
 export async function loadOrganization(session: Law18Session, organizationId: string) {
   const rows = await rest<OrganizationRecord[]>(
     session,
-    `organizations?id=eq.${enc(organizationId)}&select=id,name,slug`,
+    `organizations?id=eq.${enc(organizationId)}&select=*`,
   );
   return rows[0] ?? null;
 }
 
 export async function loadOrganizations(session: Law18Session) {
-  return rest<OrganizationRecord[]>(session, "organizations?select=id,name,slug,active,deactivated_at,deactivated_by&order=name.asc");
+  return rest<OrganizationRecord[]>(session, "organizations?select=*&order=name.asc");
+}
+
+export function positionAliasKey(value: string) {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+export async function updatePositionTitleAliases(
+  session: Law18Session,
+  scope: "organization" | "event",
+  id: string,
+  aliases: Record<string, string>,
+) {
+  const table = scope === "organization" ? "organizations" : "events";
+  const rows = await rest<(OrganizationRecord | EventRecord)[]>(
+    session,
+    `${table}?id=eq.${enc(id)}`,
+    { method: "PATCH", body: JSON.stringify({ position_title_aliases: aliases }) },
+    "return=representation",
+  );
+  return rows[0];
 }
 
 export async function createOrganization(session: Law18Session, name: string) {
@@ -839,6 +862,14 @@ export async function importTournament(
     "resolution=merge-duplicates,return=representation",
   );
   const gameByExternalId = new Map(games.map((game) => [game.external_id, game]));
+  const organizationRows = await rest<Pick<OrganizationRecord, "position_title_aliases">[]>(
+    session,
+    `organizations?id=eq.${enc(organizationId)}&select=position_title_aliases`,
+  );
+  const positionAliases = {
+    ...(organizationRows[0]?.position_title_aliases || {}),
+    ...(event.position_title_aliases || {}),
+  };
   const assignmentPayload = rows.map((row) => {
     const gameId = gameByExternalId.get(row.external_id)?.id;
     const emailMatch = row.official_email ? officialByEmail.get(row.official_email)?.id : undefined;
@@ -849,7 +880,8 @@ export async function importTournament(
       game_id: gameId,
       official_id: officialId,
       position: normalizePosition(row.position),
-      position_title: row.position.trim() || "Official",
+      position_title: positionAliases[positionAliasKey(row.position)] || row.position.trim() || "Official",
+      source_position_title: row.position.trim() || "Official",
       accepted: true,
     };
   });

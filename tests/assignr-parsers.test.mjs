@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizePosition, parseAssignrCsv, parseAssignrOfficialsCsv } from "../app/supabase-client.ts";
+import { normalizePosition, parseAssignrCsv, parseAssignrOfficialsCsv, positionAliasKey } from "../app/supabase-client.ts";
 
 test("parses an actual Assignr games export layout", () => {
   const csv = [
@@ -25,6 +25,10 @@ test("preserves Assignr assignment role categories", () => {
   assert.equal(normalizePosition("Site Coord"), "site_coordinator");
   assert.equal(normalizePosition("Site Supervisor"), "site_supervisor");
   assert.equal(normalizePosition("Standby"), "standby");
+});
+
+test("matches position aliases without case or spacing differences", () => {
+  assert.equal(positionAliasKey("  Asst.   Referee "), "asst. referee");
 });
 
 test("parses an actual Assignr users export layout", () => {

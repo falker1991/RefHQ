@@ -35,6 +35,8 @@ import {
   reactivateOrganization,
   updateOrganizationName,
   updateEventRatingSettings,
+  updatePositionTitleAliases,
+  positionAliasKey,
   updateOwnProfile,
   type AssignmentRecord,
   type CheckInRecord,
@@ -337,13 +339,17 @@ function ImportView({
   session,
   profile,
   organizationId,
+  organization,
   events,
+  canConfigureAliases,
   onImported,
 }: {
   session: Law18Session;
   profile: Profile;
   organizationId: string;
+  organization: OrganizationRecord;
   events: EventRecord[];
+  canConfigureAliases: boolean;
   onImported: (event: EventRecord) => void;
 }) {
   const [mode, setMode] = useState<"schedule" | "officials">("schedule");
@@ -355,7 +361,34 @@ function ImportView({
   const [busy, setBusy] = useState(false);
   const [destinationEventId, setDestinationEventId] = useState("");
   const [details, setDetails] = useState({ name: "", venue: "", startsOn: "", endsOn: "" });
+  const [aliasScope, setAliasScope] = useState<"organization" | "event">("organization");
+  const [aliasText, setAliasText] = useState("");
   const destinationEvent = events.find((event) => event.id === destinationEventId);
+
+  useEffect(() => {
+    const aliases = aliasScope === "event"
+      ? destinationEvent?.position_title_aliases || {}
+      : organization.position_title_aliases || {};
+    setAliasText(Object.entries(aliases).map(([source, display]) => `${source} = ${display}`).join("\n"));
+  }, [aliasScope, destinationEvent, organization]);
+
+  async function saveAliases() {
+    const targetId = aliasScope === "event" ? destinationEvent?.id : organization.id;
+    if (!targetId) return;
+    const aliases = Object.fromEntries(aliasText.split(/\r?\n/)
+      .map((line) => line.split("="))
+      .filter((parts) => parts.length >= 2 && parts[0].trim() && parts.slice(1).join("=").trim())
+      .map((parts) => [positionAliasKey(parts[0]), parts.slice(1).join("=").trim()]));
+    setBusy(true);
+    try {
+      await updatePositionTitleAliases(session, aliasScope, targetId, aliases);
+      setMessage(`${aliasScope === "event" ? "Event" : "Organization"} position titles saved for future imports.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to save position titles.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function chooseDestination(eventId: string) {
     setDestinationEventId(eventId);
@@ -495,6 +528,7 @@ function ImportView({
       </article>
     </div>
     {mode === "schedule" && rows.length > 0 && <div className="panel preview-table"><table><thead><tr><th>Game</th><th>Date/time</th><th>Field</th><th>Official</th><th>Position</th></tr></thead><tbody>{rows.slice(0, 12).map((row, index) => <tr key={`${row.external_id}-${row.official_name}-${index}`}><td>{row.home_team} vs. {row.away_team}</td><td>{row.date} {row.start_time}</td><td>{row.field}</td><td>{row.official_name}<small>{row.official_email || "Matched from officials directory"}</small></td><td>{row.position}</td></tr>)}</tbody></table>{rows.length > 12 && <p>Showing 12 of {rows.length} assignment rows.</p>}</div>}
+    {mode === "schedule" && canConfigureAliases && <article className="panel position-alias-settings"><div><p className="eyebrow">POSITION TITLES</p><h2>Import display names</h2><p>One replacement per line, such as <code>Asst. Referee = AR</code>. Event settings override organization settings.</p></div><label>Applies to<select value={aliasScope} onChange={(event) => setAliasScope(event.target.value as "organization" | "event")}><option value="organization">{organization.name}</option><option value="event" disabled={!destinationEvent}>Selected event</option></select></label><label>Aliases<textarea value={aliasText} onChange={(event) => setAliasText(event.target.value)} placeholder={"Asst. Referee = AR\nRef Coord = Referee Coach"} /></label><button className="secondary" disabled={busy || (aliasScope === "event" && !destinationEvent)} onClick={saveAliases}>Save position titles</button></article>}
     {mode === "officials" && officialRows.length > 0 && <div className="panel preview-table"><table><thead><tr><th>Official</th><th>Primary email</th><th>Secondary email</th><th>Assignr ID</th><th>Badge</th></tr></thead><tbody>{officialRows.slice(0, 12).map((row, index) => <tr key={`${row.source_official_id}-${index}`}><td>{row.full_name}</td><td>{row.primary_email || "Missing"}</td><td>{row.secondary_email || "—"}</td><td>{row.source_official_id || "—"}</td><td>{row.badge_level || "—"}</td></tr>)}</tbody></table>{officialRows.length > 12 && <p>Showing 12 of {officialRows.length} officials.</p>}{officialResult?.conflicts.length ? <div className="import-conflicts"><strong>Needs review</strong>{officialResult.conflicts.slice(0, 10).map((conflict) => <p key={`${conflict.name}-${conflict.email}`}>{conflict.name}: {conflict.reason}</p>)}</div> : null}</div>}
   </section>;
 }
@@ -1280,7 +1314,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {profile && organization && view === "officials" && <OfficialsDirectory session={session} organizationId={organization.id} officials={organizationOfficials} data={data} onCreated={() => loadOrganizationOfficials(session, organization.id).then(setOrganizationOfficials)} />}
       {event && view === "coaching" && <Placeholder title="Coaching assignments" copy="Assign coaches to this event and its matches." />}
       {event && organization && view === "assessments" && <AssessmentCenter session={session} event={event} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={canConfigureRatings} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      {isStaff && organization && view === "import" && profile && <ImportView session={session} profile={profile} organizationId={organization.id} events={events} onImported={handleImported} />}
+      {isStaff && organization && view === "import" && profile && <ImportView session={session} profile={profile} organizationId={organization.id} organization={organization} events={events} canConfigureAliases={canConfigureRatings} onImported={handleImported} />}
       {profile && view === "account" && <AccountSettings session={session} profile={profile} onUpdated={setProfile} />}
       {view === "groups" && (allRoles.has("site_owner")
         ? <SiteGroupsAdmin session={session} ownerEmail={profile?.primary_email || profile?.email || session.user.email || ""} onOpen={(organizationId) => switchOrganization(organizationId, "dashboard")} />

@@ -6,6 +6,9 @@ import { AuthPanel } from "./auth-panel";
 import { auth, type Law18Session } from "./auth-client";
 import {
   checkIn,
+  beginOrganizationAction,
+  completeOrganizationAction,
+  createOrganization,
   createAppearanceCampaign,
   importTournament,
   importOfficials,
@@ -15,6 +18,7 @@ import {
   loadEvents,
   loadAppearanceCampaigns,
   loadOrganization,
+  loadOrganizations,
   loadOrganizationOfficials,
   loadProfile,
   loadMemberships,
@@ -22,6 +26,7 @@ import {
   parseAssignrOfficialsCsv,
   saveAssessment,
   restoreDefaultAppearance,
+  reactivateOrganization,
   updateOwnProfile,
   type AssignmentRecord,
   type CheckInRecord,
@@ -727,6 +732,124 @@ function GroupsSettings({
   </section>;
 }
 
+function SiteGroupsAdmin({ session, ownerEmail }: { session: Law18Session; ownerEmail: string }) {
+  const [organizations, setOrganizations] = useState<OrganizationRecord[]>([]);
+  const [name, setName] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<{ organization: OrganizationRecord; action: "deactivate" | "delete" } | null>(null);
+  const [password, setPassword] = useState("");
+  const [confirmName, setConfirmName] = useState("");
+  const refreshOrganizations = useCallback(async () => {
+    setOrganizations(await loadOrganizations(session));
+  }, [session]);
+
+  useEffect(() => {
+    refreshOrganizations().catch((reason) => setMessage(reason instanceof Error ? reason.message : "Unable to load organizations."));
+  }, [refreshOrganizations]);
+
+  async function create() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const created = await createOrganization(session, name.trim());
+      setName("");
+      await refreshOrganizations();
+      setMessage(`${created.name} was created. You can now add organization administrators and events.`);
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to create the organization.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reactivate(organization: OrganizationRecord) {
+    setBusy(true);
+    setMessage("");
+    try {
+      await reactivateOrganization(session, organization.id);
+      await refreshOrganizations();
+      setMessage(`${organization.name} is active again.`);
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to reactivate the organization.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function requestVerification() {
+    if (!pending) return;
+    if (pending.action === "delete" && confirmName.trim() !== pending.organization.name) {
+      setMessage(`Type “${pending.organization.name}” exactly to confirm permanent deletion.`);
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    try {
+      const refreshed = await auth.verifyPassword(ownerEmail, password);
+      const challengeId = await beginOrganizationAction(refreshed, pending.organization.id, pending.action);
+      await auth.sendOrganizationVerification(ownerEmail, challengeId);
+      setPending(null);
+      setPassword("");
+      setConfirmName("");
+      setMessage(`Verification email sent to ${ownerEmail}. Open its link within 15 minutes to ${pending.action} ${pending.organization.name}.`);
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to start email verification.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <section className="page-section site-groups-page">
+    <div className="section-title"><div><p className="eyebrow">SITE OWNER · GROUPS</p><h1>Organizations</h1><p>Create and manage every organization using Law18Ref.</p></div></div>
+    <div className="organization-admin-grid">
+      <article className="panel create-organization-card">
+        <div className="panel-head"><div><p className="eyebrow">NEW ORGANIZATION</p><h2>Create a group</h2><p>Only the site owner can create organizations.</p></div></div>
+        <label>Organization name<input value={name} maxLength={120} onChange={(event) => setName(event.target.value)} placeholder="Example Soccer Association" /></label>
+        <button className="primary" disabled={busy || name.trim().length < 2} onClick={create}>{busy ? "Working…" : "Create organization"}</button>
+      </article>
+      <article className="panel organization-safety">
+        <p className="eyebrow">SAFE ORGANIZATION CONTROL</p>
+        <h2>Deactivate before deleting</h2>
+        <p>Deactivation immediately suspends access and changes while preserving all records. It is reversible. Permanent deletion becomes available after seven days and cannot be undone.</p>
+      </article>
+    </div>
+    {message && <p className="pilot-message organization-message">{message}</p>}
+    <div className="organization-list">
+      {organizations.map((item) => {
+        const deleteAvailable = Boolean(item.deactivated_at && Date.now() - new Date(item.deactivated_at).getTime() >= 7 * 24 * 60 * 60 * 1000);
+        return <article className={`panel organization-admin-row ${item.active === false ? "deactivated" : ""}`} key={item.id}>
+          <span className="group-mark">{item.name[0]}</span>
+          <div><h2>{item.name}</h2><p>{item.slug}</p><span className={`status ${item.active === false ? "missing" : "ready"}`}><b />{item.active === false ? "Deactivated" : "Active"}</span></div>
+          <div className="organization-actions">
+            {item.active === false
+              ? <>
+                <button className="secondary" disabled={busy} onClick={() => reactivate(item)}>Reactivate</button>
+                <button className="danger-button" disabled={busy || !deleteAvailable} title={deleteAvailable ? "Permanently delete organization" : "Available seven days after deactivation"} onClick={() => { setPending({ organization: item, action: "delete" }); setMessage(""); }}>Delete permanently</button>
+              </>
+              : <button className="danger-button" disabled={busy} onClick={() => { setPending({ organization: item, action: "deactivate" }); setMessage(""); }}>Deactivate</button>}
+          </div>
+          {item.active === false && item.deactivated_at && <small className="deactivation-note">Deactivated {formatDate(item.deactivated_at)}{deleteAvailable ? " · Eligible for permanent deletion" : " · Seven-day recovery period in progress"}</small>}
+        </article>;
+      })}
+      {!organizations.length && <article className="panel empty-state">No organizations have been created yet.</article>}
+    </div>
+    {pending && <div className="confirmation-backdrop" role="presentation">
+      <section className="confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="organization-confirm-title">
+        <p className="eyebrow">{pending.action === "delete" ? "PERMANENT ACTION" : "SECURITY CONFIRMATION"}</p>
+        <h2 id="organization-confirm-title">{pending.action === "delete" ? "Permanently delete" : "Deactivate"} {pending.organization.name}?</h2>
+        <p>{pending.action === "delete"
+          ? "This permanently removes the organization and all connected events, schedules, officials, assessments, and history. It cannot be recovered."
+          : "Members will lose access and event operations will stop. All data remains stored and the organization can be reactivated."}</p>
+        {pending.action === "delete" && <label>Type the organization name<input value={confirmName} onChange={(event) => setConfirmName(event.target.value)} /></label>}
+        <label>Confirm your password<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+        <p className="verification-note">After password confirmation, Law18Ref will email you a one-time verification link. The action occurs only when you open that link.</p>
+        <div><button className="secondary" disabled={busy} onClick={() => { setPending(null); setPassword(""); setConfirmName(""); }}>Cancel</button><button className="danger-button" disabled={busy || !password} onClick={requestVerification}>{busy ? "Verifying…" : "Email verification link"}</button></div>
+      </section>
+    </div>}
+  </section>;
+}
+
 function Dashboard({ session }: { session: Law18Session }) {
   const [view, setView] = useState<View>("dashboard");
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -740,6 +863,7 @@ function Dashboard({ session }: { session: Law18Session }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [accountOpen, setAccountOpen] = useState(false);
+  const [organizationActionMessage, setOrganizationActionMessage] = useState("");
   const allRoles = new Set<MembershipRole>([
     ...(profile?.is_site_owner ? ["site_owner" as MembershipRole] : []),
     ...organizationRoles,
@@ -779,6 +903,20 @@ function Dashboard({ session }: { session: Law18Session }) {
         setLoading(false);
       }
     })();
+  }, [session]);
+
+  useEffect(() => {
+    const challengeId = new URLSearchParams(window.location.search).get("organization_action");
+    if (!challengeId) return;
+    completeOrganizationAction(session, challengeId).then((result) => {
+      setOrganizationActionMessage(result);
+      setView("groups");
+      history.replaceState(null, "", window.location.pathname);
+    }).catch((reason) => {
+      setOrganizationActionMessage(reason instanceof Error ? reason.message : "Unable to complete the organization action.");
+      setView("groups");
+      history.replaceState(null, "", window.location.pathname);
+    });
   }, [session]);
 
   useEffect(() => {
@@ -838,6 +976,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       <span>{event ? formatDate(event.starts_on) : "No event imported"}</span>
     </div>
     <div className="shell">
+      {organizationActionMessage && <p className="pilot-message organization-message">{organizationActionMessage}</p>}
       {profile && view === "dashboard" && <DashboardHome profile={profile} event={event} data={data} events={events} onNavigate={setView} />}
       {!event && isStaff && view === "import" && <ImportView session={session} profile={profile!} events={events} onImported={handleImported} />}
       {event && view === "board" && (isStaff ? <AssignmentBoard data={data} /> : <RefereeDay event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} />)}
@@ -848,10 +987,12 @@ function Dashboard({ session }: { session: Law18Session }) {
       {event && view === "assessments" && profile && <AssessmentCenter session={session} profile={profile} data={data} canSubmit={canAssess} onSaved={() => refresh(event.id)} />}
       {isStaff && view === "import" && profile && <ImportView session={session} profile={profile} events={events} onImported={handleImported} />}
       {profile && view === "account" && <AccountSettings session={session} profile={profile} onUpdated={setProfile} />}
-      {view === "groups" && <GroupsSettings session={session} organization={organization} />}
+      {view === "groups" && (allRoles.has("site_owner")
+        ? <SiteGroupsAdmin session={session} ownerEmail={profile?.primary_email || profile?.email || session.user.email || ""} />
+        : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.2.0</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.2.1</span></footer>
   </main>;
 }
 

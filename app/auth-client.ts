@@ -37,6 +37,15 @@ function save(session: Law18Session | null) {
   listeners.forEach((listener) => listener(session));
 }
 
+function userFromToken(accessToken: string) {
+  try {
+    const payload = JSON.parse(atob(accessToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return { id: String(payload.sub || ""), email: String(payload.email || "") };
+  } catch {
+    return { id: "", email: "" };
+  }
+}
+
 function fromUrl(): { session: Law18Session | null; recovery: boolean } {
   const params = new URLSearchParams(window.location.hash.slice(1));
   const accessToken = params.get("access_token");
@@ -46,10 +55,10 @@ function fromUrl(): { session: Law18Session | null; recovery: boolean } {
     access_token: accessToken,
     refresh_token: refreshToken,
     expires_at: Date.now() / 1000 + Number(params.get("expires_in") || 3600),
-    user: { id: "", email: "" },
+    user: userFromToken(accessToken),
   };
   save(session);
-  history.replaceState(null, "", window.location.pathname);
+  history.replaceState(null, "", window.location.pathname + window.location.search);
   return { session, recovery: params.get("type") === "recovery" || params.get("type") === "invite" };
 }
 
@@ -79,6 +88,21 @@ export const auth = {
     }) as Law18Session;
     save(session);
     return session;
+  },
+  async verifyPassword(email: string, password: string) {
+    const session = await request("/token?grant_type=password", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }) as Law18Session;
+    save(session);
+    return session;
+  },
+  async sendOrganizationVerification(email: string, challengeId: string) {
+    const redirect = `${window.location.origin}/?organization_action=${encodeURIComponent(challengeId)}`;
+    await request(`/otp?redirect_to=${encodeURIComponent(redirect)}`, {
+      method: "POST",
+      body: JSON.stringify({ email, create_user: false }),
+    });
   },
   async signUp(email: string, password: string, fullName: string) {
     return request("/signup", {

@@ -41,6 +41,8 @@ export type OrganizationRecord = {
   name: string;
   slug: string;
   active?: boolean;
+  deactivated_at?: string | null;
+  deactivated_by?: string | null;
 };
 
 export type EventRecord = {
@@ -172,7 +174,39 @@ export async function loadOrganization(session: Law18Session, organizationId: st
 }
 
 export async function loadOrganizations(session: Law18Session) {
-  return rest<OrganizationRecord[]>(session, "organizations?select=id,name,slug,active&order=name.asc");
+  return rest<OrganizationRecord[]>(session, "organizations?select=id,name,slug,active,deactivated_at,deactivated_by&order=name.asc");
+}
+
+export async function createOrganization(session: Law18Session, name: string) {
+  return rest<OrganizationRecord>(session, "rpc/create_organization", {
+    method: "POST",
+    body: JSON.stringify({ organization_name: name }),
+  });
+}
+
+export async function reactivateOrganization(session: Law18Session, organizationId: string) {
+  return rest<OrganizationRecord>(session, "rpc/reactivate_organization", {
+    method: "POST",
+    body: JSON.stringify({ target_organization_id: organizationId }),
+  });
+}
+
+export async function beginOrganizationAction(
+  session: Law18Session,
+  organizationId: string,
+  action: "deactivate" | "delete",
+) {
+  return rest<string>(session, "rpc/begin_organization_action", {
+    method: "POST",
+    body: JSON.stringify({ target_organization_id: organizationId, action_name: action }),
+  });
+}
+
+export async function completeOrganizationAction(session: Law18Session, challengeId: string) {
+  return rest<string>(session, "rpc/complete_organization_action", {
+    method: "POST",
+    body: JSON.stringify({ challenge_id: challengeId }),
+  });
 }
 
 export async function loadMemberships(session: Law18Session) {

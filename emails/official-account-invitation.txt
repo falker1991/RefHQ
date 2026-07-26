@@ -1,0 +1,21 @@
+You’re invited to Law18Referee Management
+
+Hi {{official_first_name}},
+
+{{inviter_name}} has added you as an official with {{organization_name}} in Law18Referee Management.
+
+Create your account to view your imported assignments, access event information, and use mobile check-in. You will not need to accept assignments that were already confirmed in the organization’s assigning system.
+
+Create your account:
+{{invitation_url}}
+
+This secure invitation expires {{invitation_expiration}}.
+
+When you create your account, you will confirm your name and primary email, create a password, and complete any required personal information. Officials under 18 must also provide a parent or guardian email address.
+
+If you were not expecting this invitation, ignore this email. No account will be created unless you open the secure link and complete setup.
+
+Law18Referee Management
+Provided by FalkSports
+
+Need help? Contact {{support_email}}.

@@ -400,6 +400,13 @@ export async function loadEventData(session: Law18Session, eventId: string) {
   return { games, assignments, officials, checkIns, assessments };
 }
 
+export async function loadEventCheckIns(session: Law18Session, eventId: string) {
+  return rest<CheckInRecord[]>(
+    session,
+    `check_ins?event_id=eq.${enc(eventId)}&select=*&order=checked_in_at.desc`,
+  );
+}
+
 export async function loadAuthorizedRatingHistory(session: Law18Session) {
   const assessments = await rest<AssessmentRecord[]>(session, "assessments?select=*&order=created_at.desc");
   const gameIds = [...new Set(assessments.map((item) => item.game_id))];

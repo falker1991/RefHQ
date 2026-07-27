@@ -130,6 +130,13 @@ The hosted pilot uses Supabase as its source of truth. Do not use it as the sole
 
 ## Future tournament-operations roadmap
 
+### Assignment-core live operations
+
+- Replace attendance polling with Supabase Realtime subscriptions during the assignment-core update.
+- Push check-in, assignment acceptance, crew changes, replacements, and operational alerts instantly to authorized dashboards.
+- Scope every subscription by organization, event, site, and user role, with reconnect handling and a manual refresh fallback.
+- Monitor Realtime messages and peak connections against the active Supabase plan.
+
 ### Configurable QR, NFC, and manual check-in
 
 - Let each organization choose between daily event QR check-in and reusable NFC check-in links.

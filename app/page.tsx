@@ -305,6 +305,9 @@ function RefereeCheckIn({ event, data, session, onCheckedIn }: { event: EventRec
 function CheckInView({ event, data, onRefresh }: { event: EventRecord; data: EventData; onRefresh: () => Promise<void> }) {
   const eventDates = [...new Set(data.games.map((game) => game.starts_at.slice(0, 10)))].sort();
   const [eventDate, setEventDate] = useState(eventDates[0] || event.starts_on);
+  const [statusFilter, setStatusFilter] = useState<"all" | "checked_in" | "expected">("all");
+  const [siteFilter, setSiteFilter] = useState("all");
+  const [rosterSort, setRosterSort] = useState<"first_assignment" | "last_name" | "site">("first_assignment");
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [newArrivals, setNewArrivals] = useState<Set<string>>(new Set());
@@ -314,6 +317,32 @@ function CheckInView({ event, data, onRefresh }: { event: EventRecord; data: Eve
   const checked = new Set(data.checkIns.filter((item) => item.event_date === eventDate).map((item) => item.official_id));
   const assignedToday = new Set(data.assignments.filter((assignment) => data.games.some((game) => game.id === assignment.game_id && game.starts_at.startsWith(eventDate))).map((assignment) => assignment.official_id));
   const roster = data.officials.filter((official) => assignedToday.has(official.id));
+  const gamesById = new Map(data.games.map((game) => [game.id, game]));
+  const rosterDetails = roster.map((official) => {
+    const games = data.assignments
+      .filter((assignment) => assignment.official_id === official.id)
+      .map((assignment) => gamesById.get(assignment.game_id))
+      .filter((game): game is GameRecord => Boolean(game?.starts_at.startsWith(eventDate)))
+      .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+    const firstGame = games[0];
+    return {
+      official,
+      games,
+      firstGame,
+      firstSite: firstGame?.venue_name || firstGame?.field_name || "Unspecified site",
+      lastName: official.full_name.trim().split(/\s+/).at(-1) || official.full_name,
+      isChecked: checked.has(official.id),
+    };
+  });
+  const sites = [...new Set(rosterDetails.flatMap((item) => item.games.map((game) => game.venue_name || game.field_name || "Unspecified site")))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const visibleRoster = rosterDetails
+    .filter((item) => statusFilter === "all" || (statusFilter === "checked_in" ? item.isChecked : !item.isChecked))
+    .filter((item) => siteFilter === "all" || item.games.some((game) => (game.venue_name || game.field_name || "Unspecified site") === siteFilter))
+    .sort((a, b) => {
+      if (rosterSort === "last_name") return a.lastName.localeCompare(b.lastName) || a.official.full_name.localeCompare(b.official.full_name);
+      if (rosterSort === "site") return a.firstSite.localeCompare(b.firstSite, undefined, { numeric: true }) || (a.firstGame?.starts_at || "").localeCompare(b.firstGame?.starts_at || "");
+      return (a.firstGame?.starts_at || "9999").localeCompare(b.firstGame?.starts_at || "9999") || a.lastName.localeCompare(b.lastName);
+    });
   const refreshAttendance = useCallback(async () => {
     if (refreshingRef.current) return;
     refreshingRef.current = true;
@@ -353,12 +382,14 @@ function CheckInView({ event, data, onRefresh }: { event: EventRecord; data: Eve
     previousCheckedRef.current = { date: eventDate, ids: checked };
   }, [data.checkIns, eventDate]);
   return <section className="page-section">
-    <div className="section-title"><div><p className="eyebrow">TOURNAMENT CHECK-IN</p><h1>Arrival station</h1><p>Attendance refreshes every 15 seconds while this page is visible. Last updated {lastUpdated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}.</p></div><div className="checkin-refresh-tools"><label className="day-picker">Event day<select value={eventDate} onChange={(event) => setEventDate(event.target.value)}>{eventDates.map((date) => <option value={date} key={date}>{formatDate(date)}</option>)}</select></label><button className="secondary" disabled={refreshing} onClick={() => refreshAttendance()}>{refreshing ? "Refreshing…" : "Refresh Now"}</button></div></div>
+    <div className="section-title"><div><p className="eyebrow">TOURNAMENT CHECK-IN</p><h1>Arrival station</h1><p>Attendance refreshes every 15 seconds while this page is visible. Last updated {lastUpdated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}.</p></div><div className="checkin-refresh-tools"><label className="day-picker">Event day<select value={eventDate} onChange={(event) => { setEventDate(event.target.value); setSiteFilter("all"); }}>{eventDates.map((date) => <option value={date} key={date}>{formatDate(date)}</option>)}</select></label><button className="secondary" disabled={refreshing} onClick={() => refreshAttendance()}>{refreshing ? "Refreshing…" : "Refresh Now"}</button></div></div>
     <div className="checkin-grid">
       <article className="panel qr-panel print-qr"><div className="qr"><QRCodeSVG value={url} size={210} /></div><h2>{event.name}</h2><strong>{formatDate(eventDate)}</strong><p>{url}</p><button className="secondary print-button" onClick={() => window.print()}>Print daily QR</button></article>
-      <article className="panel roster-panel"><div className="panel-head"><div><p className="eyebrow">LIVE ROSTER</p><h2>{checked.size} checked in</h2></div></div>
-        {roster.map((official) => <div className={`official-row ${newArrivals.has(official.id) ? "new-arrival" : ""}`} key={official.id}><span className="avatar">{initials(official.full_name)}</span><div className="official-name"><strong>{official.full_name}</strong><span>{official.email || "Email not yet supplied"}</span></div><Status checked={checked.has(official.id)} /></div>)}
+      <article className="panel roster-panel"><div className="panel-head"><div><p className="eyebrow">LIVE ROSTER</p><h2>{checked.size} checked in</h2><p>{visibleRoster.length} of {roster.length} officials shown</p></div></div>
+        <div className="roster-controls"><label>Status<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option value="all">All officials</option><option value="checked_in">Checked in</option><option value="expected">Not yet checked in</option></select></label><label>Sort by<select value={rosterSort} onChange={(event) => setRosterSort(event.target.value as typeof rosterSort)}><option value="first_assignment">First assignment time</option><option value="last_name">Last name</option><option value="site">Site</option></select></label><label>Site<select value={siteFilter} onChange={(event) => setSiteFilter(event.target.value)}><option value="all">All sites</option>{sites.map((site) => <option value={site} key={site}>{site}</option>)}</select></label></div>
+        {visibleRoster.map(({ official, firstGame, firstSite, isChecked }) => <div className={`official-row ${newArrivals.has(official.id) ? "new-arrival" : ""}`} key={official.id}><span className="avatar">{initials(official.full_name)}</span><div className="official-name"><strong>{official.full_name}</strong><span>{firstGame ? `${formatTime(firstGame.starts_at)} · ${firstSite} · ${firstGame.field_name}` : "No assignment details"}</span></div><Status checked={isChecked} /></div>)}
         {!roster.length && <EmptyState>No officials are assigned on this date.</EmptyState>}
+        {roster.length > 0 && !visibleRoster.length && <EmptyState>No officials match these filters.</EmptyState>}
       </article>
     </div>
   </section>;
@@ -1573,7 +1604,7 @@ function Dashboard({ session }: { session: Law18Session }) {
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.4.5</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.4.6</span></footer>
   </main>;
 }
 

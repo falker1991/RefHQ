@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.10 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.11 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.10 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.10/);
+  assert.match(page, /Version 0\.5\.11/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.10");
+  assert.equal(JSON.parse(packageJson).version, "0.5.11");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -103,8 +103,17 @@ test("coach-only schedules exclude operational and HQ locations", async () => {
 
 test("coaching administration is hidden from referee coaches", async () => {
   const page = await read("app/page.tsx");
-  assert.match(page, /isCoach\s*\?\s*\[\["dashboard", "Dashboard"\], \["schedule", "Schedule"\], \["assessments", "Ratings"\]\]/);
+  assert.match(page, /isCoach\s*\?\s*\[\["dashboard", "Dashboard"\], \.\.\.\(coachHasCurrentOrFutureAssignment/);
   assert.match(page, /view === "coaching" && isAdministrativeStaff/);
+});
+
+test("assigned referee coaches participate in daily check-in", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /coachHasCurrentOrFutureAssignment/);
+  assert.match(page, /coachingOfficialIds/);
+  assert.match(page, /assignedToday\.add\(coachOfficial\.id\)/);
+  assert.match(page, /Referee Coach/);
+  assert.match(page, /assignment\.full_schedule\) data\.games\.forEach\(\(game\) => assignmentDates\.add/);
 });
 
 test("account merge migration transfers operational records and audits the merge", async () => {

@@ -317,6 +317,13 @@ function RefereeCheckIn({ event, data, session, onCheckedIn }: { event: EventRec
   const official = data.officials.find((item) => item.email?.toLowerCase() === email || item.linked_user_id === session.user.id);
   const assignmentDates = new Set((official ? data.assignments.filter((item) => item.official_id === official.id) : [])
     .map((assignment) => data.games.find((game) => game.id === assignment.game_id)?.starts_at.slice(0, 10)).filter(Boolean));
+  data.coachAssignments.filter((assignment) => assignment.coach_id === session.user.id).forEach((assignment) => {
+    if (assignment.full_schedule) data.games.forEach((game) => assignmentDates.add(game.starts_at.slice(0, 10)));
+    else {
+      const game = data.games.find((item) => item.id === assignment.game_id);
+      if (game) assignmentDates.add(game.starts_at.slice(0, 10));
+    }
+  });
   const [message, setMessage] = useState("");
   const [justCheckedIn, setJustCheckedIn] = useState(false);
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: event.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -357,15 +364,32 @@ function CheckInView({ event, data, session, onRefresh }: { event: EventRecord; 
   const url = `${window.location.origin}/?event=${event.check_in_slug}&date=${eventDate}`;
   const checked = new Set(data.checkIns.filter((item) => item.event_date === eventDate).map((item) => item.official_id));
   const assignedToday = new Set(data.assignments.filter((assignment) => data.games.some((game) => game.id === assignment.game_id && game.starts_at.startsWith(eventDate))).map((assignment) => assignment.official_id));
+  const coachingOfficialIds = new Set<string>();
+  data.coachAssignments.forEach((assignment) => {
+    const appliesToday = assignment.full_schedule
+      ? data.games.some((game) => game.starts_at.startsWith(eventDate))
+      : data.games.some((game) => game.id === assignment.game_id && game.starts_at.startsWith(eventDate));
+    const coachOfficial = data.officials.find((official) => official.linked_user_id === assignment.coach_id);
+    if (appliesToday && coachOfficial) {
+      assignedToday.add(coachOfficial.id);
+      coachingOfficialIds.add(coachOfficial.id);
+    }
+  });
   const currentOfficial = data.officials.find((item) => item.linked_user_id === session.user.id || item.email?.toLowerCase() === session.user.email?.toLowerCase());
   const canSelfCheckIn = Boolean(currentOfficial && assignedToday.has(currentOfficial.id) && !checked.has(currentOfficial.id));
   const roster = data.officials.filter((official) => assignedToday.has(official.id));
   const gamesById = new Map(data.games.map((game) => [game.id, game]));
   const rosterDetails = roster.map((official) => {
-    const games = data.assignments
+    const refereeGames = data.assignments
       .filter((assignment) => assignment.official_id === official.id)
       .map((assignment) => gamesById.get(assignment.game_id))
-      .filter((game): game is GameRecord => Boolean(game?.starts_at.startsWith(eventDate)))
+      .filter((game): game is GameRecord => Boolean(game?.starts_at.startsWith(eventDate)));
+    const coachingGames = data.coachAssignments
+      .filter((assignment) => assignment.coach_id === official.linked_user_id)
+      .flatMap((assignment) => assignment.full_schedule
+        ? data.games.filter((game) => game.starts_at.startsWith(eventDate))
+        : data.games.filter((game) => game.id === assignment.game_id && game.starts_at.startsWith(eventDate)));
+    const games = [...new Map([...refereeGames, ...coachingGames].map((game) => [game.id, game])).values()]
       .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
     const firstGame = games[0];
     return {
@@ -375,6 +399,7 @@ function CheckInView({ event, data, session, onRefresh }: { event: EventRecord; 
       firstSite: firstGame?.venue_name || firstGame?.field_name || "Unspecified site",
       lastName: official.full_name.trim().split(/\s+/).at(-1) || official.full_name,
       isChecked: checked.has(official.id),
+      isCoachExpected: coachingOfficialIds.has(official.id),
     };
   });
   const sites = [...new Set(rosterDetails.flatMap((item) => item.games.map((game) => game.venue_name || game.field_name || "Unspecified site")))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
@@ -443,7 +468,7 @@ function CheckInView({ event, data, session, onRefresh }: { event: EventRecord; 
       <article className="panel qr-panel print-qr"><div className="qr"><QRCodeSVG value={url} size={210} /></div><h2>{event.name}</h2><strong>{formatDate(eventDate)}</strong><p>{url}</p><button className="secondary print-button" onClick={() => window.print()}>Print daily QR</button></article>
       <article className="panel roster-panel"><div className="panel-head"><div><p className="eyebrow">LIVE ROSTER</p><h2>{checked.size} checked in</h2><p>{visibleRoster.length} of {roster.length} officials shown</p></div></div>
         <div className="roster-controls"><label>Status<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option value="all">All officials</option><option value="checked_in">Checked in</option><option value="expected">Not yet checked in</option></select></label><label>Sort by<select value={rosterSort} onChange={(event) => setRosterSort(event.target.value as typeof rosterSort)}><option value="first_assignment">First assignment time</option><option value="last_name">Last name</option><option value="site">Site</option></select></label><label>Site<select value={siteFilter} onChange={(event) => setSiteFilter(event.target.value)}><option value="all">All sites</option>{sites.map((site) => <option value={site} key={site}>{site}</option>)}</select></label></div>
-        {visibleRoster.map(({ official, firstGame, firstSite, isChecked }) => <div className={`official-row ${newArrivals.has(official.id) ? "new-arrival" : ""}`} key={official.id}><span className="avatar">{initials(official.full_name)}</span><div className="official-name"><strong>{official.full_name}</strong><span>{firstGame ? `${formatTime(firstGame.starts_at)} · ${firstSite} · ${firstGame.field_name}` : "No assignment details"}</span></div><Status checked={isChecked} /></div>)}
+        {visibleRoster.map(({ official, firstGame, firstSite, isChecked, isCoachExpected }) => <div className={`official-row ${newArrivals.has(official.id) ? "new-arrival" : ""}`} key={official.id}><span className="avatar">{initials(official.full_name)}</span><div className="official-name"><strong>{official.full_name}</strong><span>{isCoachExpected ? `Referee Coach${firstGame ? ` · ${formatTime(firstGame.starts_at)} · ${firstSite}` : ""}` : firstGame ? `${formatTime(firstGame.starts_at)} · ${firstSite} · ${firstGame.field_name}` : "No assignment details"}</span></div><Status checked={isChecked} /></div>)}
         {!roster.length && <EmptyState>No officials are assigned on this date.</EmptyState>}
         {roster.length > 0 && !visibleRoster.length && <EmptyState>No officials match these filters.</EmptyState>}
       </article>
@@ -1874,13 +1899,21 @@ function Dashboard({ session }: { session: Law18Session }) {
     const gameDate = new Intl.DateTimeFormat("en-CA", { timeZone: event.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(game.starts_at));
     return gameDate >= todayInEvent;
   }));
+  const coachHasCurrentOrFutureAssignment = data.coachAssignments.some((assignment) => {
+    if (assignment.coach_id !== session.user.id || !event) return false;
+    if (assignment.full_schedule) return event.ends_on >= todayInEvent;
+    const game = data.games.find((item) => item.id === assignment.game_id);
+    if (!game) return false;
+    const gameDate = new Intl.DateTimeFormat("en-CA", { timeZone: event.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(game.starts_at));
+    return gameDate >= todayInEvent;
+  });
 
   const nav: [View, string][] = isAdministrativeStaff
     ? [["dashboard", "Dashboard"], ["board", "Assignment Board"], ["checkin", "Check-In"], ["schedule", "Schedule"], ["officials", "Officials"], ["coaching", "Coaching"], ["assessments", "Ratings"], ["import", "Import"]]
     : isSiteCoordinator
       ? [["dashboard", "Dashboard"], ["board", "Assignment Board"], ["checkin", "Check-In"], ["schedule", "Schedule"]]
     : isCoach
-      ? [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["assessments", "Ratings"]]
+      ? [["dashboard", "Dashboard"], ...(coachHasCurrentOrFutureAssignment ? [["checkin", "Check-In"] as [View, string]] : []), ["schedule", "Schedule"], ["assessments", "Ratings"]]
       : [["dashboard", "Dashboard"], ["board", "My Assignments"], ...(refereeHasCurrentOrFutureAssignment ? [["checkin", "Check-In"] as [View, string]] : []), ["assessments", "My Evals"]];
 
   if (loading) return <main className="auth-page"><p className="auth-loading">Loading Dashboard</p></main>;
@@ -1914,7 +1947,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {qrCheckInMessage && <p className="pilot-message qr-checkin-message">{qrCheckInMessage}</p>}
       {profile && view === "dashboard" && <DashboardHome profile={profile} event={event} data={data} events={events} onNavigate={setView} />}
       {event && view === "board" && (isStaff ? <AssignmentBoard data={data} /> : <RefereeDay event={event} data={data} session={session} />)}
-      {event && view === "checkin" && (isStaff ? <CheckInView event={event} data={data} session={session} onRefresh={refreshCheckIns} /> : refereeHasCurrentOrFutureAssignment ? <RefereeCheckIn event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} /> : null)}
+      {event && view === "checkin" && (isStaff ? <CheckInView event={event} data={data} session={session} onRefresh={refreshCheckIns} /> : refereeHasCurrentOrFutureAssignment || coachHasCurrentOrFutureAssignment ? <RefereeCheckIn event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} /> : null)}
       {event && view === "schedule" && (isStaff || isCoach) && <ScheduleView session={session} event={event} data={data} canEdit={isAdministrativeStaff} canRateCrew={isCoach && canAssess} coachView={isCoach && !isAdministrativeStaff} onRateCrew={(gameId) => { setRatingGameId(gameId); setView("assessments"); }} onCreated={() => refresh(event.id)} />}
       {isAdministrativeStaff && profile && organization && view === "officials" && <OfficialsDirectory session={session} profile={profile} organizationRoles={organizationRoles} eventRoles={eventRoles} canManageOrganizationRoles={Boolean(profile.is_site_owner || organizationRoles.includes("organization_admin"))} organizationId={organization.id} officials={organizationOfficials} data={data} event={event} events={events} onCreated={() => loadOrganizationOfficials(session, organization.id).then(setOrganizationOfficials)} />}
       {event && view === "coaching" && isAdministrativeStaff && <CoachWorkspace session={session} event={event} data={data} organizationOfficials={organizationOfficials} canManage onSaved={() => refresh(event.id)} />}
@@ -1926,7 +1959,7 @@ function Dashboard({ session }: { session: Law18Session }) {
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.10</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.11</span></footer>
   </main>;
 }
 

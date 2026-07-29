@@ -1109,7 +1109,9 @@ function AssessmentCenter({
   const [configuration, setConfiguration] = useState({ ratingType: event.rating_type, adminOnly: event.ratings_admin_only });
   const [ratingSort, setRatingSort] = useState<"date" | "gender" | "age_group" | "referee" | "position">("date");
   const [historyEventId, setHistoryEventId] = useState("all");
-  const [historyFilters, setHistoryFilters] = useState({ referees: [] as string[], ageGroups: [] as string[], genders: [] as string[], positions: [] as string[], dates: [] as string[] });
+  const [historyFilters, setHistoryFilters] = useState({ referees: [] as string[], ageGroups: [] as string[], genders: [] as string[], positions: [] as string[] });
+  const [refereeFilterSearch, setRefereeFilterSearch] = useState("");
+  const [historyDateRange, setHistoryDateRange] = useState({ from: "", through: "" });
   const [history, setHistory] = useState({ assessments: data.assessments, games: data.games, assignments: data.assignments, officials: data.officials });
   useEffect(() => {
     loadAuthorizedRatingHistory(session).then(setHistory).catch(() => undefined);
@@ -1129,22 +1131,24 @@ function AssessmentCenter({
     ageGroups: [...new Set(history.games.map((game) => game.age_group || "Unspecified age group"))].sort(),
     genders: [...new Set(history.games.map((game) => game.gender || "Unspecified gender"))].sort(),
     positions: [...new Set(history.assessments.map(historyPosition))].sort(),
-    dates: [...new Set(history.games.map((game) => game.starts_at.slice(0, 10)))].sort(),
   };
   const toggleHistoryFilter = (key: keyof typeof historyFilters, value: string) => setHistoryFilters((current) => ({
     ...current,
     [key]: current[key].includes(value) ? current[key].filter((item) => item !== value) : [...current[key], value],
   }));
-  const activeHistoryFilterCount = Object.values(historyFilters).reduce((sum, values) => sum + values.length, 0);
+  const activeHistoryFilterCount = Object.values(historyFilters).reduce((sum, values) => sum + values.length, 0)
+    + Number(Boolean(historyDateRange.from)) + Number(Boolean(historyDateRange.through));
   const sortedAssessments = history.assessments.filter((item) => {
     const game = historyGameMap.get(item.game_id);
     const referee = historyOfficialMap.get(item.official_id)?.full_name || "Unknown official";
+    const gameDate = game?.starts_at.slice(0, 10) || "";
     return (historyEventId === "all" || game?.event_id === historyEventId)
       && (!historyFilters.referees.length || historyFilters.referees.includes(referee))
       && (!historyFilters.ageGroups.length || historyFilters.ageGroups.includes(game?.age_group || "Unspecified age group"))
       && (!historyFilters.genders.length || historyFilters.genders.includes(game?.gender || "Unspecified gender"))
       && (!historyFilters.positions.length || historyFilters.positions.includes(historyPosition(item)))
-      && (!historyFilters.dates.length || historyFilters.dates.includes(game?.starts_at.slice(0, 10) || ""));
+      && (!historyDateRange.from || gameDate >= historyDateRange.from)
+      && (!historyDateRange.through || gameDate <= historyDateRange.through);
   }).sort((a, b) => {
     const aGame = historyGameMap.get(a.game_id);
     const bGame = historyGameMap.get(b.game_id);
@@ -1265,8 +1269,12 @@ function AssessmentCenter({
         ["ageGroups", "Age Groups", filterOptions.ageGroups],
         ["genders", "Genders", filterOptions.genders],
         ["positions", "Positions", filterOptions.positions],
-        ["dates", "Dates", filterOptions.dates],
-      ] as const).map(([key, label, options]) => <details className="rating-filter-dropdown" key={key}><summary><span>{label}</span><small>{historyFilters[key].length ? `${historyFilters[key].length} selected` : "All"}</small></summary><div className="rating-filter-options">{options.map((option) => <label key={option}><input type="checkbox" checked={historyFilters[key].includes(option)} onChange={() => toggleHistoryFilter(key, option)} /><span>{key === "dates" ? formatDate(option) : option}</span></label>)}{!options.length && <small>No options available</small>}</div></details>)}</div><button className="text-button clear-rating-filters" disabled={!activeHistoryFilterCount} onClick={() => setHistoryFilters({ referees: [], ageGroups: [], genders: [], positions: [], dates: [] })}>Clear All Filters</button></details>
+      ] as const).map(([key, label, options]) => {
+        const visibleOptions = key === "referees" && refereeFilterSearch.trim()
+          ? options.filter((option) => option.toLowerCase().includes(refereeFilterSearch.trim().toLowerCase()))
+          : options;
+        return <details className="rating-filter-dropdown" key={key}><summary><span>{label}</span><small>{historyFilters[key].length ? `${historyFilters[key].length} selected` : "All"}</small></summary><div className="rating-filter-options">{key === "referees" && <input className="rating-referee-search" type="search" value={refereeFilterSearch} placeholder="Search referees…" aria-label="Search referees" onChange={(event) => setRefereeFilterSearch(event.target.value)} />}{visibleOptions.map((option) => <label key={option}><input type="checkbox" checked={historyFilters[key].includes(option)} onChange={() => toggleHistoryFilter(key, option)} /><span>{option}</span></label>)}{!visibleOptions.length && <small>No matching referees</small>}</div></details>;
+      })}<fieldset className="rating-date-range"><legend>Date Range</legend><label>From<input type="date" value={historyDateRange.from} max={historyDateRange.through || undefined} onChange={(event) => setHistoryDateRange((current) => ({ ...current, from: event.target.value }))} /></label><label>Through<input type="date" value={historyDateRange.through} min={historyDateRange.from || undefined} onChange={(event) => setHistoryDateRange((current) => ({ ...current, through: event.target.value }))} /></label></fieldset></div><button className="text-button clear-rating-filters" disabled={!activeHistoryFilterCount} onClick={() => { setHistoryFilters({ referees: [], ageGroups: [], genders: [], positions: [] }); setHistoryDateRange({ from: "", through: "" }); setRefereeFilterSearch(""); }}>Clear All Filters</button></details>
       {sortedAssessments.map((assessment) => {
       const skillAverage = [assessment.positioning, assessment.decision_making, assessment.communication, assessment.match_control].filter((item): item is number => item !== null).reduce((sum, item, _, all) => sum + item / all.length, 0);
       const score = assessment.evaluation_type === "basic_eval" ? assessment.overall_rating : skillAverage;
@@ -2068,7 +2076,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.26</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.27</span></footer>
   </main>;
 }
 

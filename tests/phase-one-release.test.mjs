@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.26 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.27 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.26 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.26/);
+  assert.match(page, /Version 0\.5\.27/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.26");
+  assert.equal(JSON.parse(packageJson).version, "0.5.27");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -211,9 +211,15 @@ test("ratings history supports multi-select filters independent of sorting", asy
   assert.match(page, /Clear All Filters/);
   assert.match(page, /className="rating-filter-dropdown"/);
   assert.match(page, /historyFilters\[key\]\.length \? `\$\{historyFilters\[key\]\.length\} selected` : "All"/);
-  for (const label of ["Referees", "Age Groups", "Genders", "Positions", "Dates"]) {
+  for (const label of ["Referees", "Age Groups", "Genders", "Positions"]) {
     assert.match(page, new RegExp(`\"${label}\"`));
   }
+  assert.match(page, /className="rating-referee-search"/);
+  assert.match(page, /placeholder="Search referees…"/);
+  assert.match(page, /className="rating-date-range"/);
+  assert.match(page, /historyDateRange\.from/);
+  assert.match(page, /historyDateRange\.through/);
+  assert.doesNotMatch(page, /\["dates", "Dates"/);
 });
 
 test("account merge migration transfers operational records and audits the merge", async () => {

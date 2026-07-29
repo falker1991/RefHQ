@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.17 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.18 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.17 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.17/);
+  assert.match(page, /Version 0\.5\.18/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.17");
+  assert.equal(JSON.parse(packageJson).version, "0.5.18");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -171,6 +171,17 @@ test("assessment upsert uses a non-partial matching unique index", async () => {
   assert.match(client, /on_conflict=game_id,official_id,coach_id/);
   assert.match(migration, /create unique index assessments_game_official_coach_unique/);
   assert.doesNotMatch(migration, /where official_id is not null/i);
+});
+
+test("ratings history supports multi-select filters independent of sorting", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /historyFilters/);
+  assert.match(page, /toggleHistoryFilter/);
+  assert.match(page, /Filter Ratings/);
+  assert.match(page, /Clear All Filters/);
+  for (const label of ["Referees", "Age Groups", "Genders", "Positions", "Dates"]) {
+    assert.match(page, new RegExp(`\"${label}\"`));
+  }
 });
 
 test("account merge migration transfers operational records and audits the merge", async () => {

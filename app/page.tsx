@@ -1880,7 +1880,7 @@ function Dashboard({ session }: { session: Law18Session }) {
     : isSiteCoordinator
       ? [["dashboard", "Dashboard"], ["board", "Assignment Board"], ["checkin", "Check-In"], ["schedule", "Schedule"]]
     : isCoach
-      ? [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["coaching", "Coaching"], ["assessments", "Ratings"]]
+      ? [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["assessments", "Ratings"]]
       : [["dashboard", "Dashboard"], ["board", "My Assignments"], ...(refereeHasCurrentOrFutureAssignment ? [["checkin", "Check-In"] as [View, string]] : []), ["assessments", "My Evals"]];
 
   if (loading) return <main className="auth-page"><p className="auth-loading">Loading Dashboard</p></main>;
@@ -1917,7 +1917,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {event && view === "checkin" && (isStaff ? <CheckInView event={event} data={data} session={session} onRefresh={refreshCheckIns} /> : refereeHasCurrentOrFutureAssignment ? <RefereeCheckIn event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} /> : null)}
       {event && view === "schedule" && (isStaff || isCoach) && <ScheduleView session={session} event={event} data={data} canEdit={isAdministrativeStaff} canRateCrew={isCoach && canAssess} coachView={isCoach && !isAdministrativeStaff} onRateCrew={(gameId) => { setRatingGameId(gameId); setView("assessments"); }} onCreated={() => refresh(event.id)} />}
       {isAdministrativeStaff && profile && organization && view === "officials" && <OfficialsDirectory session={session} profile={profile} organizationRoles={organizationRoles} eventRoles={eventRoles} canManageOrganizationRoles={Boolean(profile.is_site_owner || organizationRoles.includes("organization_admin"))} organizationId={organization.id} officials={organizationOfficials} data={data} event={event} events={events} onCreated={() => loadOrganizationOfficials(session, organization.id).then(setOrganizationOfficials)} />}
-      {event && view === "coaching" && <CoachWorkspace session={session} event={event} data={data} organizationOfficials={organizationOfficials} canManage={isAdministrativeStaff} onSaved={() => refresh(event.id)} />}
+      {event && view === "coaching" && isAdministrativeStaff && <CoachWorkspace session={session} event={event} data={data} organizationOfficials={organizationOfficials} canManage onSaved={() => refresh(event.id)} />}
       {event && organization && view === "assessments" && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={canConfigureRatings} initialGameId={ratingGameId} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
       {isAdministrativeStaff && organization && view === "import" && profile && <ImportView session={session} profile={profile} organizationId={organization.id} organization={organization} events={events} canConfigureAliases={canConfigureRatings} onImported={handleImported} />}
       {profile && view === "account" && <AccountSettings session={session} profile={profile} onUpdated={setProfile} />}
@@ -1926,7 +1926,7 @@ function Dashboard({ session }: { session: Law18Session }) {
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.9</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.10</span></footer>
   </main>;
 }
 

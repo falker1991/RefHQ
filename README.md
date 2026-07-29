@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.5.7 is the Phase 1 pilot-administration release. Referee coaches can see the assigned crew for every game in their authorized scope and open a mobile-friendly crew-rating workspace directly from each schedule card. Coach visibility remains limited by full-schedule or selected-game access.
+Version 0.5.8 is the Phase 1 pilot-administration release. The coach ratings workspace is constrained to the mobile viewport, and its game selector uses concise date, field, and time labels. Referee coaches can see crews within their authorized scope after the accompanying Supabase crew-visibility migration is applied.
 
 ## What is included
 

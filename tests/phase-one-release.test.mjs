@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.7 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.8 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.7 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.7/);
+  assert.match(page, /Version 0\.5\.8/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.7");
+  assert.equal(JSON.parse(packageJson).version, "0.5.8");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -84,6 +84,13 @@ test("coach crew visibility is scoped by a dedicated RLS migration", async () =>
   assert.match(migration, /coaches view assigned game crews/);
   assert.match(migration, /coaches view assigned crew officials/);
   assert.match(migration, /full_schedule_access/);
+});
+
+test("ratings game options are concise and mobile controls stay within the workspace", async () => {
+  const [page, css] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
+  assert.match(page, /\{formatDate\(game\.starts_at\)\} · \{game\.field_name\} · \{formatTime\(game\.starts_at\)\}/);
+  assert.match(css, /\.assessment-selects select\{[^}]*width:100%[^}]*min-width:0[^}]*max-width:100%/);
+  assert.match(css, /\.crew-rating-workspace\{[^}]*overflow:hidden/);
 });
 
 test("account merge migration transfers operational records and audits the merge", async () => {

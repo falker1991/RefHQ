@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.16 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.17 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.16 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.16/);
+  assert.match(page, /Version 0\.5\.17/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.16");
+  assert.equal(JSON.parse(packageJson).version, "0.5.17");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -161,6 +161,16 @@ test("all users have active-group role-aware help", async () => {
   for (const role of ["site_owner", "organization_admin", "event_admin", "assignor", "site_coordinator", "referee_coach", "referee"]) {
     assert.match(page, new RegExp(`${role}: \\{ title:`));
   }
+});
+
+test("assessment upsert uses a non-partial matching unique index", async () => {
+  const [client, migration] = await Promise.all([
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/202607290023_assessment_upsert_constraint.sql"),
+  ]);
+  assert.match(client, /on_conflict=game_id,official_id,coach_id/);
+  assert.match(migration, /create unique index assessments_game_official_coach_unique/);
+  assert.doesNotMatch(migration, /where official_id is not null/i);
 });
 
 test("account merge migration transfers operational records and audits the merge", async () => {

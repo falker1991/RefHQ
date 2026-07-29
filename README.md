@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.5.1 is the Phase 1 pilot-administration release. Assignors can drag and drop actual Assignr Games and Users exports, switch between events, monitor the full-day staffing board, and see daily check-ins update. Organization administrators can manage multi-role event access, limit staff to selected games, assign referee coaches, edit provisional identities, and safely merge duplicate linked accounts while preserving operational history.
+Version 0.5.2 is the Phase 1 pilot-administration release. Assignors can drag and drop actual Assignr Games and Users exports, switch between events, monitor the full-day staffing board, and see daily check-ins update. The officials directory displays every person’s organization roles. Organization administrators can manage multi-role event access, limit staff to selected games, assign referee coaches, edit provisional identities, and safely merge duplicate linked accounts while preserving operational history.
 
 ## What is included
 

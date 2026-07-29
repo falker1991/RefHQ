@@ -505,6 +505,20 @@ export async function checkIn(
   return rows[0];
 }
 
+export async function undoCheckIn(
+  session: Law18Session,
+  eventId: string,
+  officialId: string,
+  eventDate: string,
+) {
+  await rest(
+    session,
+    `check_ins?event_id=eq.${enc(eventId)}&official_id=eq.${enc(officialId)}&event_date=eq.${enc(eventDate)}`,
+    { method: "DELETE" },
+    "return=minimal",
+  );
+}
+
 export type ImportRow = {
   external_id: string;
   date: string;

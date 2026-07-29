@@ -46,6 +46,7 @@ import {
   updatePositionTitleAliases,
   positionAliasKey,
   updateOwnProfile,
+  undoCheckIn,
   zonedLocalDateTimeToIso,
   type AssignmentRecord,
   type CheckInRecord,
@@ -350,7 +351,7 @@ function RefereeCheckIn({ event, data, session, onCheckedIn }: { event: EventRec
   return <section className="page-section referee-checkin"><div className="section-title"><div><p className="eyebrow">OFFICIAL CHECK-IN</p><h1>{isCheckedIn ? "Check-in complete" : "Scan the on-site code"}</h1><p>{isCheckedIn ? `You are checked in for ${formatDate(selectedDate)}.` : "The check-in QR is displayed or printed by event staff at the venue."}</p></div></div>{!isCheckedIn && <QrScanner onFound={scanned} />}{message && <p className="pilot-message">{message}</p>}{isCheckedIn && !message && <p className="pilot-message">✓ You’re checked in. Have a great day!</p>}</section>;
 }
 
-function CheckInView({ event, data, session, onRefresh }: { event: EventRecord; data: EventData; session: Law18Session; onRefresh: () => Promise<void> }) {
+function CheckInView({ event, data, session, canManageCheckIns, onRefresh }: { event: EventRecord; data: EventData; session: Law18Session; canManageCheckIns: boolean; onRefresh: () => Promise<void> }) {
   const eventDates = [...new Set(data.games.map((game) => game.starts_at.slice(0, 10)))].sort();
   const [eventDate, setEventDate] = useState(eventDates[0] || event.starts_on);
   const [statusFilter, setStatusFilter] = useState<"all" | "checked_in" | "expected">("all");
@@ -360,6 +361,7 @@ function CheckInView({ event, data, session, onRefresh }: { event: EventRecord; 
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [newArrivals, setNewArrivals] = useState<Set<string>>(new Set());
   const [scheduleOfficialId, setScheduleOfficialId] = useState<string | null>(null);
+  const [manualCheckInOfficialId, setManualCheckInOfficialId] = useState<string | null>(null);
   const refreshingRef = useRef(false);
   const previousCheckedRef = useRef<{ date: string; ids: Set<string> } | null>(null);
   const url = `${window.location.origin}/?event=${event.check_in_slug}&date=${eventDate}`;
@@ -438,6 +440,18 @@ function CheckInView({ event, data, session, onRefresh }: { event: EventRecord; 
       window.alert(reason instanceof Error ? reason.message : "That QR code could not be verified.");
     }
   }
+  async function toggleManualCheckIn(official: OfficialRecord, isChecked: boolean) {
+    setManualCheckInOfficialId(official.id);
+    try {
+      if (isChecked) await undoCheckIn(session, event.id, official.id, eventDate);
+      else await checkIn(session, event.id, official.id, "assignor", eventDate);
+      await refreshAttendance();
+    } catch (reason) {
+      window.alert(reason instanceof Error ? reason.message : "Unable to update this check-in.");
+    } finally {
+      setManualCheckInOfficialId(null);
+    }
+  }
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") refreshAttendance().catch(() => undefined);
@@ -470,7 +484,7 @@ function CheckInView({ event, data, session, onRefresh }: { event: EventRecord; 
       <article className="panel qr-panel print-qr"><div className="qr"><QRCodeSVG value={url} size={210} /></div><h2>{event.name}</h2><strong>{formatDate(eventDate)}</strong><p>{url}</p><button className="secondary print-button" onClick={() => window.print()}>Print daily QR</button></article>
       <article className="panel roster-panel"><div className="panel-head"><div><p className="eyebrow">LIVE ROSTER</p><h2>{checked.size} checked in</h2><p>{visibleRoster.length} of {roster.length} officials shown</p></div></div>
         <div className="roster-controls"><label>Status<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option value="all">All officials</option><option value="checked_in">Checked in</option><option value="expected">Not yet checked in</option></select></label><label>Sort by<select value={rosterSort} onChange={(event) => setRosterSort(event.target.value as typeof rosterSort)}><option value="first_assignment">First assignment time</option><option value="last_name">Last name</option><option value="site">Site</option></select></label><label>Site<select value={siteFilter} onChange={(event) => setSiteFilter(event.target.value)}><option value="all">All sites</option>{sites.map((site) => <option value={site} key={site}>{site}</option>)}</select></label></div>
-        {visibleRoster.map(({ official, firstGame, firstSite, isChecked, isCoachExpected }) => <div className={`official-row ${newArrivals.has(official.id) ? "new-arrival" : ""}`} key={official.id}><span className="avatar">{initials(official.full_name)}</span><div className="official-name"><button className="checkin-official-button" onClick={() => setScheduleOfficialId(official.id)}>{official.full_name}</button><span>{isCoachExpected ? `Referee Coach${firstGame ? ` · ${formatTime(firstGame.starts_at)} · ${firstSite}` : ""}` : firstGame ? `${formatTime(firstGame.starts_at)} · ${firstSite} · ${firstGame.field_name}` : "No assignment details"}</span></div><Status checked={isChecked} /></div>)}
+        {visibleRoster.map(({ official, firstGame, firstSite, isChecked, isCoachExpected }) => <div className={`official-row ${newArrivals.has(official.id) ? "new-arrival" : ""}`} key={official.id}><span className="avatar">{initials(official.full_name)}</span><div className="official-name"><button className="checkin-official-button" onClick={() => setScheduleOfficialId(official.id)}>{official.full_name}</button><span>{isCoachExpected ? `Referee Coach${firstGame ? ` · ${formatTime(firstGame.starts_at)} · ${firstSite}` : ""}` : firstGame ? `${formatTime(firstGame.starts_at)} · ${firstSite} · ${firstGame.field_name}` : "No assignment details"}</span></div><div className="checkin-status-actions"><Status checked={isChecked} />{canManageCheckIns && <button className={isChecked ? "text-button undo-checkin-button" : "secondary manual-checkin-button"} disabled={manualCheckInOfficialId === official.id} onClick={() => toggleManualCheckIn(official, isChecked)}>{manualCheckInOfficialId === official.id ? "Updating…" : isChecked ? "Undo Check-In" : "Check In"}</button>}</div></div>)}
         {!roster.length && <EmptyState>No officials are assigned on this date.</EmptyState>}
         {roster.length > 0 && !visibleRoster.length && <EmptyState>No officials match these filters.</EmptyState>}
       </article>
@@ -1961,7 +1975,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {qrCheckInMessage && <p className="pilot-message qr-checkin-message">{qrCheckInMessage}</p>}
       {profile && view === "dashboard" && <DashboardHome profile={profile} event={event} data={data} events={events} onNavigate={setView} />}
       {event && view === "board" && (isStaff ? <AssignmentBoard data={data} /> : <RefereeDay event={event} data={data} session={session} />)}
-      {event && view === "checkin" && (isStaff ? <CheckInView event={event} data={data} session={session} onRefresh={refreshCheckIns} /> : refereeHasCurrentOrFutureAssignment || coachHasCurrentOrFutureAssignment ? <RefereeCheckIn event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} /> : null)}
+      {event && view === "checkin" && (isStaff ? <CheckInView event={event} data={data} session={session} canManageCheckIns={isAdministrativeStaff} onRefresh={refreshCheckIns} /> : refereeHasCurrentOrFutureAssignment || coachHasCurrentOrFutureAssignment ? <RefereeCheckIn event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} /> : null)}
       {event && view === "schedule" && (isStaff || isCoach) && <ScheduleView session={session} event={event} data={data} canEdit={isAdministrativeStaff} canRateCrew={isCoach && canAssess} coachView={isCoach && !isAdministrativeStaff} onRateCrew={(gameId) => { setRatingGameId(gameId); setView("assessments"); }} onCreated={() => refresh(event.id)} />}
       {isAdministrativeStaff && profile && organization && view === "officials" && <OfficialsDirectory session={session} profile={profile} organizationRoles={organizationRoles} eventRoles={eventRoles} canManageOrganizationRoles={Boolean(profile.is_site_owner || organizationRoles.includes("organization_admin"))} organizationId={organization.id} officials={organizationOfficials} data={data} event={event} events={events} onCreated={() => loadOrganizationOfficials(session, organization.id).then(setOrganizationOfficials)} />}
       {event && view === "coaching" && isAdministrativeStaff && <CoachWorkspace session={session} event={event} data={data} organizationOfficials={organizationOfficials} canManage onSaved={() => refresh(event.id)} />}
@@ -1973,7 +1987,7 @@ function Dashboard({ session }: { session: Law18Session }) {
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.13</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.14</span></footer>
   </main>;
 }
 

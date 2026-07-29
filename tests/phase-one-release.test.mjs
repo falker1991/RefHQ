@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.13 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.14 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.13 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.13/);
+  assert.match(page, /Version 0\.5\.14/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.13");
+  assert.equal(JSON.parse(packageJson).version, "0.5.14");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -132,6 +132,17 @@ test("rating configuration requires an explicit save and Basic Eval stores notes
   assert.match(page, /configuration\.ratingType === event\.rating_type/);
   assert.match(page, /className="basic-eval-notes"/);
   assert.match(page, /coach_notes: rating\.coach_notes \|\| null/);
+});
+
+test("administrative roster supports immediate manual check-in and undo", async () => {
+  const [page, client] = await Promise.all([read("app/page.tsx"), read("app/supabase-client.ts")]);
+  assert.match(page, /canManageCheckIns=\{isAdministrativeStaff\}/);
+  assert.match(page, /toggleManualCheckIn/);
+  assert.match(page, /Undo Check-In/);
+  assert.match(page, /"Check In"/);
+  assert.doesNotMatch(page, /confirm\([^)]*check.?in/i);
+  assert.match(client, /export async function undoCheckIn/);
+  assert.match(client, /method: "DELETE"/);
 });
 
 test("account merge migration transfers operational records and audits the merge", async () => {

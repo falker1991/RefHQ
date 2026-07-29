@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.0 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.1 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,18 @@ test("Version 0.5.0 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.0/);
+  assert.match(page, /Version 0\.5\.1/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.0");
+  assert.equal(JSON.parse(packageJson).version, "0.5.1");
+});
+
+test("Assignr import supports drag and drop with CSV validation", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /onDragEnter=\{enterDropZone\}/);
+  assert.match(page, /onDrop=\{dropFile\}/);
+  assert.match(page, /Drop CSV to upload/);
+  assert.match(page, /Drop one Assignr CSV file at a time/);
 });
 
 test("account merge migration transfers operational records and audits the merge", async () => {

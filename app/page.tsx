@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { AuthPanel } from "./auth-panel";
 import { auth, type Law18Session } from "./auth-client";
@@ -503,6 +503,8 @@ function ImportView({
   const [fileName, setFileName] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [draggingFile, setDraggingFile] = useState(false);
+  const dragDepth = useRef(0);
   const [destinationEventId, setDestinationEventId] = useState("");
   const [details, setDetails] = useState({ name: "", venue: "", startsOn: "", endsOn: "" });
   const [aliasScope, setAliasScope] = useState<"organization" | "event">("organization");
@@ -561,6 +563,10 @@ function ImportView({
 
   async function readFile(file?: File) {
     if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".csv") && file.type !== "text/csv") {
+      setMessage("Please drop an Assignr CSV file.");
+      return;
+    }
     try {
       const contents = await file.text();
       if (mode === "officials") {
@@ -597,6 +603,41 @@ function ImportView({
       setRows([]);
       setMessage(error instanceof Error ? error.message : "Unable to read that CSV.");
     }
+  }
+
+  function dropFile(event: DragEvent<HTMLElement>) {
+    event.preventDefault();
+    dragDepth.current = 0;
+    setDraggingFile(false);
+    const files = [...event.dataTransfer.files];
+    if (files.length !== 1) {
+      setMessage("Drop one Assignr CSV file at a time.");
+      return;
+    }
+    readFile(files[0]);
+  }
+
+  function enterDropZone(event: DragEvent<HTMLElement>) {
+    event.preventDefault();
+    dragDepth.current += 1;
+    setDraggingFile(true);
+  }
+
+  function leaveDropZone(event: DragEvent<HTMLElement>) {
+    event.preventDefault();
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDraggingFile(false);
+  }
+
+  function switchImportMode(nextMode: "schedule" | "officials") {
+    setMode(nextMode);
+    setRows([]);
+    setOfficialRows([]);
+    setOfficialResult(null);
+    setFileName("");
+    setMessage("");
+    setDraggingFile(false);
+    dragDepth.current = 0;
   }
 
   async function confirmOfficialImport() {
@@ -642,14 +683,14 @@ function ImportView({
   return <section className="page-section">
     <div className="section-title"><div><p className="eyebrow">ASSIGNR BRIDGE</p><h1>Import center</h1><p>Import the official directory separately, then add one or more schedule days to an event.</p></div></div>
     <div className="segmented import-tabs">
-      <button className={mode === "schedule" ? "active" : ""} onClick={() => { setMode("schedule"); setRows([]); setOfficialRows([]); setMessage(""); }}>Schedule export</button>
-      <button className={mode === "officials" ? "active" : ""} onClick={() => { setMode("officials"); setRows([]); setOfficialRows([]); setMessage(""); }}>Officials export</button>
+      <button className={mode === "schedule" ? "active" : ""} onClick={() => switchImportMode("schedule")}>Schedule export</button>
+      <button className={mode === "officials" ? "active" : ""} onClick={() => switchImportMode("officials")}>Officials export</button>
     </div>
     <div className="import-grid">
-      <article className="panel import-card">
-        <span className="upload-icon">↑</span><h2>{fileName || `Choose an Assignr ${mode === "schedule" ? "games" : "users"} CSV`}</h2>
+      <article className={`panel import-card ${draggingFile ? "dragging" : ""}`} onDragEnter={enterDropZone} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }} onDragLeave={leaveDropZone} onDrop={dropFile}>
+        <span className="upload-icon">{draggingFile ? "↓" : "↑"}</span><h2>{draggingFile ? "Drop CSV to upload" : fileName || `Drag an Assignr ${mode === "schedule" ? "games" : "users"} CSV here`}</h2>
         <p>{mode === "schedule" ? "Uses Assignr’s Games export with Position 1 / Official 1 crew columns." : "Uses Assignr’s Users export. Imported officials remain provisional until they create and verify their account."}</p>
-        <label className="primary file-button">Choose CSV<input type="file" accept=".csv,text/csv" onChange={(event) => readFile(event.target.files?.[0])} /></label>
+        <span className="drop-or">or</span><label className="primary file-button">Browse Files<input type="file" accept=".csv,text/csv" onChange={(event) => readFile(event.target.files?.[0])} /></label>
         {mode === "schedule" && <a className="text-button sample-link" href="/assignr-schedule.csv" download>Download sample CSV</a>}
       </article>
       <article className="panel import-review">
@@ -1769,7 +1810,7 @@ function Dashboard({ session }: { session: Law18Session }) {
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.0</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.1</span></footer>
   </main>;
 }
 

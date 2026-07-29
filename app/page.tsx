@@ -453,7 +453,7 @@ function CheckInView({ event, data, session, onRefresh }: { event: EventRecord; 
   </section>;
 }
 
-function ScheduleView({ session, event, data, canEdit, canRateCrew, onRateCrew, onCreated }: { session: Law18Session; event: EventRecord; data: EventData; canEdit: boolean; canRateCrew: boolean; onRateCrew: (gameId: string) => void; onCreated: () => void }) {
+function ScheduleView({ session, event, data, canEdit, canRateCrew, coachView, onRateCrew, onCreated }: { session: Law18Session; event: EventRecord; data: EventData; canEdit: boolean; canRateCrew: boolean; coachView: boolean; onRateCrew: (gameId: string) => void; onCreated: () => void }) {
   const officials = new Map(data.officials.map((official) => [official.id, official]));
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -488,9 +488,12 @@ function ScheduleView({ session, event, data, canEdit, canRateCrew, onRateCrew, 
   const compareGroups = (a: GameRecord, b: GameRecord) => sortBy === "time"
     ? timeSortValue(a.starts_at) - timeSortValue(b.starts_at)
     : groupLabel(a).localeCompare(groupLabel(b), undefined, { numeric: true });
-  const groupedGames = [...data.games].sort((a, b) => compareGroups(a, b) || a.starts_at.localeCompare(b.starts_at))
+  const visibleGames = coachView
+    ? data.games.filter((game) => !game.operational && !`${game.field_name} ${game.venue_name || ""}`.toLowerCase().includes("hq"))
+    : data.games;
+  const groupedGames = [...visibleGames].sort((a, b) => compareGroups(a, b) || a.starts_at.localeCompare(b.starts_at))
     .reduce<Record<string, GameRecord[]>>((groups, item) => ({ ...groups, [groupLabel(item)]: [...(groups[groupLabel(item)] || []), item] }), {});
-  return <section className="page-section"><div className="section-title"><div><p className="eyebrow">EVENT SCHEDULE</p><h1>Games and crews</h1><p>{data.games.length} imported games</p></div></div>
+  return <section className="page-section"><div className="section-title"><div><p className="eyebrow">EVENT SCHEDULE</p><h1>Games and crews</h1><p>{visibleGames.length} imported games</p></div></div>
     <div className="schedule-tools"><label>Sort and group by<select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}><option value="date">Date</option><option value="time">Time</option><option value="site">Site</option><option value="field">Field</option><option value="age_group">Age group</option><option value="gender">Gender</option><option value="competition">Competition</option></select></label>{canEdit && <button className="secondary" onClick={() => setAdding((value) => !value)}>{adding ? "Cancel" : "Add game manually"}</button>}</div>
     {adding && <article className="panel manual-entry-form"><h2>Add a game to {event.name}</h2><div className="manual-form-grid"><label>Date and time<input type="datetime-local" value={game.starts_at} onChange={(e) => setGame({ ...game, starts_at: e.target.value })} /></label><label>Field<input value={game.field_name} onChange={(e) => setGame({ ...game, field_name: e.target.value })} /></label><label>Home team<input value={game.home_team} onChange={(e) => setGame({ ...game, home_team: e.target.value })} /></label><label>Away team<input value={game.away_team} onChange={(e) => setGame({ ...game, away_team: e.target.value })} /></label><label>Division or competition<input value={game.division} onChange={(e) => setGame({ ...game, division: e.target.value })} /></label></div><button className="primary" disabled={busy || !game.starts_at || !game.field_name.trim() || !game.home_team.trim() || !game.away_team.trim()} onClick={addGame}>{busy ? "Adding…" : "Add game"}</button></article>}
     {message && <p className="pilot-message">{message}</p>}
@@ -1912,7 +1915,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {profile && view === "dashboard" && <DashboardHome profile={profile} event={event} data={data} events={events} onNavigate={setView} />}
       {event && view === "board" && (isStaff ? <AssignmentBoard data={data} /> : <RefereeDay event={event} data={data} session={session} />)}
       {event && view === "checkin" && (isStaff ? <CheckInView event={event} data={data} session={session} onRefresh={refreshCheckIns} /> : refereeHasCurrentOrFutureAssignment ? <RefereeCheckIn event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} /> : null)}
-      {event && view === "schedule" && (isStaff || isCoach) && <ScheduleView session={session} event={event} data={data} canEdit={isAdministrativeStaff} canRateCrew={isCoach && canAssess} onRateCrew={(gameId) => { setRatingGameId(gameId); setView("assessments"); }} onCreated={() => refresh(event.id)} />}
+      {event && view === "schedule" && (isStaff || isCoach) && <ScheduleView session={session} event={event} data={data} canEdit={isAdministrativeStaff} canRateCrew={isCoach && canAssess} coachView={isCoach && !isAdministrativeStaff} onRateCrew={(gameId) => { setRatingGameId(gameId); setView("assessments"); }} onCreated={() => refresh(event.id)} />}
       {isAdministrativeStaff && profile && organization && view === "officials" && <OfficialsDirectory session={session} profile={profile} organizationRoles={organizationRoles} eventRoles={eventRoles} canManageOrganizationRoles={Boolean(profile.is_site_owner || organizationRoles.includes("organization_admin"))} organizationId={organization.id} officials={organizationOfficials} data={data} event={event} events={events} onCreated={() => loadOrganizationOfficials(session, organization.id).then(setOrganizationOfficials)} />}
       {event && view === "coaching" && <CoachWorkspace session={session} event={event} data={data} organizationOfficials={organizationOfficials} canManage={isAdministrativeStaff} onSaved={() => refresh(event.id)} />}
       {event && organization && view === "assessments" && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={canConfigureRatings} initialGameId={ratingGameId} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
@@ -1923,7 +1926,7 @@ function Dashboard({ session }: { session: Law18Session }) {
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.8</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.9</span></footer>
   </main>;
 }
 

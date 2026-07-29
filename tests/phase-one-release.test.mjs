@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.4 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.5 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.4 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.4/);
+  assert.match(page, /Version 0\.5\.5/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.4");
+  assert.equal(JSON.parse(packageJson).version, "0.5.5");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -46,6 +46,21 @@ test("event access is discoverable and site-owner access is locked", async () =>
   assert.match(page, /Open Event Access/);
   assert.match(page, /Site Owner — Full Access/);
   assert.match(page, /owner-locked/);
+});
+
+test("daily check-in uses the camera scanner and hides it after check-in", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /Scan QR Code/);
+  assert.match(page, /\{!isCheckedIn && <QrScanner/);
+  assert.match(page, /Check-in complete/);
+});
+
+test("coaches can be assigned in bulk or from the filtered full schedule", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /Multiple selected games/);
+  assert.match(page, /Assign Coaches by Game/);
+  assert.match(page, /coach-schedule-filters/);
+  assert.match(page, /Promise\.all\(newTargets/);
 });
 
 test("account merge migration transfers operational records and audits the merge", async () => {

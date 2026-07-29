@@ -307,7 +307,7 @@ function QrScanner({ onFound }: { onFound: (rawValue: string) => void }) {
   return <section className="panel scanner-card" id="scan">
     <div><p className="eyebrow">EVENT QR</p><h2>Scan at referee headquarters</h2><p>Use Law18Referee Management or your phone’s Camera app.</p></div>
     <video ref={videoRef} autoPlay muted playsInline className={scanning ? "scanner-video active" : "scanner-video"} />
-    <button className="secondary" onClick={start} disabled={scanning}>{scanning ? "Scanning…" : "Open QR scanner"}</button>
+    <button className="primary scan-qr-button" onClick={start} disabled={scanning}>{scanning ? "Scanning…" : "Scan QR Code"}</button>
     {message && <p className="pilot-message">{message}</p>}
   </section>;
 }
@@ -318,27 +318,32 @@ function RefereeCheckIn({ event, data, session, onCheckedIn }: { event: EventRec
   const assignmentDates = new Set((official ? data.assignments.filter((item) => item.official_id === official.id) : [])
     .map((assignment) => data.games.find((game) => game.id === assignment.game_id)?.starts_at.slice(0, 10)).filter(Boolean));
   const [message, setMessage] = useState("");
+  const [justCheckedIn, setJustCheckedIn] = useState(false);
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: event.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const selectedDate = new URLSearchParams(window.location.search).get("date") || today;
+  const isCheckedIn = justCheckedIn || Boolean(official && data.checkIns.some((item) =>
+    item.official_id === official.id && item.event_date === selectedDate && item.status === "checked_in"));
   async function scanned(rawValue: string) {
     if (!official) return;
     try {
       const scannedUrl = new URL(rawValue);
       const scannedEvent = scannedUrl.searchParams.get("event");
       const scannedDate = scannedUrl.searchParams.get("date");
-      const today = new Intl.DateTimeFormat("en-CA", { timeZone: event.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
       if (scannedUrl.origin !== window.location.origin || scannedEvent !== event.check_in_slug || !scannedDate || scannedDate < today || !assignmentDates.has(scannedDate)) {
         throw new Error("This QR code does not match one of your assigned event days.");
       }
       await checkIn(session, event.id, official.id, "qr", scannedDate);
+      setJustCheckedIn(true);
       setMessage("You’re checked in. Have a great day!");
       onCheckedIn();
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "That QR code could not be verified.");
     }
   }
-  return <section className="page-section referee-checkin"><div className="section-title"><div><p className="eyebrow">OFFICIAL CHECK-IN</p><h1>Scan the on-site code</h1><p>The check-in QR is displayed or printed by event staff at the venue.</p></div></div><QrScanner onFound={scanned} />{message && <p className="pilot-message">{message}</p>}</section>;
+  return <section className="page-section referee-checkin"><div className="section-title"><div><p className="eyebrow">OFFICIAL CHECK-IN</p><h1>{isCheckedIn ? "Check-in complete" : "Scan the on-site code"}</h1><p>{isCheckedIn ? `You are checked in for ${formatDate(selectedDate)}.` : "The check-in QR is displayed or printed by event staff at the venue."}</p></div></div>{!isCheckedIn && <QrScanner onFound={scanned} />}{message && <p className="pilot-message">{message}</p>}{isCheckedIn && !message && <p className="pilot-message">✓ You’re checked in. Have a great day!</p>}</section>;
 }
 
-function CheckInView({ event, data, onRefresh }: { event: EventRecord; data: EventData; onRefresh: () => Promise<void> }) {
+function CheckInView({ event, data, session, onRefresh }: { event: EventRecord; data: EventData; session: Law18Session; onRefresh: () => Promise<void> }) {
   const eventDates = [...new Set(data.games.map((game) => game.starts_at.slice(0, 10)))].sort();
   const [eventDate, setEventDate] = useState(eventDates[0] || event.starts_on);
   const [statusFilter, setStatusFilter] = useState<"all" | "checked_in" | "expected">("all");
@@ -352,6 +357,8 @@ function CheckInView({ event, data, onRefresh }: { event: EventRecord; data: Eve
   const url = `${window.location.origin}/?event=${event.check_in_slug}&date=${eventDate}`;
   const checked = new Set(data.checkIns.filter((item) => item.event_date === eventDate).map((item) => item.official_id));
   const assignedToday = new Set(data.assignments.filter((assignment) => data.games.some((game) => game.id === assignment.game_id && game.starts_at.startsWith(eventDate))).map((assignment) => assignment.official_id));
+  const currentOfficial = data.officials.find((item) => item.linked_user_id === session.user.id || item.email?.toLowerCase() === session.user.email?.toLowerCase());
+  const canSelfCheckIn = Boolean(currentOfficial && assignedToday.has(currentOfficial.id) && !checked.has(currentOfficial.id));
   const roster = data.officials.filter((official) => assignedToday.has(official.id));
   const gamesById = new Map(data.games.map((game) => [game.id, game]));
   const rosterDetails = roster.map((official) => {
@@ -391,6 +398,19 @@ function CheckInView({ event, data, onRefresh }: { event: EventRecord; data: Eve
       setRefreshing(false);
     }
   }, [onRefresh]);
+  async function scanForSelf(rawValue: string) {
+    if (!currentOfficial) return;
+    try {
+      const scannedUrl = new URL(rawValue);
+      if (scannedUrl.origin !== window.location.origin || scannedUrl.searchParams.get("event") !== event.check_in_slug || scannedUrl.searchParams.get("date") !== eventDate) {
+        throw new Error("This QR code does not match the selected event day.");
+      }
+      await checkIn(session, event.id, currentOfficial.id, "qr", eventDate);
+      await refreshAttendance();
+    } catch (reason) {
+      window.alert(reason instanceof Error ? reason.message : "That QR code could not be verified.");
+    }
+  }
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") refreshAttendance().catch(() => undefined);
@@ -428,6 +448,8 @@ function CheckInView({ event, data, onRefresh }: { event: EventRecord; data: Eve
         {roster.length > 0 && !visibleRoster.length && <EmptyState>No officials match these filters.</EmptyState>}
       </article>
     </div>
+    {canSelfCheckIn && <QrScanner onFound={scanForSelf} />}
+    {currentOfficial && assignedToday.has(currentOfficial.id) && checked.has(currentOfficial.id) && <p className="pilot-message staff-self-checkin">✓ You are checked in for this event day.</p>}
   </section>;
 }
 
@@ -1277,23 +1299,62 @@ function CoachWorkspace({
   onSaved: () => void;
 }) {
   const [coachId, setCoachId] = useState("");
-  const [scope, setScope] = useState<"full" | "game">("full");
-  const [gameId, setGameId] = useState("");
+  const [scope, setScope] = useState<"full" | "games">("full");
+  const [selectedGameIds, setSelectedGameIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState("all");
+  const [scheduleField, setScheduleField] = useState("all");
+  const [scheduleTime, setScheduleTime] = useState("all");
+  const [scheduleQuery, setScheduleQuery] = useState("");
+  const [gameCoachSelections, setGameCoachSelections] = useState<Record<string, string>>({});
   const linkedOfficials = organizationOfficials.filter((official) => official.linked_user_id);
   const visibleAssignments = canManage
     ? data.coachAssignments
     : data.coachAssignments.filter((assignment) => assignment.coach_id === session.user.id);
   const officialByUser = new Map(organizationOfficials.filter((official) => official.linked_user_id).map((official) => [official.linked_user_id!, official]));
   const gameById = new Map(data.games.map((game) => [game.id, game]));
+  const scheduleGames = data.games.filter((game) => !game.operational).sort((a, b) => a.starts_at.localeCompare(b.starts_at) || a.field_name.localeCompare(b.field_name, undefined, { numeric: true }));
+  const scheduleDates = [...new Set(scheduleGames.map((game) => game.starts_at.slice(0, 10)))];
+  const scheduleFields = [...new Set(scheduleGames.map((game) => game.field_name))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const scheduleTimes = [...new Set(scheduleGames.map((game) => formatTime(game.starts_at)))];
+  const filteredScheduleGames = scheduleGames.filter((game) =>
+    (scheduleDate === "all" || game.starts_at.startsWith(scheduleDate))
+    && (scheduleField === "all" || game.field_name === scheduleField)
+    && (scheduleTime === "all" || formatTime(game.starts_at) === scheduleTime)
+    && `${game.home_team} ${game.away_team} ${game.division || ""} ${game.field_name}`.toLowerCase().includes(scheduleQuery.toLowerCase()));
+  function assignmentExists(targetCoachId: string, targetGameId: string | null) {
+    return data.coachAssignments.some((assignment) => assignment.coach_id === targetCoachId
+      && (targetGameId ? assignment.game_id === targetGameId : assignment.full_schedule));
+  }
   async function assignCoach() {
     const coach = linkedOfficials.find((official) => official.linked_user_id === coachId);
     if (!coach) return;
     setBusy(true);
     try {
-      await createCoachAssignment(session, event.id, coachId, scope === "game" ? gameId : null);
-      setMessage(`${coach.full_name} was assigned to ${scope === "full" ? "the full event schedule" : "the selected game"}.`);
+      const targets = scope === "full" ? [null] : selectedGameIds;
+      const newTargets = targets.filter((target) => !assignmentExists(coachId, target));
+      await Promise.all(newTargets.map((target) => createCoachAssignment(session, event.id, coachId, target)));
+      setMessage(newTargets.length
+        ? `${coach.full_name} was assigned to ${scope === "full" ? "the full event schedule" : `${newTargets.length} selected game${newTargets.length === 1 ? "" : "s"}`}.`
+        : `${coach.full_name} already has the selected coaching access.`);
+      if (scope === "games") setSelectedGameIds([]);
+      onSaved();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to assign the coach.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function assignScheduleGame(gameId: string) {
+    const selectedCoachId = gameCoachSelections[gameId];
+    const coach = linkedOfficials.find((official) => official.linked_user_id === selectedCoachId);
+    if (!coach) return;
+    setBusy(true);
+    try {
+      if (!assignmentExists(selectedCoachId, gameId)) await createCoachAssignment(session, event.id, selectedCoachId, gameId);
+      setMessage(`${coach.full_name} was assigned to ${gameById.get(gameId)?.home_team || "the selected game"}.`);
+      setGameCoachSelections((current) => ({ ...current, [gameId]: "" }));
       onSaved();
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "Unable to assign the coach.");
@@ -1314,8 +1375,16 @@ function CoachWorkspace({
     }
   }
   return <section className="page-section"><div className="section-title"><div><p className="eyebrow">REFEREE DEVELOPMENT</p><h1>Coaching Assignments</h1><p>Assign coaches to the complete event schedule or selected games.</p></div></div>
-    {canManage && <article className="panel coach-assignment-form"><label>Referee coach<select value={coachId} onChange={(event) => setCoachId(event.target.value)}><option value="">Select a linked organization member</option>{linkedOfficials.map((official) => <option value={official.linked_user_id!} key={official.id}>{official.full_name} — {official.email}</option>)}</select></label><label>Schedule scope<select value={scope} onChange={(event) => setScope(event.target.value as typeof scope)}><option value="full">Full event schedule</option><option value="game">Selected game</option></select></label>{scope === "game" && <label>Game<select value={gameId} onChange={(event) => setGameId(event.target.value)}><option value="">Select a game</option>{data.games.filter((game) => !game.operational).map((game) => <option value={game.id} key={game.id}>{formatDate(game.starts_at)} · {formatTime(game.starts_at)} · {game.field_name} · {game.home_team} vs. {game.away_team}</option>)}</select></label>}<button className="primary" disabled={busy || !coachId || (scope === "game" && !gameId)} onClick={assignCoach}>{busy ? "Saving…" : "Assign Coach"}</button></article>}
+    {canManage && <article className="panel coach-assignment-form bulk-coach-form"><label>Referee coach<select value={coachId} onChange={(event) => setCoachId(event.target.value)}><option value="">Select a linked organization member</option>{linkedOfficials.map((official) => <option value={official.linked_user_id!} key={official.id}>{official.full_name} — {official.email}</option>)}</select></label><label>Schedule scope<select value={scope} onChange={(event) => setScope(event.target.value as typeof scope)}><option value="full">Full event schedule</option><option value="games">Multiple selected games</option></select></label>{scope === "games" && <fieldset className="coach-game-picker"><legend>Select games</legend>{scheduleGames.map((game) => <label key={game.id}><input type="checkbox" checked={selectedGameIds.includes(game.id)} onChange={(event) => setSelectedGameIds((current) => event.target.checked ? [...current, game.id] : current.filter((id) => id !== game.id))} /><span><strong>{formatDate(game.starts_at)} · {formatTime(game.starts_at)} · {game.field_name}</strong><small>{game.home_team} vs. {game.away_team}</small></span></label>)}</fieldset>}<button className="primary" disabled={busy || !coachId || (scope === "games" && !selectedGameIds.length)} onClick={assignCoach}>{busy ? "Saving…" : scope === "games" ? `Assign Coach to ${selectedGameIds.length || ""} Game${selectedGameIds.length === 1 ? "" : "s"}` : "Assign Coach"}</button></article>}
     {message && <p className="pilot-message">{message}</p>}
+    {canManage && <article className="panel coach-schedule-manager">
+      <div className="panel-head"><div><p className="eyebrow">FULL SCHEDULE</p><h2>Assign Coaches by Game</h2><p>Filter the event schedule, then choose a coach for any game.</p></div></div>
+      <div className="coach-schedule-filters"><label>Day<select value={scheduleDate} onChange={(event) => setScheduleDate(event.target.value)}><option value="all">All days</option>{scheduleDates.map((date) => <option value={date} key={date}>{formatDate(date)}</option>)}</select></label><label>Field<select value={scheduleField} onChange={(event) => setScheduleField(event.target.value)}><option value="all">All fields</option>{scheduleFields.map((field) => <option value={field} key={field}>{field}</option>)}</select></label><label>Time<select value={scheduleTime} onChange={(event) => setScheduleTime(event.target.value)}><option value="all">All times</option>{scheduleTimes.map((time) => <option value={time} key={time}>{time}</option>)}</select></label><label>Teams, age group, or division<input type="search" value={scheduleQuery} onChange={(event) => setScheduleQuery(event.target.value)} placeholder="Search schedule…" /></label></div>
+      <div className="coach-schedule-list">{filteredScheduleGames.map((game) => {
+        const assigned = data.coachAssignments.filter((assignment) => assignment.game_id === game.id).map((assignment) => officialByUser.get(assignment.coach_id)?.full_name).filter(Boolean);
+        return <div className="coach-schedule-row" key={game.id}><time><strong>{formatTime(game.starts_at)}</strong><small>{formatDate(game.starts_at)}</small></time><div><strong>{game.home_team} vs. {game.away_team}</strong><small>{game.field_name}{game.division ? ` · ${game.division}` : ""}</small><span>{assigned.length ? `Assigned: ${assigned.join(", ")}` : "No coach assigned"}</span></div><select aria-label={`Coach for ${game.home_team} versus ${game.away_team}`} value={gameCoachSelections[game.id] || ""} onChange={(event) => setGameCoachSelections((current) => ({ ...current, [game.id]: event.target.value }))}><option value="">Choose coach</option>{linkedOfficials.map((official) => <option value={official.linked_user_id!} key={official.id}>{official.full_name}</option>)}</select><button className="secondary" disabled={busy || !gameCoachSelections[game.id]} onClick={() => assignScheduleGame(game.id)}>Assign</button></div>;
+      })}{!filteredScheduleGames.length && <EmptyState>No games match these schedule filters.</EmptyState>}</div>
+    </article>}
     <div className="coach-assignment-list">{visibleAssignments.map((assignment) => {
       const coach = officialByUser.get(assignment.coach_id);
       const game = assignment.game_id ? gameById.get(assignment.game_id) : null;
@@ -1833,7 +1902,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {qrCheckInMessage && <p className="pilot-message qr-checkin-message">{qrCheckInMessage}</p>}
       {profile && view === "dashboard" && <DashboardHome profile={profile} event={event} data={data} events={events} onNavigate={setView} />}
       {event && view === "board" && (isStaff ? <AssignmentBoard data={data} /> : <RefereeDay event={event} data={data} session={session} />)}
-      {event && view === "checkin" && (isStaff ? <CheckInView event={event} data={data} onRefresh={refreshCheckIns} /> : refereeHasCurrentOrFutureAssignment ? <RefereeCheckIn event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} /> : null)}
+      {event && view === "checkin" && (isStaff ? <CheckInView event={event} data={data} session={session} onRefresh={refreshCheckIns} /> : refereeHasCurrentOrFutureAssignment ? <RefereeCheckIn event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} /> : null)}
       {event && view === "schedule" && (isStaff || isCoach) && <ScheduleView session={session} event={event} data={data} onCreated={() => refresh(event.id)} />}
       {isAdministrativeStaff && profile && organization && view === "officials" && <OfficialsDirectory session={session} profile={profile} organizationRoles={organizationRoles} eventRoles={eventRoles} canManageOrganizationRoles={Boolean(profile.is_site_owner || organizationRoles.includes("organization_admin"))} organizationId={organization.id} officials={organizationOfficials} data={data} event={event} events={events} onCreated={() => loadOrganizationOfficials(session, organization.id).then(setOrganizationOfficials)} />}
       {event && view === "coaching" && <CoachWorkspace session={session} event={event} data={data} organizationOfficials={organizationOfficials} canManage={isAdministrativeStaff} onSaved={() => refresh(event.id)} />}
@@ -1845,7 +1914,7 @@ function Dashboard({ session }: { session: Law18Session }) {
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.4</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.5</span></footer>
   </main>;
 }
 

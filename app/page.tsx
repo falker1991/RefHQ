@@ -359,6 +359,7 @@ function CheckInView({ event, data, session, onRefresh }: { event: EventRecord; 
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [newArrivals, setNewArrivals] = useState<Set<string>>(new Set());
+  const [scheduleOfficialId, setScheduleOfficialId] = useState<string | null>(null);
   const refreshingRef = useRef(false);
   const previousCheckedRef = useRef<{ date: string; ids: Set<string> } | null>(null);
   const url = `${window.location.origin}/?event=${event.check_in_slug}&date=${eventDate}`;
@@ -411,6 +412,7 @@ function CheckInView({ event, data, session, onRefresh }: { event: EventRecord; 
       if (rosterSort === "site") return a.firstSite.localeCompare(b.firstSite, undefined, { numeric: true }) || (a.firstGame?.starts_at || "").localeCompare(b.firstGame?.starts_at || "");
       return (a.firstGame?.starts_at || "9999").localeCompare(b.firstGame?.starts_at || "9999") || a.lastName.localeCompare(b.lastName);
     });
+  const scheduleOfficial = rosterDetails.find((item) => item.official.id === scheduleOfficialId);
   const refreshAttendance = useCallback(async () => {
     if (refreshingRef.current) return;
     refreshingRef.current = true;
@@ -468,13 +470,21 @@ function CheckInView({ event, data, session, onRefresh }: { event: EventRecord; 
       <article className="panel qr-panel print-qr"><div className="qr"><QRCodeSVG value={url} size={210} /></div><h2>{event.name}</h2><strong>{formatDate(eventDate)}</strong><p>{url}</p><button className="secondary print-button" onClick={() => window.print()}>Print daily QR</button></article>
       <article className="panel roster-panel"><div className="panel-head"><div><p className="eyebrow">LIVE ROSTER</p><h2>{checked.size} checked in</h2><p>{visibleRoster.length} of {roster.length} officials shown</p></div></div>
         <div className="roster-controls"><label>Status<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option value="all">All officials</option><option value="checked_in">Checked in</option><option value="expected">Not yet checked in</option></select></label><label>Sort by<select value={rosterSort} onChange={(event) => setRosterSort(event.target.value as typeof rosterSort)}><option value="first_assignment">First assignment time</option><option value="last_name">Last name</option><option value="site">Site</option></select></label><label>Site<select value={siteFilter} onChange={(event) => setSiteFilter(event.target.value)}><option value="all">All sites</option>{sites.map((site) => <option value={site} key={site}>{site}</option>)}</select></label></div>
-        {visibleRoster.map(({ official, firstGame, firstSite, isChecked, isCoachExpected }) => <div className={`official-row ${newArrivals.has(official.id) ? "new-arrival" : ""}`} key={official.id}><span className="avatar">{initials(official.full_name)}</span><div className="official-name"><strong>{official.full_name}</strong><span>{isCoachExpected ? `Referee Coach${firstGame ? ` · ${formatTime(firstGame.starts_at)} · ${firstSite}` : ""}` : firstGame ? `${formatTime(firstGame.starts_at)} · ${firstSite} · ${firstGame.field_name}` : "No assignment details"}</span></div><Status checked={isChecked} /></div>)}
+        {visibleRoster.map(({ official, firstGame, firstSite, isChecked, isCoachExpected }) => <div className={`official-row ${newArrivals.has(official.id) ? "new-arrival" : ""}`} key={official.id}><span className="avatar">{initials(official.full_name)}</span><div className="official-name"><button className="checkin-official-button" onClick={() => setScheduleOfficialId(official.id)}>{official.full_name}</button><span>{isCoachExpected ? `Referee Coach${firstGame ? ` · ${formatTime(firstGame.starts_at)} · ${firstSite}` : ""}` : firstGame ? `${formatTime(firstGame.starts_at)} · ${firstSite} · ${firstGame.field_name}` : "No assignment details"}</span></div><Status checked={isChecked} /></div>)}
         {!roster.length && <EmptyState>No officials are assigned on this date.</EmptyState>}
         {roster.length > 0 && !visibleRoster.length && <EmptyState>No officials match these filters.</EmptyState>}
       </article>
     </div>
     {canSelfCheckIn && <QrScanner onFound={scanForSelf} />}
     {currentOfficial && assignedToday.has(currentOfficial.id) && checked.has(currentOfficial.id) && <p className="pilot-message staff-self-checkin">✓ You are checked in for this event day.</p>}
+    {scheduleOfficial && <div className="confirmation-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setScheduleOfficialId(null); }}><section className="confirmation-dialog checkin-schedule-dialog" role="dialog" aria-modal="true" aria-labelledby="checkin-schedule-title">
+      <header><div><p className="eyebrow">DAILY SCHEDULE</p><h2 id="checkin-schedule-title">{scheduleOfficial.official.full_name}</h2><p>{formatDate(eventDate)} · {scheduleOfficial.isCoachExpected ? "Referee Coach" : `${scheduleOfficial.games.length} assignment${scheduleOfficial.games.length === 1 ? "" : "s"}`}</p></div><button className="modal-close-button" aria-label="Close schedule" onClick={() => setScheduleOfficialId(null)}>×</button></header>
+      <div className="checkin-day-schedule">{scheduleOfficial.games.map((game) => {
+        const assignment = data.assignments.find((item) => item.game_id === game.id && item.official_id === scheduleOfficial.official.id);
+        const isCoachingGame = data.coachAssignments.some((item) => item.coach_id === scheduleOfficial.official.linked_user_id && (item.full_schedule || item.game_id === game.id));
+        return <article key={game.id}><time>{formatTime(game.starts_at)}</time><div><strong>{game.home_team} vs. {game.away_team}</strong><span>{game.venue_name || event.venue_name} · {game.field_name}</span><small>{assignment ? positionLabel(assignment.position, assignment.position_title) : isCoachingGame ? "Referee Coach" : "Event assignment"}</small></div></article>;
+      })}{!scheduleOfficial.games.length && <EmptyState>No scheduled games are available for this event day.</EmptyState>}</div>
+    </section></div>}
   </section>;
 }
 
@@ -1959,7 +1969,7 @@ function Dashboard({ session }: { session: Law18Session }) {
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.11</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.12</span></footer>
   </main>;
 }
 

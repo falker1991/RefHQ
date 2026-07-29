@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.5.11 is the Phase 1 pilot-administration release. Referee coaches assigned to a game or full event schedule are included in daily check-in eligibility and the live arrival roster even when they are not part of an imported referee crew. Coaching administration remains limited to assignors and administrators.
+Version 0.5.12 is the Phase 1 pilot-administration release. Selecting a person’s name in the live check-in roster opens a mobile-friendly modal containing their complete schedule for the selected day, including times, sites, fields, matchups, and referee or coaching positions.
 
 ## What is included
 

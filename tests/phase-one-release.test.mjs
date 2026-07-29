@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.11 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.12 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.11 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.11/);
+  assert.match(page, /Version 0\.5\.12/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.11");
+  assert.equal(JSON.parse(packageJson).version, "0.5.12");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -114,6 +114,15 @@ test("assigned referee coaches participate in daily check-in", async () => {
   assert.match(page, /assignedToday\.add\(coachOfficial\.id\)/);
   assert.match(page, /Referee Coach/);
   assert.match(page, /assignment\.full_schedule\) data\.games\.forEach\(\(game\) => assignmentDates\.add/);
+});
+
+test("check-in roster names open a complete daily schedule modal", async () => {
+  const [page, css] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
+  assert.match(page, /className="checkin-official-button"/);
+  assert.match(page, /setScheduleOfficialId\(official\.id\)/);
+  assert.match(page, /className="confirmation-dialog checkin-schedule-dialog"/);
+  assert.match(page, /className="checkin-day-schedule"/);
+  assert.match(css, /\.checkin-schedule-dialog/);
 });
 
 test("account merge migration transfers operational records and audits the merge", async () => {

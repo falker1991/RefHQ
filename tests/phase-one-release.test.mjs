@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.3 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.4 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.3 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.3/);
+  assert.match(page, /Version 0\.5\.4/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.3");
+  assert.equal(JSON.parse(packageJson).version, "0.5.4");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -38,6 +38,14 @@ test("official editor uses structured fields and role cards", async () => {
   assert.match(page, /official-fields-grid/);
   assert.match(page, /official-role-grid/);
   assert.match(page, /official-edit-actions/);
+});
+
+test("event access is discoverable and site-owner access is locked", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, />Event Access</);
+  assert.match(page, /Open Event Access/);
+  assert.match(page, /Site Owner — Full Access/);
+  assert.match(page, /owner-locked/);
 });
 
 test("account merge migration transfers operational records and audits the merge", async () => {

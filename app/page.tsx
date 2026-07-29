@@ -1811,13 +1811,13 @@ function Dashboard({ session }: { session: Law18Session }) {
     ...eventRoles,
   ])];
   const helpByRole: Record<MembershipRole, { title: string; items: string[] }> = {
-    site_owner: { title: "Site Owner", items: ["Create, archive, and manage organizations.", "Manage site-wide appearance campaigns and themes.", "Access every organization and administrative workflow."] },
-    organization_admin: { title: "Organization Admin", items: ["Manage organization officials, roles, events, and settings.", "Import schedules and officials, configure ratings, and assign event staff.", "Monitor schedules, check-ins, coaching, and ratings across the organization."] },
-    event_admin: { title: "Event Admin", items: ["Manage assigned events and their schedules, staff, and settings.", "Import event data, manage event access, and configure ratings.", "Monitor check-ins, coaching assignments, and event reports."] },
-    assignor: { title: "Assignor", items: ["Import and review schedules and referee crews for authorized events.", "Manage event access, referee coaches, and manual check-ins.", "Monitor the assignment board, check-in roster, and ratings tools when enabled."] },
-    site_coordinator: { title: "Site Coordinator", items: ["View the assignment board and schedule for your authorized event scope.", "Monitor arrivals and use event check-in tools.", "Select a roster name to view that person’s complete daily schedule."] },
-    referee_coach: { title: "Referee Coach", items: ["View crews and games within your assigned coaching scope.", "Use Rate Crew or Ratings to complete evaluations.", "Check in with the event QR code when assigned to work that day."] },
-    referee: { title: "Referee", items: ["View only your own imported assignments.", "Scan the on-site QR code to check in on an assigned event day.", "View evaluations that event staff have made public to you."] },
+    site_owner: { title: "Site Owner Navigation", items: ["Use the organization selector below the header to open the group you want to manage.", "Open Groups from your initials menu to create, open, archive, or restore organizations.", "Open Site Appearance from your initials menu to edit, save, schedule, or restore site themes.", "After selecting an organization and event, use the same event tabs described for organization administrators."] },
+    organization_admin: { title: "Organization Admin Navigation", items: ["Choose the organization and active event from the selectors below the header.", "Open Officials to add or edit people, set organization roles, merge accounts, or open Event Access.", "Open Import to add officials or upload an Assignr schedule into the selected event.", "Open Assignment Board or Schedule to review the day, Check-In to manage arrivals, Coaching to assign coaches, and Ratings to configure or review evaluations."] },
+    event_admin: { title: "Event Admin Navigation", items: ["Select an assigned event from the Active Event menu below the header.", "Open Officials, then Event Access, to add or update event staff for that event.", "Open Import for event schedule data, Schedule for game details, Check-In for arrivals, Coaching for coach assignments, and Ratings for evaluation settings and history."] },
+    assignor: { title: "Assignor Navigation", items: ["Select the event you are working from the Active Event menu below the header.", "Open Import to upload an authorized schedule, then use Assignment Board or Schedule to review crews.", "Open Check-In to filter arrivals, manually check someone in, undo a check-in, or select an official’s name to see their daily schedule.", "Open Coaching to place coaches on games. Use Rate Crew on a schedule game, or open Ratings and choose a game, when coaching tools are enabled."] },
+    site_coordinator: { title: "Site Coordinator Navigation", items: ["Select today’s event from the Active Event menu.", "Open Assignment Board or Schedule to review the games in your event scope.", "Open Check-In to monitor arrivals. Use its filters to narrow the roster, and select an official’s name to view that person’s full schedule for the day."] },
+    referee_coach: { title: "Referee Coach Navigation", items: ["Select the event you are coaching from the My Event menu.", "Open Schedule to see games and crews in your coaching scope.", "Select Rate Crew on a game to open its evaluation form, complete the crew ratings, and submit them together.", "You can also open Ratings, choose a game in the modal, and use the page underneath to review rating history.", "When Check-In appears, open it at the venue, select Scan QR Code, and scan the code displayed by event staff."] },
+    referee: { title: "Referee Navigation", items: ["Select the event you want from the My Event menu below the header.", "Open My Assignments to view your imported game schedule and positions.", "On an assigned event day, open Check-In, select Scan QR Code, and scan the code displayed by event staff. The scanner disappears after your check-in is recorded.", "Open My Evals to view evaluations that have been shared with you.", "Open your initials menu, then Account Settings, to update your contact and personal information."] },
   };
   const isAdministrativeStaff = ["site_owner", "organization_admin", "event_admin", "assignor"].some((role) => allRoles.has(role as MembershipRole));
   const isSiteCoordinator = allRoles.has("site_coordinator");
@@ -2029,9 +2029,9 @@ function Dashboard({ session }: { session: Law18Session }) {
       </div>
     </header>
     {helpOpen && <div className="confirmation-backdrop help-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setHelpOpen(false); }}><section className="confirmation-dialog role-help-dialog" role="dialog" aria-modal="true" aria-labelledby="role-help-title">
-      <header><div><p className="eyebrow">HELP & HOW-TO</p><h2 id="role-help-title">Your access in {organization?.name || "this organization"}</h2><p>This guide reflects your roles for the active organization and event.</p></div><button className="modal-close-button" aria-label="Close help" onClick={() => setHelpOpen(false)}>×</button></header>
+      <header><div><p className="eyebrow">HELP & HOW-TO</p><h2 id="role-help-title">How to Navigate Law18Ref</h2><p>Follow the directions below for your role in {organization?.name || "the active organization"}.</p></div><button className="modal-close-button" aria-label="Close help" onClick={() => setHelpOpen(false)}>×</button></header>
       <div className="role-help-roles">{activeGroupRoles.map((role) => <span className="role-badge" key={role}>{roleNames[role]}</span>)}</div>
-      <div className="role-help-content">{activeGroupRoles.map((role) => <article key={role}><h3>{helpByRole[role].title}</h3><ul>{helpByRole[role].items.map((item) => <li key={item}>{item}</li>)}</ul></article>)}{!activeGroupRoles.length && <EmptyState>No active role is assigned in this organization.</EmptyState>}</div>
+      <div className="role-help-content">{activeGroupRoles.map((role) => <section key={role}><h3>{helpByRole[role].title}</h3><ol>{helpByRole[role].items.map((item) => <li key={item}>{item}</li>)}</ol></section>)}{!activeGroupRoles.length && <EmptyState>No active role is assigned in this organization.</EmptyState>}</div>
       <div className="role-help-actions"><button className="primary" onClick={() => setHelpOpen(false)}>Close Help</button></div>
     </section></div>}
     <div className="eventbar">
@@ -2056,7 +2056,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.20</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.21</span></footer>
   </main>;
 }
 

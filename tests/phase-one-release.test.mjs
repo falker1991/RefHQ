@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.23 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.24 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.23 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.23/);
+  assert.match(page, /Version 0\.5\.24/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.23");
+  assert.equal(JSON.parse(packageJson).version, "0.5.24");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -182,6 +182,13 @@ test("assessment upsert uses a non-partial matching unique index", async () => {
   assert.match(client, /on_conflict=game_id,official_id,coach_id/);
   assert.match(migration, /create unique index assessments_game_official_coach_unique/);
   assert.doesNotMatch(migration, /where official_id is not null/i);
+});
+
+test("rating drafts are readable only by their creator", async () => {
+  const migration = await read("supabase/migrations/202607290024_private_rating_drafts.sql");
+  assert.match(migration, /as restrictive/);
+  assert.match(migration, /status <> 'draft'/);
+  assert.match(migration, /coach_id = auth\.uid\(\)/);
 });
 
 test("ratings history supports multi-select filters independent of sorting", async () => {

@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.5.23 is the Phase 1 pilot-administration release. Basic Eval official cards are more compact, place the score beside the official, support N/A ratings, and use smaller notes fields.
+Version 0.5.24 is the Phase 1 pilot-administration release. Rating drafts are protected by a restrictive database policy so only the account that created a draft can read it until submission.
 
 ## What is included
 

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.12 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.13 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.12 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.12/);
+  assert.match(page, /Version 0\.5\.13/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.12");
+  assert.equal(JSON.parse(packageJson).version, "0.5.13");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -123,6 +123,15 @@ test("check-in roster names open a complete daily schedule modal", async () => {
   assert.match(page, /className="confirmation-dialog checkin-schedule-dialog"/);
   assert.match(page, /className="checkin-day-schedule"/);
   assert.match(css, /\.checkin-schedule-dialog/);
+});
+
+test("rating configuration requires an explicit save and Basic Eval stores notes", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /Save Configuration/);
+  assert.match(page, /saveConfiguration/);
+  assert.match(page, /configuration\.ratingType === event\.rating_type/);
+  assert.match(page, /className="basic-eval-notes"/);
+  assert.match(page, /coach_notes: rating\.coach_notes \|\| null/);
 });
 
 test("account merge migration transfers operational records and audits the merge", async () => {

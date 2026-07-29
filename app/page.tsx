@@ -1081,12 +1081,16 @@ function AssessmentCenter({
   const [drafts, setDrafts] = useState<Record<string, CrewRatingDraft>>({});
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [configuration, setConfiguration] = useState({ ratingType: event.rating_type, adminOnly: event.ratings_admin_only });
   const [ratingSort, setRatingSort] = useState<"date" | "gender" | "age_group" | "referee" | "position">("date");
   const [historyEventId, setHistoryEventId] = useState("all");
   const [history, setHistory] = useState({ assessments: data.assessments, games: data.games, assignments: data.assignments, officials: data.officials });
   useEffect(() => {
     loadAuthorizedRatingHistory(session).then(setHistory).catch(() => undefined);
   }, [session, data.assessments.length]);
+  useEffect(() => {
+    setConfiguration({ ratingType: event.rating_type, adminOnly: event.ratings_admin_only });
+  }, [event.id, event.rating_type, event.ratings_admin_only]);
   const officialMap = new Map(data.officials.map((official) => [official.id, official]));
   const gameMap = new Map(data.games.map((game) => [game.id, game]));
   const historyOfficialMap = new Map(history.officials.map((official) => [official.id, official]));
@@ -1153,7 +1157,7 @@ function AssessmentCenter({
           match_control: event.rating_type === "skills_eval" ? rating.match_control : null,
           strengths: event.rating_type === "skills_eval" ? rating.strengths || null : null,
           development_focus: event.rating_type === "skills_eval" ? rating.development_focus || null : null,
-          coach_notes: event.rating_type === "skills_eval" ? rating.coach_notes || null : null,
+          coach_notes: rating.coach_notes || null,
         });
       }));
       setMessage(status === "draft" ? `Draft ratings saved for ${gameAssignments.length} officials.` : `Ratings submitted for ${gameAssignments.length} officials.`);
@@ -1165,13 +1169,13 @@ function AssessmentCenter({
     }
   }
 
-  async function configure(ratingType: EventRecord["rating_type"], adminOnly: boolean) {
+  async function saveConfiguration() {
     setBusy(true);
     setMessage("");
     try {
-      const updated = await updateEventRatingSettings(session, event.id, ratingType, adminOnly);
+      const updated = await updateEventRatingSettings(session, event.id, configuration.ratingType, configuration.adminOnly);
       onEventUpdated(updated);
-      setVisibility(adminOnly ? "private" : visibility);
+      setVisibility(configuration.adminOnly ? "private" : visibility);
       setMessage("Event rating settings updated.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to update event rating settings.");
@@ -1183,7 +1187,7 @@ function AssessmentCenter({
   if (!canSubmit) return <section className="page-section"><div className="section-title"><div><p className="eyebrow">MY FEEDBACK</p><h1>Ratings history</h1><p>Ratings shared with you appear here.</p></div></div><EmptyState>No public ratings are available yet.</EmptyState></section>;
   return <section className="page-section ratings-page">
     <div className="section-title"><div><p className="eyebrow">REFEREE DEVELOPMENT</p><h1>Ratings</h1><p>Rate every official assigned to a game in one view.</p></div></div>
-    {canConfigure && <article className="panel rating-settings"><div><p className="eyebrow">EVENT SETTINGS</p><h2>Rating configuration</h2><p>These settings apply to every game in {event.name}.</p></div><label>Evaluation type<select value={event.rating_type} disabled={busy} onChange={(e) => configure(e.target.value as EventRecord["rating_type"], event.ratings_admin_only)}><option value="skills_eval">Skills Eval</option><option value="basic_eval">Basic Eval</option></select></label><label className="visibility-lock"><input type="checkbox" checked={event.ratings_admin_only} disabled={busy} onChange={(e) => configure(event.rating_type, e.target.checked)} /><span><strong>Lock visibility to event staff</strong><small>Only administrators, event/game assignors, and referee coaches can view ratings.</small></span></label></article>}
+    {canConfigure && <article className="panel rating-settings"><div><p className="eyebrow">EVENT SETTINGS</p><h2>Rating configuration</h2><p>Changes remain private to this form until you save them.</p></div><label>Evaluation type<select value={configuration.ratingType} disabled={busy} onChange={(e) => setConfiguration({ ...configuration, ratingType: e.target.value as EventRecord["rating_type"] })}><option value="skills_eval">Skills Eval</option><option value="basic_eval">Basic Eval</option></select></label><label className="visibility-lock"><input type="checkbox" checked={configuration.adminOnly} disabled={busy} onChange={(e) => setConfiguration({ ...configuration, adminOnly: e.target.checked })} /><span><strong>Lock visibility to event staff</strong><small>Only administrators, event/game assignors, and referee coaches can view ratings.</small></span></label><button className="primary rating-config-save" disabled={busy || (configuration.ratingType === event.rating_type && configuration.adminOnly === event.ratings_admin_only)} onClick={saveConfiguration}>{busy ? "Saving…" : "Save Configuration"}</button></article>}
     <article className="panel crew-rating-workspace">
       <div className="panel-head"><div><p className="eyebrow">{event.rating_type === "skills_eval" ? "SKILLS EVAL" : "BASIC EVAL"}</p><h2>Select a game</h2></div></div>
       <div className="assessment-selects"><label>Game<select value={gameId} onChange={(e) => chooseGame(e.target.value)}><option value="">Choose a game</option>{eligibleGames.map((game) => <option value={game.id} key={game.id}>{formatDate(game.starts_at)} · {game.field_name} · {formatTime(game.starts_at)}</option>)}</select></label><label>Visibility<select value={event.ratings_admin_only ? "private" : visibility} disabled={event.ratings_admin_only} onChange={(e) => setVisibility(e.target.value as "public" | "private")}><option value="private">Private — event staff and referee coaches</option><option value="public">Public — visible to each referee</option></select></label>{event.ratings_admin_only && <p className="import-note">Visibility is locked to event staff for this event.</p>}</div>
@@ -1191,7 +1195,7 @@ function AssessmentCenter({
         const rating = drafts[assignment.official_id] || blankCrewRating();
         return <section className="crew-rating-card" key={assignment.official_id}><div className="crew-rating-heading"><span className="avatar">{initials(officialMap.get(assignment.official_id)?.full_name || "R")}</span><div><h3>{officialMap.get(assignment.official_id)?.full_name || "Official"}</h3><p>{positionLabel(assignment.position, assignment.position_title)}</p></div></div>
           {event.rating_type === "basic_eval"
-            ? <label className="basic-rating"><span><strong>Overall Rating</strong><small>1 developing · 5 excellent</small></span><select value={rating.overall_rating} onChange={(e) => updateDraft(assignment.official_id, { overall_rating: Number(e.target.value) })}>{[1,2,3,4,5].map((score) => <option key={score}>{score}</option>)}</select></label>
+            ? <div className="basic-eval-fields"><label className="basic-rating"><span><strong>Overall Rating</strong><small>1 developing · 5 excellent</small></span><select value={rating.overall_rating} onChange={(e) => updateDraft(assignment.official_id, { overall_rating: Number(e.target.value) })}>{[1,2,3,4,5].map((score) => <option key={score}>{score}</option>)}</select></label><label className="basic-eval-notes">Notes<textarea value={rating.coach_notes} placeholder="Add notes about this official…" onChange={(e) => updateDraft(assignment.official_id, { coach_notes: e.target.value })} /></label></div>
             : <><div className="skill-rating-grid">{([
               ["positioning", "Positioning"],
               ["decision_making", "Decision Making"],
@@ -1969,7 +1973,7 @@ function Dashboard({ session }: { session: Law18Session }) {
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.12</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.13</span></footer>
   </main>;
 }
 

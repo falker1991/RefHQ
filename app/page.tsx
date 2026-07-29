@@ -1505,15 +1505,27 @@ function DashboardHome({
   event,
   data,
   events,
+  adminView,
   onNavigate,
 }: {
   profile: Profile;
   event?: EventRecord;
   data: EventData;
   events: EventRecord[];
+  adminView: boolean;
   onNavigate: (view: View) => void;
 }) {
-  const checkedIn = new Set(data.checkIns.filter((item) => item.status === "checked_in").map((item) => item.official_id)).size;
+  const today = event ? new Intl.DateTimeFormat("en-CA", { timeZone: event.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()) : "";
+  const todayGameIds = new Set(data.games.filter((game) =>
+    event && new Intl.DateTimeFormat("en-CA", { timeZone: event.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(game.starts_at)) === today
+  ).map((game) => game.id));
+  const expectedToday = new Set(data.assignments.filter((assignment) => todayGameIds.has(assignment.game_id)).map((assignment) => assignment.official_id));
+  data.coachAssignments.forEach((assignment) => {
+    if (!todayGameIds.size || (!assignment.full_schedule && (!assignment.game_id || !todayGameIds.has(assignment.game_id)))) return;
+    const coachOfficial = data.officials.find((official) => official.linked_user_id === assignment.coach_id);
+    if (coachOfficial) expectedToday.add(coachOfficial.id);
+  });
+  const checkedIn = new Set(data.checkIns.filter((item) => item.event_date === today && item.status === "checked_in" && expectedToday.has(item.official_id)).map((item) => item.official_id)).size;
   const roleLabel = profile.role === "admin" ? "Administrator" : profile.role === "assignor" ? "Assignor" : profile.role === "coach" ? "Referee coach" : "Referee";
   const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const relevantEvents = events.filter((item) => new Date(`${item.ends_on}T23:59:59`).getTime() >= sevenDaysAgo)
@@ -1522,10 +1534,10 @@ function DashboardHome({
     <div className="welcome">
       <div><p className="eyebrow">DASHBOARD</p><h1>Welcome, {profile.full_name.split(" ")[0]}.</h1><p>Your events, assignments, and tournament-day tools in one place.</p></div>
     </div>
-    <div className="metrics dashboard-metrics">
-      <article><span className="metric-icon green">◇</span><div><strong>{events.length}</strong><p>Available events</p></div></article>
-      <article><span className="metric-icon blue">☷</span><div><strong>{data.games.length}</strong><p>Games in active event</p></div></article>
-      <article><span className="metric-icon green">✓</span><div><strong>{checkedIn}</strong><p>Officials checked in</p></div></article>
+    <div className={`metrics dashboard-metrics${adminView ? " admin-dashboard-metrics" : ""}`}>
+      {!adminView && <article><span className="metric-icon green">◇</span><div><strong>{events.length}</strong><p>Available events</p></div></article>}
+      {!adminView && <article><span className="metric-icon blue">☷</span><div><strong>{data.games.length}</strong><p>Games in active event</p></div></article>}
+      <article><span className="metric-icon green">✓</span><div><strong>{adminView ? `${checkedIn}/${expectedToday.size}` : checkedIn}</strong><p>{adminView ? "Today's Check Ins" : "Officials checked in"}</p></div></article>
       <article><span className="metric-icon blue">◎</span><div><strong className="role-metric">{roleLabel}</strong><p>Your account role</p></div></article>
     </div>
     <div className="dashboard-grid">
@@ -2041,7 +2053,7 @@ function Dashboard({ session }: { session: Law18Session }) {
     <div className="shell">
       {organizationActionMessage && <p className="pilot-message organization-message">{organizationActionMessage}</p>}
       {qrCheckInMessage && <p className="pilot-message qr-checkin-message">{qrCheckInMessage}</p>}
-      {profile && view === "dashboard" && <DashboardHome profile={profile} event={event} data={data} events={events} onNavigate={setView} />}
+      {profile && view === "dashboard" && <DashboardHome profile={profile} event={event} data={data} events={events} adminView={isAdministrativeStaff} onNavigate={setView} />}
       {event && view === "board" && (isStaff ? <AssignmentBoard data={data} /> : <RefereeDay event={event} data={data} session={session} />)}
       {event && view === "checkin" && (isStaff ? <CheckInView event={event} data={data} session={session} canManageCheckIns={isAdministrativeStaff} onRefresh={refreshCheckIns} /> : refereeHasCurrentOrFutureAssignment || coachHasCurrentOrFutureAssignment ? <RefereeCheckIn event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} /> : null)}
       {event && view === "schedule" && (isStaff || isCoach) && <ScheduleView session={session} event={event} data={data} canEdit={isAdministrativeStaff} canRateCrew={isCoach && canAssess} coachView={isCoach && !isAdministrativeStaff} onRateCrew={setRatingModalGameId} onCreated={() => refresh(event.id)} />}
@@ -2056,7 +2068,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.24</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.25</span></footer>
   </main>;
 }
 

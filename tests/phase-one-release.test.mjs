@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.24 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.25 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.24 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.24/);
+  assert.match(page, /Version 0\.5\.25/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.24");
+  assert.equal(JSON.parse(packageJson).version, "0.5.25");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -117,6 +117,16 @@ test("assigned referee coaches participate in daily check-in", async () => {
   assert.match(page, /assignedToday\.add\(coachOfficial\.id\)/);
   assert.match(page, /Referee Coach/);
   assert.match(page, /assignment\.full_schedule\) data\.games\.forEach\(\(game\) => assignmentDates\.add/);
+});
+
+test("administrative dashboard shows today's check-in progress and role only", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /adminView=\{isAdministrativeStaff\}/);
+  assert.match(page, /adminView \? `\$\{checkedIn\}\/\$\{expectedToday\.size\}` : checkedIn/);
+  assert.match(page, /adminView \? "Today's Check Ins" : "Officials checked in"/);
+  assert.match(page, /\{!adminView && <article><span className="metric-icon green">◇/);
+  assert.match(page, /\{!adminView && <article><span className="metric-icon blue">☷/);
+  assert.match(page, /Your account role/);
 });
 
 test("check-in roster names open a complete daily schedule modal", async () => {

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.22 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.23 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.22 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.22/);
+  assert.match(page, /Version 0\.5\.23/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.22");
+  assert.equal(JSON.parse(packageJson).version, "0.5.23");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -135,6 +135,10 @@ test("rating configuration requires an explicit save and Basic Eval stores notes
   assert.match(page, /configuration\.ratingType === event\.rating_type/);
   assert.match(page, /className="basic-eval-notes"/);
   assert.match(page, /coach_notes: rating\.coach_notes \|\| null/);
+  assert.match(page, /className="inline-basic-rating"/);
+  assert.match(page, /<option value="">N\/A<\/option>/);
+  assert.match(page, /overall_rating: e\.target\.value \? Number\(e\.target\.value\) : null/);
+  assert.match(page, /<textarea rows=\{2\}/);
 });
 
 test("administrative roster supports immediate manual check-in and undo", async () => {

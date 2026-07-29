@@ -1051,7 +1051,7 @@ function OfficialsDirectory({
 }
 
 type CrewRatingDraft = {
-  overall_rating: number;
+  overall_rating: number | null;
   positioning: number;
   decision_making: number;
   communication: number;
@@ -1062,7 +1062,7 @@ type CrewRatingDraft = {
 };
 
 const blankCrewRating = (): CrewRatingDraft => ({
-  overall_rating: 3,
+  overall_rating: null,
   positioning: 3,
   decision_making: 3,
   communication: 3,
@@ -1165,7 +1165,7 @@ function AssessmentCenter({
     data.assignments.filter((assignment) => assignment.game_id === nextGameId).forEach((assignment) => {
       const saved = data.assessments.find((assessment) => assessment.game_id === nextGameId && assessment.official_id === assignment.official_id && assessment.coach_id === session.user.id);
       nextDrafts[assignment.official_id] = saved ? {
-        overall_rating: saved.overall_rating || 3,
+        overall_rating: saved.overall_rating ?? null,
         positioning: saved.positioning || 3,
         decision_making: saved.decision_making || 3,
         communication: saved.communication || 3,
@@ -1245,9 +1245,9 @@ function AssessmentCenter({
       <div className="assessment-selects"><label>Game<select value={gameId} onChange={(e) => chooseGame(e.target.value)}><option value="">Choose a game</option>{eligibleGames.map((game) => <option value={game.id} key={game.id}>{formatDate(game.starts_at)} · {game.field_name} · {formatTime(game.starts_at)}</option>)}</select></label><label>Visibility<select value={event.ratings_admin_only ? "private" : visibility} disabled={event.ratings_admin_only} onChange={(e) => setVisibility(e.target.value as "public" | "private")}><option value="private">Private — event staff and referee coaches</option><option value="public">Public — visible to each referee</option></select></label>{event.ratings_admin_only && <p className="import-note">Visibility is locked to event staff for this event.</p>}</div>
       <div className="crew-rating-list">{gameAssignments.map((assignment) => {
         const rating = drafts[assignment.official_id] || blankCrewRating();
-        return <section className="crew-rating-card" key={assignment.official_id}><div className="crew-rating-heading"><span className="avatar">{initials(officialMap.get(assignment.official_id)?.full_name || "R")}</span><div><h3>{officialMap.get(assignment.official_id)?.full_name || "Official"}</h3><p>{positionLabel(assignment.position, assignment.position_title)}</p></div></div>
+        return <section className="crew-rating-card" key={assignment.official_id}><div className="crew-rating-heading"><span className="avatar">{initials(officialMap.get(assignment.official_id)?.full_name || "R")}</span><div className="crew-rating-identity"><h3>{officialMap.get(assignment.official_id)?.full_name || "Official"}</h3><p>{positionLabel(assignment.position, assignment.position_title)}</p></div>{event.rating_type === "basic_eval" && <label className="inline-basic-rating"><span>Rating</span><select aria-label={`Rating for ${officialMap.get(assignment.official_id)?.full_name || "official"}`} value={rating.overall_rating ?? ""} onChange={(e) => updateDraft(assignment.official_id, { overall_rating: e.target.value ? Number(e.target.value) : null })}><option value="">N/A</option>{[1,2,3,4,5].map((score) => <option value={score} key={score}>{score}</option>)}</select></label>}</div>
           {event.rating_type === "basic_eval"
-            ? <div className="basic-eval-fields"><label className="basic-rating"><span><strong>Overall Rating</strong><small>1 developing · 5 excellent</small></span><select value={rating.overall_rating} onChange={(e) => updateDraft(assignment.official_id, { overall_rating: Number(e.target.value) })}>{[1,2,3,4,5].map((score) => <option key={score}>{score}</option>)}</select></label><label className="basic-eval-notes">Notes<textarea value={rating.coach_notes} placeholder="Add notes about this official…" onChange={(e) => updateDraft(assignment.official_id, { coach_notes: e.target.value })} /></label></div>
+            ? <div className="basic-eval-fields"><label className="basic-eval-notes">Notes<textarea rows={2} value={rating.coach_notes} placeholder="Add notes about this official…" onChange={(e) => updateDraft(assignment.official_id, { coach_notes: e.target.value })} /></label></div>
             : <><div className="skill-rating-grid">{([
               ["positioning", "Positioning"],
               ["decision_making", "Decision Making"],
@@ -2056,7 +2056,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.22</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.23</span></footer>
   </main>;
 }
 

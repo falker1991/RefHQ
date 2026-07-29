@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.5.21 is the Phase 1 pilot-administration release. Help now uses a readable, scrollable single-column navigation guide with task-oriented directions tailored to each active-group role.
+Version 0.5.22 is the Phase 1 pilot-administration release. Rating-history filters now use compact multi-select dropdowns for referees, age groups, genders, positions, and dates.
 
 ## What is included
 

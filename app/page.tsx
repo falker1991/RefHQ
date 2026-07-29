@@ -1266,7 +1266,7 @@ function AssessmentCenter({
         ["genders", "Genders", filterOptions.genders],
         ["positions", "Positions", filterOptions.positions],
         ["dates", "Dates", filterOptions.dates],
-      ] as const).map(([key, label, options]) => <fieldset key={key}><legend>{label}</legend>{options.map((option) => <label key={option}><input type="checkbox" checked={historyFilters[key].includes(option)} onChange={() => toggleHistoryFilter(key, option)} /><span>{key === "dates" ? formatDate(option) : option}</span></label>)}{!options.length && <small>No options available</small>}</fieldset>)}</div><button className="text-button clear-rating-filters" disabled={!activeHistoryFilterCount} onClick={() => setHistoryFilters({ referees: [], ageGroups: [], genders: [], positions: [], dates: [] })}>Clear All Filters</button></details>
+      ] as const).map(([key, label, options]) => <details className="rating-filter-dropdown" key={key}><summary><span>{label}</span><small>{historyFilters[key].length ? `${historyFilters[key].length} selected` : "All"}</small></summary><div className="rating-filter-options">{options.map((option) => <label key={option}><input type="checkbox" checked={historyFilters[key].includes(option)} onChange={() => toggleHistoryFilter(key, option)} /><span>{key === "dates" ? formatDate(option) : option}</span></label>)}{!options.length && <small>No options available</small>}</div></details>)}</div><button className="text-button clear-rating-filters" disabled={!activeHistoryFilterCount} onClick={() => setHistoryFilters({ referees: [], ageGroups: [], genders: [], positions: [], dates: [] })}>Clear All Filters</button></details>
       {sortedAssessments.map((assessment) => {
       const skillAverage = [assessment.positioning, assessment.decision_making, assessment.communication, assessment.match_control].filter((item): item is number => item !== null).reduce((sum, item, _, all) => sum + item / all.length, 0);
       const score = assessment.evaluation_type === "basic_eval" ? assessment.overall_rating : skillAverage;
@@ -2056,7 +2056,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.21</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.22</span></footer>
   </main>;
 }
 

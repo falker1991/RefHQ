@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.14 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.15 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.14 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.14/);
+  assert.match(page, /Version 0\.5\.15/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.14");
+  assert.equal(JSON.parse(packageJson).version, "0.5.15");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -95,8 +95,7 @@ test("ratings game options are concise and mobile controls stay within the works
 
 test("coach-only schedules exclude operational and HQ locations", async () => {
   const page = await read("app/page.tsx");
-  assert.match(page, /coachView\s*\?\s*data\.games\.filter/);
-  assert.match(page, /!game\.operational/);
+  assert.match(page, /coachView\s*\?\s*data\.games\.filter\(isRateableGame\)/);
   assert.match(page, /toLowerCase\(\)\.includes\("hq"\)/);
   assert.match(page, /coachView=\{isCoach && !isAdministrativeStaff\}/);
 });
@@ -143,6 +142,14 @@ test("administrative roster supports immediate manual check-in and undo", async 
   assert.doesNotMatch(page, /confirm\([^)]*check.?in/i);
   assert.match(client, /export async function undoCheckIn/);
   assert.match(client, /method: "DELETE"/);
+});
+
+test("Rate Crew buttons and rating choices exclude HQ and operational games", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /function isRateableGame/);
+  assert.match(page, /!game\.operational/);
+  assert.match(page, /canRateCrew && isRateableGame\(game\)/);
+  assert.match(page, /eligibleGames = data\.games\.filter\(isRateableGame\)/);
 });
 
 test("account merge migration transfers operational records and audits the merge", async () => {

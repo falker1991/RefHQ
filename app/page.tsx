@@ -127,6 +127,11 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat([], { weekday: "long", month: "short", day: "numeric" }).format(date);
 }
 
+function isRateableGame(game: GameRecord) {
+  return !game.operational
+    && !`${game.field_name} ${game.venue_name || ""}`.toLowerCase().includes("hq");
+}
+
 function positionLabel(position: AssignmentRecord["position"], importedTitle?: string | null) {
   if (importedTitle?.trim()) return importedTitle.trim();
   return {
@@ -538,7 +543,7 @@ function ScheduleView({ session, event, data, canEdit, canRateCrew, coachView, o
     ? timeSortValue(a.starts_at) - timeSortValue(b.starts_at)
     : groupLabel(a).localeCompare(groupLabel(b), undefined, { numeric: true });
   const visibleGames = coachView
-    ? data.games.filter((game) => !game.operational && !`${game.field_name} ${game.venue_name || ""}`.toLowerCase().includes("hq"))
+    ? data.games.filter(isRateableGame)
     : data.games;
   const groupedGames = [...visibleGames].sort((a, b) => compareGroups(a, b) || a.starts_at.localeCompare(b.starts_at))
     .reduce<Record<string, GameRecord[]>>((groups, item) => ({ ...groups, [groupLabel(item)]: [...(groups[groupLabel(item)] || []), item] }), {});
@@ -548,7 +553,7 @@ function ScheduleView({ session, event, data, canEdit, canRateCrew, coachView, o
     {message && <p className="pilot-message">{message}</p>}
     <div className="schedule-groups">{Object.entries(groupedGames).map(([label, games]) => <details className="panel schedule-group" open key={label}><summary><span>{label}</span><small>{games.length} game{games.length === 1 ? "" : "s"}</small></summary><div className="schedule-list">{games.map((game) => {
       const crew = data.assignments.filter((assignment) => assignment.game_id === game.id);
-      return <article className="schedule-card coach-schedule-card" key={game.id}><div className="timebox"><time>{formatDate(game.starts_at)}</time><strong>{formatTime(game.starts_at)}</strong><span>{game.field_name}</span></div><div className="schedule-game-details"><h2>{game.home_team} vs. {game.away_team}</h2><p>{[game.age_group, game.gender, game.division].filter(Boolean).join(" · ")}</p><div className="schedule-crew-list">{crew.map((assignment) => <span key={assignment.id}><b>{positionLabel(assignment.position, assignment.position_title)}</b><strong>{officials.get(assignment.official_id)?.full_name || "Open"}</strong></span>)}{!crew.length && <small>No crew assignments are visible for this game.</small>}</div></div>{canRateCrew && <button className="primary rate-crew-button" onClick={() => onRateCrew(game.id)}>Rate Crew</button>}</article>;
+      return <article className="schedule-card coach-schedule-card" key={game.id}><div className="timebox"><time>{formatDate(game.starts_at)}</time><strong>{formatTime(game.starts_at)}</strong><span>{game.field_name}</span></div><div className="schedule-game-details"><h2>{game.home_team} vs. {game.away_team}</h2><p>{[game.age_group, game.gender, game.division].filter(Boolean).join(" · ")}</p><div className="schedule-crew-list">{crew.map((assignment) => <span key={assignment.id}><b>{positionLabel(assignment.position, assignment.position_title)}</b><strong>{officials.get(assignment.official_id)?.full_name || "Open"}</strong></span>)}{!crew.length && <small>No crew assignments are visible for this game.</small>}</div></div>{canRateCrew && isRateableGame(game) && <button className="primary rate-crew-button" onClick={() => onRateCrew(game.id)}>Rate Crew</button>}</article>;
     })}</div></details>)}</div>
   </section>;
 }
@@ -1110,7 +1115,7 @@ function AssessmentCenter({
   const historyOfficialMap = new Map(history.officials.map((official) => [official.id, official]));
   const historyGameMap = new Map(history.games.map((game) => [game.id, game]));
   const gameAssignments = [...new Map(data.assignments.filter((assignment) => assignment.game_id === gameId).map((assignment) => [assignment.official_id, assignment])).values()];
-  const eligibleGames = data.games.filter((game) => !game.operational).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+  const eligibleGames = data.games.filter(isRateableGame).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
   const sortedAssessments = history.assessments.filter((item) => historyEventId === "all" || historyGameMap.get(item.game_id)?.event_id === historyEventId).sort((a, b) => {
     const aGame = historyGameMap.get(a.game_id);
     const bGame = historyGameMap.get(b.game_id);
@@ -1987,7 +1992,7 @@ function Dashboard({ session }: { session: Law18Session }) {
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.14</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.15</span></footer>
   </main>;
 }
 

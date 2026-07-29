@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.5.6 is the Phase 1 pilot-administration release. A persistent page-refresh control now sits beside the user badge. Officials can check in through an in-app camera scanner that disappears after their successful daily check-in, and coaching administrators can assign one coach to multiple games or work from a filterable full-schedule view.
+Version 0.5.7 is the Phase 1 pilot-administration release. Referee coaches can see the assigned crew for every game in their authorized scope and open a mobile-friendly crew-rating workspace directly from each schedule card. Coach visibility remains limited by full-schedule or selected-game access.
 
 ## What is included
 

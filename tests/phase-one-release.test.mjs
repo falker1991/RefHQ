@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.6 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.7 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.6 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.6/);
+  assert.match(page, /Version 0\.5\.7/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.6");
+  assert.equal(JSON.parse(packageJson).version, "0.5.7");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -68,6 +68,22 @@ test("top bar has an accessible page refresh button beside the account menu", as
   assert.match(page, /className="topbar-account-actions"/);
   assert.match(page, /className="page-refresh-button" aria-label="Refresh page"/);
   assert.match(page, /window\.location\.reload\(\)/);
+});
+
+test("coach schedule lists crews and opens the selected game's rating workspace", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /schedule-crew-list/);
+  assert.match(page, />Rate Crew</);
+  assert.match(page, /setRatingGameId\(gameId\)/);
+  assert.match(page, /initialGameId=\{ratingGameId\}/);
+});
+
+test("coach crew visibility is scoped by a dedicated RLS migration", async () => {
+  const migration = await read("supabase/migrations/202607290022_coach_crew_visibility.sql");
+  assert.match(migration, /coach_can_view_game/);
+  assert.match(migration, /coaches view assigned game crews/);
+  assert.match(migration, /coaches view assigned crew officials/);
+  assert.match(migration, /full_schedule_access/);
 });
 
 test("account merge migration transfers operational records and audits the merge", async () => {

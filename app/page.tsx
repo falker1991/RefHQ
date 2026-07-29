@@ -453,7 +453,7 @@ function CheckInView({ event, data, session, onRefresh }: { event: EventRecord; 
   </section>;
 }
 
-function ScheduleView({ session, event, data, onCreated }: { session: Law18Session; event: EventRecord; data: EventData; onCreated: () => void }) {
+function ScheduleView({ session, event, data, canEdit, canRateCrew, onRateCrew, onCreated }: { session: Law18Session; event: EventRecord; data: EventData; canEdit: boolean; canRateCrew: boolean; onRateCrew: (gameId: string) => void; onCreated: () => void }) {
   const officials = new Map(data.officials.map((official) => [official.id, official]));
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -491,12 +491,12 @@ function ScheduleView({ session, event, data, onCreated }: { session: Law18Sessi
   const groupedGames = [...data.games].sort((a, b) => compareGroups(a, b) || a.starts_at.localeCompare(b.starts_at))
     .reduce<Record<string, GameRecord[]>>((groups, item) => ({ ...groups, [groupLabel(item)]: [...(groups[groupLabel(item)] || []), item] }), {});
   return <section className="page-section"><div className="section-title"><div><p className="eyebrow">EVENT SCHEDULE</p><h1>Games and crews</h1><p>{data.games.length} imported games</p></div></div>
-    <div className="schedule-tools"><label>Sort and group by<select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}><option value="date">Date</option><option value="time">Time</option><option value="site">Site</option><option value="field">Field</option><option value="age_group">Age group</option><option value="gender">Gender</option><option value="competition">Competition</option></select></label><button className="secondary" onClick={() => setAdding((value) => !value)}>{adding ? "Cancel" : "Add game manually"}</button></div>
+    <div className="schedule-tools"><label>Sort and group by<select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}><option value="date">Date</option><option value="time">Time</option><option value="site">Site</option><option value="field">Field</option><option value="age_group">Age group</option><option value="gender">Gender</option><option value="competition">Competition</option></select></label>{canEdit && <button className="secondary" onClick={() => setAdding((value) => !value)}>{adding ? "Cancel" : "Add game manually"}</button>}</div>
     {adding && <article className="panel manual-entry-form"><h2>Add a game to {event.name}</h2><div className="manual-form-grid"><label>Date and time<input type="datetime-local" value={game.starts_at} onChange={(e) => setGame({ ...game, starts_at: e.target.value })} /></label><label>Field<input value={game.field_name} onChange={(e) => setGame({ ...game, field_name: e.target.value })} /></label><label>Home team<input value={game.home_team} onChange={(e) => setGame({ ...game, home_team: e.target.value })} /></label><label>Away team<input value={game.away_team} onChange={(e) => setGame({ ...game, away_team: e.target.value })} /></label><label>Division or competition<input value={game.division} onChange={(e) => setGame({ ...game, division: e.target.value })} /></label></div><button className="primary" disabled={busy || !game.starts_at || !game.field_name.trim() || !game.home_team.trim() || !game.away_team.trim()} onClick={addGame}>{busy ? "Adding…" : "Add game"}</button></article>}
     {message && <p className="pilot-message">{message}</p>}
     <div className="schedule-groups">{Object.entries(groupedGames).map(([label, games]) => <details className="panel schedule-group" open key={label}><summary><span>{label}</span><small>{games.length} game{games.length === 1 ? "" : "s"}</small></summary><div className="schedule-list">{games.map((game) => {
       const crew = data.assignments.filter((assignment) => assignment.game_id === game.id);
-      return <article className="schedule-card" key={game.id}><div className="timebox"><time>{formatDate(game.starts_at)}</time><strong>{formatTime(game.starts_at)}</strong><span>{game.field_name}</span></div><div><h2>{game.home_team} vs. {game.away_team}</h2><p>{[game.age_group, game.gender, game.division].filter(Boolean).join(" · ")}</p><span className="crew-line">{crew.map((assignment) => `${positionLabel(assignment.position, assignment.position_title)}: ${officials.get(assignment.official_id)?.full_name || "Open"}`).join(" · ")}</span></div></article>;
+      return <article className="schedule-card coach-schedule-card" key={game.id}><div className="timebox"><time>{formatDate(game.starts_at)}</time><strong>{formatTime(game.starts_at)}</strong><span>{game.field_name}</span></div><div className="schedule-game-details"><h2>{game.home_team} vs. {game.away_team}</h2><p>{[game.age_group, game.gender, game.division].filter(Boolean).join(" · ")}</p><div className="schedule-crew-list">{crew.map((assignment) => <span key={assignment.id}><b>{positionLabel(assignment.position, assignment.position_title)}</b><strong>{officials.get(assignment.official_id)?.full_name || "Open"}</strong></span>)}{!crew.length && <small>No crew assignments are visible for this game.</small>}</div></div>{canRateCrew && <button className="primary rate-crew-button" onClick={() => onRateCrew(game.id)}>Rate Crew</button>}</article>;
     })}</div></details>)}</div>
   </section>;
 }
@@ -1025,6 +1025,7 @@ function AssessmentCenter({
   canConfigure,
   onSaved,
   onEventUpdated,
+  initialGameId,
 }: {
   session: Law18Session;
   event: EventRecord;
@@ -1035,6 +1036,7 @@ function AssessmentCenter({
   canConfigure: boolean;
   onSaved: () => void;
   onEventUpdated: (event: EventRecord) => void;
+  initialGameId?: string;
 }) {
   const [gameId, setGameId] = useState("");
   const [visibility, setVisibility] = useState<"public" | "private">(event.ratings_admin_only ? "private" : "public");
@@ -1085,6 +1087,9 @@ function AssessmentCenter({
     });
     setDrafts(nextDrafts);
   }
+  useEffect(() => {
+    if (initialGameId && data.games.some((game) => game.id === initialGameId)) chooseGame(initialGameId);
+  }, [initialGameId]);
 
   function updateDraft(officialId: string, changes: Partial<CrewRatingDraft>) {
     setDrafts((current) => ({ ...current, [officialId]: { ...(current[officialId] || blankCrewRating()), ...changes } }));
@@ -1689,6 +1694,7 @@ function Dashboard({ session }: { session: Law18Session }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [accountOpen, setAccountOpen] = useState(false);
+  const [ratingGameId, setRatingGameId] = useState("");
   const [organizationActionMessage, setOrganizationActionMessage] = useState("");
   const [qrCheckInMessage, setQrCheckInMessage] = useState("");
   const allRoles = new Set<MembershipRole>([
@@ -1906,10 +1912,10 @@ function Dashboard({ session }: { session: Law18Session }) {
       {profile && view === "dashboard" && <DashboardHome profile={profile} event={event} data={data} events={events} onNavigate={setView} />}
       {event && view === "board" && (isStaff ? <AssignmentBoard data={data} /> : <RefereeDay event={event} data={data} session={session} />)}
       {event && view === "checkin" && (isStaff ? <CheckInView event={event} data={data} session={session} onRefresh={refreshCheckIns} /> : refereeHasCurrentOrFutureAssignment ? <RefereeCheckIn event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} /> : null)}
-      {event && view === "schedule" && (isStaff || isCoach) && <ScheduleView session={session} event={event} data={data} onCreated={() => refresh(event.id)} />}
+      {event && view === "schedule" && (isStaff || isCoach) && <ScheduleView session={session} event={event} data={data} canEdit={isAdministrativeStaff} canRateCrew={isCoach && canAssess} onRateCrew={(gameId) => { setRatingGameId(gameId); setView("assessments"); }} onCreated={() => refresh(event.id)} />}
       {isAdministrativeStaff && profile && organization && view === "officials" && <OfficialsDirectory session={session} profile={profile} organizationRoles={organizationRoles} eventRoles={eventRoles} canManageOrganizationRoles={Boolean(profile.is_site_owner || organizationRoles.includes("organization_admin"))} organizationId={organization.id} officials={organizationOfficials} data={data} event={event} events={events} onCreated={() => loadOrganizationOfficials(session, organization.id).then(setOrganizationOfficials)} />}
       {event && view === "coaching" && <CoachWorkspace session={session} event={event} data={data} organizationOfficials={organizationOfficials} canManage={isAdministrativeStaff} onSaved={() => refresh(event.id)} />}
-      {event && organization && view === "assessments" && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={canConfigureRatings} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
+      {event && organization && view === "assessments" && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={canConfigureRatings} initialGameId={ratingGameId} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
       {isAdministrativeStaff && organization && view === "import" && profile && <ImportView session={session} profile={profile} organizationId={organization.id} organization={organization} events={events} canConfigureAliases={canConfigureRatings} onImported={handleImported} />}
       {profile && view === "account" && <AccountSettings session={session} profile={profile} onUpdated={setProfile} />}
       {view === "groups" && (allRoles.has("site_owner")
@@ -1917,7 +1923,7 @@ function Dashboard({ session }: { session: Law18Session }) {
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.6</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.7</span></footer>
   </main>;
 }
 

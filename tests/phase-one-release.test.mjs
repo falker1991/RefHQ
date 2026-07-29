@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.2 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.3 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.2 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.2/);
+  assert.match(page, /Version 0\.5\.3/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.2");
+  assert.equal(JSON.parse(packageJson).version, "0.5.3");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -31,6 +31,13 @@ test("officials directory displays all organization roles", async () => {
   const page = await read("app/page.tsx");
   assert.match(page, /Organization Roles/);
   assert.match(page, /roles\.map\(\(role\) => <span className="role-badge"/);
+});
+
+test("official editor uses structured fields and role cards", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /official-fields-grid/);
+  assert.match(page, /official-role-grid/);
+  assert.match(page, /official-edit-actions/);
 });
 
 test("account merge migration transfers operational records and audits the merge", async () => {

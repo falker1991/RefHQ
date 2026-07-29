@@ -1086,6 +1086,7 @@ function AssessmentCenter({
   modal = false,
   onClose,
   hideWorkspace = false,
+  onOpenRating,
 }: {
   session: Law18Session;
   event: EventRecord;
@@ -1100,6 +1101,7 @@ function AssessmentCenter({
   modal?: boolean;
   onClose?: () => void;
   hideWorkspace?: boolean;
+  onOpenRating?: () => void;
 }) {
   const [gameId, setGameId] = useState("");
   const [visibility, setVisibility] = useState<"public" | "private">(event.ratings_admin_only ? "private" : "public");
@@ -1242,7 +1244,7 @@ function AssessmentCenter({
 
   if (!canSubmit) return <section className="page-section"><div className="section-title"><div><p className="eyebrow">MY FEEDBACK</p><h1>Ratings history</h1><p>Ratings shared with you appear here.</p></div></div><EmptyState>No public ratings are available yet.</EmptyState></section>;
   return <section className={`page-section ratings-page${modal ? " rating-modal" : ""}`} role={modal ? "dialog" : undefined} aria-modal={modal || undefined} aria-label={modal ? "Rate crew" : undefined} onClick={modal ? (click) => { if (click.target === click.currentTarget) onClose?.(); } : undefined}>
-    <div className="section-title"><div><p className="eyebrow">REFEREE DEVELOPMENT</p><h1>Ratings</h1><p>Rate every official assigned to a game in one view.</p></div></div>
+    <div className="section-title"><div><p className="eyebrow">REFEREE DEVELOPMENT</p><h1>Ratings</h1><p>Rate every official assigned to a game in one view.</p></div>{hideWorkspace && <button className="primary" onClick={onOpenRating}>Rate a Crew</button>}</div>
     {canConfigure && <article className="panel rating-settings"><div><p className="eyebrow">EVENT SETTINGS</p><h2>Rating configuration</h2><p>Changes remain private to this form until you save them.</p></div><label>Evaluation type<select value={configuration.ratingType} disabled={busy} onChange={(e) => setConfiguration({ ...configuration, ratingType: e.target.value as EventRecord["rating_type"] })}><option value="skills_eval">Skills Eval</option><option value="basic_eval">Basic Eval</option></select></label><label className="visibility-lock"><input type="checkbox" checked={configuration.adminOnly} disabled={busy} onChange={(e) => setConfiguration({ ...configuration, adminOnly: e.target.checked })} /><span><strong>Lock visibility to event staff</strong><small>Only administrators, event/game assignors, and referee coaches can view ratings.</small></span></label><button className="primary rating-config-save" disabled={busy || (configuration.ratingType === event.rating_type && configuration.adminOnly === event.ratings_admin_only)} onClick={saveConfiguration}>{busy ? "Saving…" : "Save Configuration"}</button></article>}
     {!hideWorkspace && <article className="panel crew-rating-workspace">
       <div className="panel-head"><div><p className="eyebrow">{event.rating_type === "skills_eval" ? "SKILLS EVAL" : "BASIC EVAL"}</p><h2>{modal ? "Rate Crew" : "Select a game"}</h2></div>{modal && <button className="modal-close" aria-label="Close rating form" onClick={onClose}>×</button>}</div>
@@ -2031,7 +2033,7 @@ function Dashboard({ session }: { session: Law18Session }) {
   return <main>
     <header className="topbar">
       <button className="brand" aria-label="Law18Referee Management dashboard" onClick={() => setView("dashboard")}><Mark /></button>
-      <nav>{nav.map(([id, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => { setView(id); if (id === "assessments" && canAssess) setRatingModalGameId(""); }}>{label}</button>)}</nav>
+      <nav>{nav.map(([id, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}>{label}</button>)}</nav>
       <div className="topbar-account-actions">
         <button className="help-button" aria-label="Open role help" title="Help and how-to" onClick={() => setHelpOpen(true)}>?</button>
         <button className="page-refresh-button" aria-label="Refresh page" title="Refresh page" onClick={() => window.location.reload()}>↻</button>
@@ -2067,7 +2069,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {event && view === "schedule" && (isStaff || isCoach) && <ScheduleView session={session} event={event} data={data} canEdit={isAdministrativeStaff} canRateCrew={isCoach && canAssess} coachView={isCoach && !isAdministrativeStaff} onRateCrew={setRatingModalGameId} onCreated={() => refresh(event.id)} />}
       {isAdministrativeStaff && profile && organization && view === "officials" && <OfficialsDirectory session={session} profile={profile} organizationRoles={organizationRoles} eventRoles={eventRoles} canManageOrganizationRoles={Boolean(profile.is_site_owner || organizationRoles.includes("organization_admin"))} organizationId={organization.id} officials={organizationOfficials} data={data} event={event} events={events} onCreated={() => loadOrganizationOfficials(session, organization.id).then(setOrganizationOfficials)} />}
       {event && view === "coaching" && isAdministrativeStaff && <CoachWorkspace session={session} event={event} data={data} organizationOfficials={organizationOfficials} canManage onSaved={() => refresh(event.id)} />}
-      {event && organization && view === "assessments" && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={canConfigureRatings} hideWorkspace={canAssess} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
+      {event && organization && view === "assessments" && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={canConfigureRatings} hideWorkspace={canAssess} onOpenRating={() => setRatingModalGameId("")} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
       {isAdministrativeStaff && organization && view === "import" && profile && <ImportView session={session} profile={profile} organizationId={organization.id} organization={organization} events={events} canConfigureAliases={canConfigureRatings} onImported={handleImported} />}
       {profile && view === "account" && <AccountSettings session={session} profile={profile} onUpdated={setProfile} />}
       {view === "groups" && (allRoles.has("site_owner")
@@ -2076,7 +2078,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.27</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.28</span></footer>
   </main>;
 }
 

@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.5.19 is the Phase 1 pilot-administration release. Schedule-launched crew ratings now open in a focused modal, while successful submissions close the modal or reset the Ratings tab for the next game.
+Version 0.5.20 is the Phase 1 pilot-administration release. Crew-rating entry now uses the same focused modal from both the Schedule and Ratings tabs, while the Ratings page retains configuration and history.
 
 ## What is included
 

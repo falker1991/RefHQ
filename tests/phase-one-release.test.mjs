@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.19 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.20 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.19 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.19/);
+  assert.match(page, /Version 0\.5\.20/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.19");
+  assert.equal(JSON.parse(packageJson).version, "0.5.20");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -75,9 +75,11 @@ test("coach schedule lists crews and opens the selected game's rating modal", as
   assert.match(page, /schedule-crew-list/);
   assert.match(page, />Rate Crew</);
   assert.match(page, /onRateCrew=\{setRatingModalGameId\}/);
-  assert.match(page, /initialGameId=\{ratingModalGameId\} modal/);
+  assert.match(page, /initialGameId=\{ratingModalGameId \|\| undefined\} modal/);
   assert.match(page, /if \(modal\) onClose\?\.\(\)/);
   assert.match(page, /else chooseGame\(""\)/);
+  assert.match(page, /id === "assessments" && canAssess/);
+  assert.match(page, /hideWorkspace=\{canAssess\}/);
 });
 
 test("coach crew visibility is scoped by a dedicated RLS migration", async () => {

@@ -1085,6 +1085,7 @@ function AssessmentCenter({
   initialGameId,
   modal = false,
   onClose,
+  hideWorkspace = false,
 }: {
   session: Law18Session;
   event: EventRecord;
@@ -1098,6 +1099,7 @@ function AssessmentCenter({
   initialGameId?: string;
   modal?: boolean;
   onClose?: () => void;
+  hideWorkspace?: boolean;
 }) {
   const [gameId, setGameId] = useState("");
   const [visibility, setVisibility] = useState<"public" | "private">(event.ratings_admin_only ? "private" : "public");
@@ -1238,7 +1240,7 @@ function AssessmentCenter({
   return <section className={`page-section ratings-page${modal ? " rating-modal" : ""}`} role={modal ? "dialog" : undefined} aria-modal={modal || undefined} aria-label={modal ? "Rate crew" : undefined} onClick={modal ? (click) => { if (click.target === click.currentTarget) onClose?.(); } : undefined}>
     <div className="section-title"><div><p className="eyebrow">REFEREE DEVELOPMENT</p><h1>Ratings</h1><p>Rate every official assigned to a game in one view.</p></div></div>
     {canConfigure && <article className="panel rating-settings"><div><p className="eyebrow">EVENT SETTINGS</p><h2>Rating configuration</h2><p>Changes remain private to this form until you save them.</p></div><label>Evaluation type<select value={configuration.ratingType} disabled={busy} onChange={(e) => setConfiguration({ ...configuration, ratingType: e.target.value as EventRecord["rating_type"] })}><option value="skills_eval">Skills Eval</option><option value="basic_eval">Basic Eval</option></select></label><label className="visibility-lock"><input type="checkbox" checked={configuration.adminOnly} disabled={busy} onChange={(e) => setConfiguration({ ...configuration, adminOnly: e.target.checked })} /><span><strong>Lock visibility to event staff</strong><small>Only administrators, event/game assignors, and referee coaches can view ratings.</small></span></label><button className="primary rating-config-save" disabled={busy || (configuration.ratingType === event.rating_type && configuration.adminOnly === event.ratings_admin_only)} onClick={saveConfiguration}>{busy ? "Saving…" : "Save Configuration"}</button></article>}
-    <article className="panel crew-rating-workspace">
+    {!hideWorkspace && <article className="panel crew-rating-workspace">
       <div className="panel-head"><div><p className="eyebrow">{event.rating_type === "skills_eval" ? "SKILLS EVAL" : "BASIC EVAL"}</p><h2>{modal ? "Rate Crew" : "Select a game"}</h2></div>{modal && <button className="modal-close" aria-label="Close rating form" onClick={onClose}>×</button>}</div>
       <div className="assessment-selects"><label>Game<select value={gameId} onChange={(e) => chooseGame(e.target.value)}><option value="">Choose a game</option>{eligibleGames.map((game) => <option value={game.id} key={game.id}>{formatDate(game.starts_at)} · {game.field_name} · {formatTime(game.starts_at)}</option>)}</select></label><label>Visibility<select value={event.ratings_admin_only ? "private" : visibility} disabled={event.ratings_admin_only} onChange={(e) => setVisibility(e.target.value as "public" | "private")}><option value="private">Private — event staff and referee coaches</option><option value="public">Public — visible to each referee</option></select></label>{event.ratings_admin_only && <p className="import-note">Visibility is locked to event staff for this event.</p>}</div>
       <div className="crew-rating-list">{gameAssignments.map((assignment) => {
@@ -1256,7 +1258,7 @@ function AssessmentCenter({
       })}{gameId && !gameAssignments.length && <EmptyState>No officials are assigned to this game.</EmptyState>}</div>
       {message && <p className="pilot-message assessment-message">{message}</p>}
       <div className="assessment-actions"><button className="secondary" disabled={busy || !gameAssignments.length} onClick={() => submitCrew("draft")}>Save crew draft</button><button className="primary" disabled={busy || !gameAssignments.length} onClick={() => submitCrew("submitted")}>Submit all ratings</button></div>
-    </article>
+    </article>}
     <article className="panel history ratings-history"><div className="panel-head"><div><p className="eyebrow">HISTORY</p><h2>{sortedAssessments.length} matching rating{sortedAssessments.length === 1 ? "" : "s"}</h2></div><div className="history-filters"><label className="compact-sort">Event<select value={historyEventId} onChange={(e) => setHistoryEventId(e.target.value)}><option value="all">All permitted events</option>{[...new Set(history.games.map((game) => game.event_id))].map((id) => <option value={id} key={id}>{events.find((item) => item.id === id)?.name || `Previous event · ${id.slice(0, 8)}`}</option>)}</select></label><label className="compact-sort">Sort by<select value={ratingSort} onChange={(e) => setRatingSort(e.target.value as typeof ratingSort)}><option value="date">Date</option><option value="gender">Gender</option><option value="age_group">Age group</option><option value="referee">Referee</option><option value="position">Position</option></select></label></div></div>
       <details className="ratings-filter-panel"><summary>Filter Ratings{activeHistoryFilterCount ? ` · ${activeHistoryFilterCount} selected` : ""}</summary><div className="ratings-filter-grid">{([
         ["referees", "Referees", filterOptions.referees],
@@ -1795,7 +1797,7 @@ function Dashboard({ session }: { session: Law18Session }) {
   const [error, setError] = useState("");
   const [accountOpen, setAccountOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [ratingModalGameId, setRatingModalGameId] = useState("");
+  const [ratingModalGameId, setRatingModalGameId] = useState<string | null>(null);
   const [organizationActionMessage, setOrganizationActionMessage] = useState("");
   const [qrCheckInMessage, setQrCheckInMessage] = useState("");
   const allRoles = new Set<MembershipRole>([
@@ -2009,7 +2011,7 @@ function Dashboard({ session }: { session: Law18Session }) {
   return <main>
     <header className="topbar">
       <button className="brand" aria-label="Law18Referee Management dashboard" onClick={() => setView("dashboard")}><Mark /></button>
-      <nav>{nav.map(([id, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}>{label}</button>)}</nav>
+      <nav>{nav.map(([id, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => { setView(id); if (id === "assessments" && canAssess) setRatingModalGameId(""); }}>{label}</button>)}</nav>
       <div className="topbar-account-actions">
         <button className="help-button" aria-label="Open role help" title="Help and how-to" onClick={() => setHelpOpen(true)}>?</button>
         <button className="page-refresh-button" aria-label="Refresh page" title="Refresh page" onClick={() => window.location.reload()}>↻</button>
@@ -2045,7 +2047,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {event && view === "schedule" && (isStaff || isCoach) && <ScheduleView session={session} event={event} data={data} canEdit={isAdministrativeStaff} canRateCrew={isCoach && canAssess} coachView={isCoach && !isAdministrativeStaff} onRateCrew={setRatingModalGameId} onCreated={() => refresh(event.id)} />}
       {isAdministrativeStaff && profile && organization && view === "officials" && <OfficialsDirectory session={session} profile={profile} organizationRoles={organizationRoles} eventRoles={eventRoles} canManageOrganizationRoles={Boolean(profile.is_site_owner || organizationRoles.includes("organization_admin"))} organizationId={organization.id} officials={organizationOfficials} data={data} event={event} events={events} onCreated={() => loadOrganizationOfficials(session, organization.id).then(setOrganizationOfficials)} />}
       {event && view === "coaching" && isAdministrativeStaff && <CoachWorkspace session={session} event={event} data={data} organizationOfficials={organizationOfficials} canManage onSaved={() => refresh(event.id)} />}
-      {event && organization && view === "assessments" && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={canConfigureRatings} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
+      {event && organization && view === "assessments" && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={canConfigureRatings} hideWorkspace={canAssess} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
       {isAdministrativeStaff && organization && view === "import" && profile && <ImportView session={session} profile={profile} organizationId={organization.id} organization={organization} events={events} canConfigureAliases={canConfigureRatings} onImported={handleImported} />}
       {profile && view === "account" && <AccountSettings session={session} profile={profile} onUpdated={setProfile} />}
       {view === "groups" && (allRoles.has("site_owner")
@@ -2053,8 +2055,8 @@ function Dashboard({ session }: { session: Law18Session }) {
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    {event && organization && ratingModalGameId && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId} modal onClose={() => setRatingModalGameId("")} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.19</span></footer>
+    {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.20</span></footer>
   </main>;
 }
 

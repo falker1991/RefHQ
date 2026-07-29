@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.15 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.16 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.15 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.15/);
+  assert.match(page, /Version 0\.5\.16/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.15");
+  assert.equal(JSON.parse(packageJson).version, "0.5.16");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -150,6 +150,17 @@ test("Rate Crew buttons and rating choices exclude HQ and operational games", as
   assert.match(page, /!game\.operational/);
   assert.match(page, /canRateCrew && isRateableGame\(game\)/);
   assert.match(page, /eligibleGames = data\.games\.filter\(isRateableGame\)/);
+});
+
+test("all users have active-group role-aware help", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /className="help-button"/);
+  assert.match(page, /HELP & HOW-TO/);
+  assert.match(page, /activeGroupRoles/);
+  assert.match(page, /Your access in \{organization\?\.name/);
+  for (const role of ["site_owner", "organization_admin", "event_admin", "assignor", "site_coordinator", "referee_coach", "referee"]) {
+    assert.match(page, new RegExp(`${role}: \\{ title:`));
+  }
 });
 
 test("account merge migration transfers operational records and audits the merge", async () => {

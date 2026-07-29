@@ -1755,6 +1755,7 @@ function Dashboard({ session }: { session: Law18Session }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [accountOpen, setAccountOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [ratingGameId, setRatingGameId] = useState("");
   const [organizationActionMessage, setOrganizationActionMessage] = useState("");
   const [qrCheckInMessage, setQrCheckInMessage] = useState("");
@@ -1763,6 +1764,20 @@ function Dashboard({ session }: { session: Law18Session }) {
     ...organizationRoles,
     ...eventRoles,
   ]);
+  const activeGroupRoles = [...new Set<MembershipRole>([
+    ...(profile?.is_site_owner ? ["site_owner" as MembershipRole] : []),
+    ...organizationRoles,
+    ...eventRoles,
+  ])];
+  const helpByRole: Record<MembershipRole, { title: string; items: string[] }> = {
+    site_owner: { title: "Site Owner", items: ["Create, archive, and manage organizations.", "Manage site-wide appearance campaigns and themes.", "Access every organization and administrative workflow."] },
+    organization_admin: { title: "Organization Admin", items: ["Manage organization officials, roles, events, and settings.", "Import schedules and officials, configure ratings, and assign event staff.", "Monitor schedules, check-ins, coaching, and ratings across the organization."] },
+    event_admin: { title: "Event Admin", items: ["Manage assigned events and their schedules, staff, and settings.", "Import event data, manage event access, and configure ratings.", "Monitor check-ins, coaching assignments, and event reports."] },
+    assignor: { title: "Assignor", items: ["Import and review schedules and referee crews for authorized events.", "Manage event access, referee coaches, and manual check-ins.", "Monitor the assignment board, check-in roster, and ratings tools when enabled."] },
+    site_coordinator: { title: "Site Coordinator", items: ["View the assignment board and schedule for your authorized event scope.", "Monitor arrivals and use event check-in tools.", "Select a roster name to view that person’s complete daily schedule."] },
+    referee_coach: { title: "Referee Coach", items: ["View crews and games within your assigned coaching scope.", "Use Rate Crew or Ratings to complete evaluations.", "Check in with the event QR code when assigned to work that day."] },
+    referee: { title: "Referee", items: ["View only your own imported assignments.", "Scan the on-site QR code to check in on an assigned event day.", "View evaluations that event staff have made public to you."] },
+  };
   const isAdministrativeStaff = ["site_owner", "organization_admin", "event_admin", "assignor"].some((role) => allRoles.has(role as MembershipRole));
   const isSiteCoordinator = allRoles.has("site_coordinator");
   const isStaff = isAdministrativeStaff || isSiteCoordinator;
@@ -1957,6 +1972,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       <button className="brand" aria-label="Law18Referee Management dashboard" onClick={() => setView("dashboard")}><Mark /></button>
       <nav>{nav.map(([id, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}>{label}</button>)}</nav>
       <div className="topbar-account-actions">
+        <button className="help-button" aria-label="Open role help" title="Help and how-to" onClick={() => setHelpOpen(true)}>?</button>
         <button className="page-refresh-button" aria-label="Refresh page" title="Refresh page" onClick={() => window.location.reload()}>↻</button>
         <div className="account-menu">
           <button className="avatar account-avatar" aria-label="Open account menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((open) => !open)}>{initials(profile?.full_name || session.user.email || "RH")}</button>
@@ -1971,6 +1987,12 @@ function Dashboard({ session }: { session: Law18Session }) {
         </div>
       </div>
     </header>
+    {helpOpen && <div className="confirmation-backdrop help-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setHelpOpen(false); }}><section className="confirmation-dialog role-help-dialog" role="dialog" aria-modal="true" aria-labelledby="role-help-title">
+      <header><div><p className="eyebrow">HELP & HOW-TO</p><h2 id="role-help-title">Your access in {organization?.name || "this organization"}</h2><p>This guide reflects your roles for the active organization and event.</p></div><button className="modal-close-button" aria-label="Close help" onClick={() => setHelpOpen(false)}>×</button></header>
+      <div className="role-help-roles">{activeGroupRoles.map((role) => <span className="role-badge" key={role}>{roleNames[role]}</span>)}</div>
+      <div className="role-help-content">{activeGroupRoles.map((role) => <article key={role}><h3>{helpByRole[role].title}</h3><ul>{helpByRole[role].items.map((item) => <li key={item}>{item}</li>)}</ul></article>)}{!activeGroupRoles.length && <EmptyState>No active role is assigned in this organization.</EmptyState>}</div>
+      <div className="role-help-actions"><button className="primary" onClick={() => setHelpOpen(false)}>Close Help</button></div>
+    </section></div>}
     <div className="eventbar">
       <div><span className="event-mark">{organization?.name[0] || "R"}</span>{organizations.length > 1 && <label><span>Active organization</span><select value={organization?.id || ""} onChange={(event) => switchOrganization(event.target.value)}>{organizations.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>}<label><span>{isStaff ? "Active event" : "My event"}</span><select value={eventId} onChange={(event) => switchEvent(event.target.value)} disabled={!events.length}><option value="">{events.length ? "Select event" : "No events yet"}</option>{events.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label></div>
       <span>{event ? formatDate(event.starts_on) : "No event imported"}</span>
@@ -1992,7 +2014,7 @@ function Dashboard({ session }: { session: Law18Session }) {
         : <GroupsSettings session={session} organization={organization} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.15</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.16</span></footer>
   </main>;
 }
 

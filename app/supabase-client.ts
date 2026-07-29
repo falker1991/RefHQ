@@ -17,7 +17,7 @@ export type Profile = {
   role: "admin" | "assignor" | "referee" | "coach";
 };
 
-export type MembershipRole = "site_owner" | "organization_admin" | "event_admin" | "assignor" | "referee_coach" | "referee";
+export type MembershipRole = "site_owner" | "organization_admin" | "event_admin" | "assignor" | "site_coordinator" | "referee_coach" | "referee";
 
 export type OrganizationMembership = {
   id: string;
@@ -36,6 +36,7 @@ export type EventMembership = {
   coaching_tools_enabled: boolean;
   ratings_history_scope: "none" | "specific" | "all";
   ratings_event_ids: string[];
+  assigned_game_ids: string[];
 };
 
 export type OrganizationRecord = {
@@ -92,6 +93,7 @@ export type OfficialRecord = {
   source_display_name?: string | null;
   linked_user_id?: string | null;
   identity_status?: string;
+  merged_into_official_id?: string | null;
   pending_org_role?: MembershipRole;
   pending_org_roles?: MembershipRole[];
 };
@@ -122,6 +124,18 @@ export type CheckInRecord = {
   status: "checked_in" | "late" | "missing" | "excused";
   method: string;
   event_date: string;
+};
+
+export type CoachAssignmentRecord = {
+  id: string;
+  event_id: string;
+  game_id: string | null;
+  coach_id: string;
+  official_id: string | null;
+  scope_date: string | null;
+  venue_name: string | null;
+  field_name: string | null;
+  full_schedule: boolean;
 };
 
 export type AssessmentRecord = {
@@ -379,7 +393,11 @@ export async function loadEventData(session: Law18Session, eventId: string) {
     session,
     `games?event_id=eq.${enc(eventId)}&select=*&order=starts_at.asc`,
   );
-  if (!games.length) return { games, assignments: [], officials: [], checkIns: [], assessments: [] };
+  const coachAssignments = await rest<CoachAssignmentRecord[]>(
+    session,
+    `coach_assignments?event_id=eq.${enc(eventId)}&select=*`,
+  );
+  if (!games.length) return { games, assignments: [], officials: [], checkIns: [], assessments: [], coachAssignments };
   const gameIds = games.map((game) => game.id).join(",");
   const assignments = await rest<AssignmentRecord[]>(
     session,
@@ -397,7 +415,29 @@ export async function loadEventData(session: Law18Session, eventId: string) {
     session,
     `assessments?game_id=in.(${gameIds})&select=*`,
   );
-  return { games, assignments, officials, checkIns, assessments };
+  return { games, assignments, officials, checkIns, assessments, coachAssignments };
+}
+
+export async function createCoachAssignment(
+  session: Law18Session,
+  eventId: string,
+  coachId: string,
+  gameId: string | null,
+) {
+  const rows = await rest<CoachAssignmentRecord[]>(session, "coach_assignments", {
+    method: "POST",
+    body: JSON.stringify({
+      event_id: eventId,
+      game_id: gameId,
+      coach_id: coachId,
+      full_schedule: !gameId,
+    }),
+  }, "return=representation");
+  return rows[0];
+}
+
+export async function deleteCoachAssignment(session: Law18Session, assignmentId: string) {
+  await rest(session, `coach_assignments?id=eq.${enc(assignmentId)}`, { method: "DELETE" }, "return=minimal");
 }
 
 export async function loadEventCheckIns(session: Law18Session, eventId: string) {
@@ -700,11 +740,31 @@ export function normalizePosition(position: string): AssignmentRecord["position"
   return "other";
 }
 
-export async function loadOrganizationOfficials(session: Law18Session, organizationId: string) {
+export async function loadOrganizationOfficials(session: Law18Session, organizationId: string, includeMerged = false) {
   return rest<OfficialRecord[]>(
     session,
-    `officials?organization_id=eq.${enc(organizationId)}&select=*&order=full_name.asc`,
+    `officials?organization_id=eq.${enc(organizationId)}${includeMerged ? "" : "&merged_into_official_id=is.null"}&select=*&order=full_name.asc`,
   );
+}
+
+export async function mergeOrganizationAccounts(
+  session: Law18Session,
+  organizationId: string,
+  primaryOfficialId: string,
+  secondaryOfficialId: string,
+) {
+  return rest<{
+    primary_official_id: string;
+    primary_user_id: string;
+    primary_email: string;
+  }>(session, "rpc/merge_organization_accounts", {
+    method: "POST",
+    body: JSON.stringify({
+      organization_uuid: organizationId,
+      primary_official_uuid: primaryOfficialId,
+      secondary_official_uuid: secondaryOfficialId,
+    }),
+  });
 }
 
 export async function importOfficials(
@@ -715,7 +775,10 @@ export async function importOfficials(
   rows: OfficialImportRow[],
 ): Promise<OfficialImportResult> {
   if (!organizationId) throw new Error("Select an organization before importing officials.");
-  const existing = await loadOrganizationOfficials(session, organizationId);
+  const existing = await loadOrganizationOfficials(session, organizationId, true);
+  const byId = new Map(existing.map((item) => [item.id, item]));
+  const resolvedOfficial = (official?: OfficialRecord) =>
+    official?.merged_into_official_id ? byId.get(official.merged_into_official_id) || official : official;
   const bySource = new Map(existing.filter((item) => item.source_official_id).map((item) => [item.source_official_id!, item]));
   const byEmail = new Map(existing.filter((item) => item.email).map((item) => [item.email!.trim().toLowerCase(), item]));
   const provisionalByName = new Map<string, OfficialRecord[]>();
@@ -749,7 +812,7 @@ export async function importOfficials(
     if (!directSourceMatch && !sourceMatch && nameCandidates.length > 1) {
       conflicts.push({ name: row.full_name, email: email || "", reason: "Multiple provisional officials have this name; manual identity review required" });
     }
-    const match = sourceMatch;
+    const match = resolvedOfficial(sourceMatch);
     const changes = {
       full_name: match?.linked_user_id ? match.full_name : row.full_name,
       source_display_name: row.full_name,
@@ -883,7 +946,7 @@ export async function importTournament(
     event = events[0];
   }
 
-  const existingOfficials = await loadOrganizationOfficials(session, organizationId);
+  const existingOfficials = await loadOrganizationOfficials(session, organizationId, true);
   const byName = new Map<string, OfficialRecord[]>();
   existingOfficials.forEach((official) => {
     const key = normalizeOfficialName(official.source_display_name || official.full_name);
@@ -906,13 +969,20 @@ export async function importTournament(
       }))),
     }, "return=minimal");
   }
-  const officials = await loadOrganizationOfficials(session, organizationId);
+  const officials = await loadOrganizationOfficials(session, organizationId, true);
+  const officialsById = new Map(officials.map((official) => [official.id, official]));
+  const resolveMergedOfficial = (official: OfficialRecord) =>
+    official.merged_into_official_id
+      ? officialsById.get(official.merged_into_official_id) || official
+      : official;
   const officialByEmail = new Map(officials.filter((official) => official.email)
-    .map((official) => [official.email!.trim().toLowerCase(), official]));
+    .map((official) => [official.email!.trim().toLowerCase(), resolveMergedOfficial(official)]));
   const officialByName = new Map<string, OfficialRecord[]>();
   officials.forEach((official) => {
     const key = normalizeOfficialName(official.source_display_name || official.full_name);
-    officialByName.set(key, [...(officialByName.get(key) || []), official]);
+    const resolved = resolveMergedOfficial(official);
+    const current = officialByName.get(key) || [];
+    if (!current.some((item) => item.id === resolved.id)) officialByName.set(key, [...current, resolved]);
   });
 
   const uniqueGames = [...new Map(rows.map((row) => [
@@ -1114,7 +1184,7 @@ export async function assignEventRole(
   session: Law18Session,
   eventId: string,
   userId: string,
-  role: "event_admin" | "assignor" | "referee_coach" | "referee",
+  role: "event_admin" | "assignor" | "site_coordinator" | "referee_coach" | "referee",
   ratingsHistoryScope: "none" | "specific" | "all" = "none",
   ratingsEventIds: string[] = [],
 ) {
@@ -1129,4 +1199,56 @@ export async function assignEventRole(
       created_by: session.user.id,
     }),
   }, "resolution=merge-duplicates,return=representation");
+}
+
+export async function loadUserEventMemberships(
+  session: Law18Session,
+  eventId: string,
+  userId: string,
+) {
+  return rest<EventMembership[]>(
+    session,
+    `event_memberships?event_id=eq.${enc(eventId)}&user_id=eq.${enc(userId)}&select=*`,
+  );
+}
+
+export async function saveUserEventAccess(
+  session: Law18Session,
+  eventId: string,
+  userId: string,
+  roles: Exclude<MembershipRole, "site_owner" | "organization_admin">[],
+  options: {
+    fullScheduleAccess: boolean;
+    coachingToolsEnabled: boolean;
+    ratingsHistoryScope: "none" | "specific" | "all";
+    ratingsEventIds: string[];
+    assignedGameIds: string[];
+  },
+) {
+  await rest(
+    session,
+    `event_memberships?event_id=eq.${enc(eventId)}&user_id=eq.${enc(userId)}`,
+    { method: "DELETE" },
+    "return=minimal",
+  );
+  if (!roles.length) return [];
+  return rest<EventMembership[]>(
+    session,
+    "event_memberships",
+    {
+      method: "POST",
+      body: JSON.stringify(roles.map((role) => ({
+        event_id: eventId,
+        user_id: userId,
+        role,
+        full_schedule_access: options.fullScheduleAccess,
+        coaching_tools_enabled: options.coachingToolsEnabled,
+        ratings_history_scope: options.ratingsHistoryScope,
+        ratings_event_ids: options.ratingsEventIds,
+        assigned_game_ids: options.fullScheduleAccess ? [] : options.assignedGameIds,
+        created_by: session.user.id,
+      }))),
+    },
+    "return=representation",
+  );
 }

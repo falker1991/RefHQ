@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.2.0 is designed for a small live tournament. Assignors can import actual Assignr Games and Users exports, switch between events, monitor the full-day staffing board, and see daily check-ins update. Imported officials remain provisional until they create an account whose verified primary email can be linked safely.
+Version 0.5.0 is the Phase 1 pilot-administration release. Assignors can import actual Assignr Games and Users exports, switch between events, monitor the full-day staffing board, and see daily check-ins update. Organization administrators can manage multi-role event access, limit staff to selected games, assign referee coaches, edit provisional identities, and safely merge duplicate linked accounts while preserving operational history.
 
 ## What is included
 
@@ -12,6 +12,7 @@ Version 0.2.0 is designed for a small live tournament. Assignors can import actu
 - Repeat schedule imports that append new days or update matching games in an existing event
 - Multiple-event switcher for assignors and officials
 - Full-day field/time assignment board with checked-in referees highlighted
+- Assignment-board grid, collapsible field, and first-assignment attendance views
 - Tournament QR and authenticated self check-in
 - Mobile-first referee schedule with no assignment acceptance step
 - Installable Home Screen experience and in-app QR scanner where supported
@@ -19,6 +20,8 @@ Version 0.2.0 is designed for a small live tournament. Assignors can import actu
 - Coach assignment workspace
 - Assessment form and referee history
 - Scoped organization/event membership foundation and site-owner appearance scheduler
+- Organization-admin account merging with assignment, attendance, rating, and role preservation
+- Whistle-and-ball browser and Home Screen icon
 - Supabase schema, indexes, role-aware row-level security, and demo seed
 - Cloudflare-compatible build
 
@@ -99,7 +102,7 @@ The hosted pilot uses Supabase as its source of truth. Do not use it as the sole
 
 ## Production checklist
 
-- Next update: replace the single global profile role with scoped organization and event memberships.
+- Phase 1 foundation delivered in Version 0.5.0:
   - Add the hierarchy: site owner → organization admin → event admin → assignor → referee coach → referee.
   - Allow organization admins to create/manage organizations, members, and events and inherit all lower-role capabilities.
   - Allow event admins to create events and fully manage only the events where they are listed as an event admin.
@@ -113,6 +116,7 @@ The hosted pilot uses Supabase as its source of truth. Do not use it as the sole
   - Add an organization referee directory so each referee belongs to the organization once and can participate in multiple events.
   - Automatically create or reuse organization referee records when officials first appear in a schedule import.
   - Add bulk referee import independent of an event, manual referee creation, and duplicate-account review tools.
+- Phase 2 account invitations and onboarding:
   - Add optional invitation emails with secure, expiring account-creation links and pending, active, suspended, and archived membership states.
   - Default to an administrator-reviewed workflow: import referees, review new and matched records, then explicitly send invitations individually or in bulk.
   - Add invitation delivery states for pending, delivered, accepted, expired, and failed invitations.

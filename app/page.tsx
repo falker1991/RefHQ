@@ -1537,12 +1537,12 @@ function DashboardHome({
     <div className={`metrics dashboard-metrics${adminView ? " admin-dashboard-metrics" : ""}`}>
       {!adminView && <article><span className="metric-icon green">◇</span><div><strong>{events.length}</strong><p>Available events</p></div></article>}
       {!adminView && <article><span className="metric-icon blue">☷</span><div><strong>{data.games.length}</strong><p>Games in active event</p></div></article>}
-      <article><span className="metric-icon green">✓</span><div><strong>{adminView ? `${checkedIn}/${expectedToday.size}` : checkedIn}</strong><p>{adminView ? "Today's Check Ins" : "Officials checked in"}</p></div></article>
+      <article><span className="metric-icon green">✓</span><div><strong>{adminView ? `${checkedIn}/${expectedToday.size}` : checkedIn}</strong><p>{adminView ? "Today's Check-ins" : "Officials checked in"}</p></div></article>
       <article><span className="metric-icon blue">◎</span><div><strong className="role-metric">{roleLabel}</strong><p>Your account role</p></div></article>
     </div>
     <div className="dashboard-grid">
       <article className="panel dashboard-event">
-        <div className="panel-head"><div><p className="eyebrow">CURRENT AND UPCOMING</p><h2>{relevantEvents.length} active events</h2></div></div>
+        <div className="panel-head"><div><p className="eyebrow">CURRENT AND UPCOMING</p><h2>{relevantEvents.length} Active Events</h2></div></div>
         {relevantEvents.length ? <div className="dashboard-event-body dashboard-event-list">
           {relevantEvents.map((item) => <p className={item.id === event?.id ? "selected-dashboard-event" : ""} key={item.id}><strong>{item.name}</strong><span>{formatDate(item.starts_on)} through {formatDate(item.ends_on)} · {item.venue_name}</span></p>)}
           <div className="dashboard-actions">
@@ -1552,7 +1552,7 @@ function DashboardHome({
         </div> : <div className="empty-dashboard"><p>No tournament is available yet.</p>{profile.role !== "referee" && <button className="primary" onClick={() => onNavigate("import")}>Import an event</button>}</div>}
       </article>
       <article className="panel dashboard-quick">
-        <div className="panel-head"><div><p className="eyebrow">QUICK ACCESS</p><h2>Account and organization</h2></div></div>
+        <div className="panel-head"><div><p className="eyebrow">QUICK ACCESS</p><h2>Account and Organization</h2></div></div>
         <button onClick={() => onNavigate("account")}><span>Personal details</span><b>Account settings →</b></button>
         <button onClick={() => onNavigate("groups")}><span>Membership</span><b>View my groups →</b></button>
       </article>
@@ -2068,7 +2068,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.25</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.26</span></footer>
   </main>;
 }
 

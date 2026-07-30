@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.29 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.30 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.29 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.29/);
+  assert.match(page, /Version 0\.5\.30/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.29");
+  assert.equal(JSON.parse(packageJson).version, "0.5.30");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -221,6 +221,17 @@ test("ratings history supports multi-select filters independent of sorting", asy
   assert.match(page, /historyDateRange\.from/);
   assert.match(page, /historyDateRange\.through/);
   assert.doesNotMatch(page, /\["dates", "Dates"/);
+  assert.match(page, /const filteredAverage = filteredScores\.length/);
+  assert.match(page, /Average Score <strong>\{filteredAverage\?\.toFixed\(2\) \|\| "—"\}/);
+});
+
+test("officials directory shows authorized submitted-rating averages", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /setDirectoryAssessments\(result\.assessments\)/);
+  assert.match(page, /assessment\.status !== "draft"/);
+  assert.match(page, /<span className="directory-average">Average Rating<\/span>/);
+  assert.match(page, /officialAverage\(official\.id\)\?\.toFixed\(2\) \|\| "—"/);
+  assert.match(page, /<option value="rating">Average rating<\/option>/);
 });
 
 test("rating authors can reopen and edit an entire game crew", async () => {

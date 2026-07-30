@@ -823,12 +823,13 @@ function OfficialsDirectory({
   onCreated: () => void;
 }) {
   const [query, setQuery] = useState("");
+  const [directoryAssessments, setDirectoryAssessments] = useState<AssessmentRecord[]>([]);
   const eventOfficialIds = new Set(data.assignments.map((assignment) => assignment.official_id));
   const [scope, setScope] = useState<"organization" | "event">("organization");
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "email" | "phone" | "badge" | "identity" | "role" | "event">("name");
+  const [sortBy, setSortBy] = useState<"name" | "email" | "phone" | "badge" | "identity" | "role" | "event" | "rating">("name");
   const [managing, setManaging] = useState<OfficialRecord | null>(null);
   const [editing, setEditing] = useState<OfficialRecord | null>(null);
   const eventRoleChoices: Exclude<MembershipRole, "site_owner" | "organization_admin">[] = ["event_admin", "assignor", "site_coordinator", "referee_coach", "referee"];
@@ -844,6 +845,16 @@ function OfficialsDirectory({
   const [ratingEventIds, setRatingEventIds] = useState<string[]>([]);
   const [official, setOfficial] = useState({ full_name: "", email: "", secondary_email: "", date_of_birth: "", phone: "", badge_level: "", pending_org_roles: ["referee"] as MembershipRole[] });
   const [editValues, setEditValues] = useState({ full_name: "", email: "", secondary_email: "", date_of_birth: "", phone: "", badge_level: "", pending_org_roles: ["referee"] as MembershipRole[] });
+  useEffect(() => {
+    loadAuthorizedRatingHistory(session).then((result) => setDirectoryAssessments(result.assessments)).catch(() => setDirectoryAssessments([]));
+  }, [session]);
+  const officialAverage = (officialId: string) => {
+    const scores = directoryAssessments
+      .filter((assessment) => assessment.official_id === officialId && assessment.status !== "draft")
+      .map(assessmentScore)
+      .filter((score): score is number => score !== null);
+    return scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : null;
+  };
   const ownerAlreadyListed = officials.some((item) => item.linked_user_id === profile.id || item.email?.toLowerCase() === (profile.primary_email || profile.email).toLowerCase());
   const selfOwnerRecord: OfficialRecord | null = profile.is_site_owner && !ownerAlreadyListed ? {
     id: `site-owner-${profile.id}`,
@@ -872,6 +883,7 @@ function OfficialsDirectory({
       identity: [a.linked_user_id ? "linked" : "provisional", b.linked_user_id ? "linked" : "provisional"],
       role: [(a.pending_org_roles || [a.pending_org_role || "referee"]).join(","), (b.pending_org_roles || [b.pending_org_role || "referee"]).join(",")],
       event: [eventOfficialIds.has(a.id) ? "assigned" : "unassigned", eventOfficialIds.has(b.id) ? "assigned" : "unassigned"],
+      rating: [(officialAverage(a.id) ?? -1).toFixed(3), (officialAverage(b.id) ?? -1).toFixed(3)],
     }[sortBy];
     return values[0].localeCompare(values[1]);
   });
@@ -997,14 +1009,14 @@ function OfficialsDirectory({
     <div className="directory-tools">
       <div className="segmented"><button className={scope === "organization" ? "active" : ""} onClick={() => setScope("organization")}>Organization</button><button className={scope === "event" ? "active" : ""} onClick={() => setScope("event")}>Active event</button></div>
       <input className="search" type="search" placeholder="Search name, email, or badge…" value={query} onChange={(event) => setQuery(event.target.value)} />
-      <label className="compact-sort">Sort by<select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}><option value="name">Name</option><option value="email">Email</option><option value="phone">Phone</option><option value="badge">Badge</option><option value="identity">Account status</option><option value="role">Organization role</option><option value="event">Event assignment</option></select></label>
+      <label className="compact-sort">Sort by<select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}><option value="name">Name</option><option value="email">Email</option><option value="phone">Phone</option><option value="badge">Badge</option><option value="identity">Account status</option><option value="role">Organization role</option><option value="event">Event assignment</option><option value="rating">Average rating</option></select></label>
       {canManageOrganizationRoles && <button className="secondary" disabled={linkedAccounts.length < 2} onClick={() => setMerging(true)}>Merge accounts</button>}
       <button className="secondary" onClick={() => setAdding((value) => !value)}>{adding ? "Cancel" : "Add official"}</button>
     </div>
     {adding && <article className="panel manual-entry-form"><h2>Add an official</h2><div className="manual-form-grid"><label>Full name<input value={official.full_name} onChange={(e) => setOfficial({ ...official, full_name: e.target.value })} /></label><label>Primary email<input type="email" value={official.email} onChange={(e) => setOfficial({ ...official, email: e.target.value })} /></label><label>Secondary email<input type="email" value={official.secondary_email} onChange={(e) => setOfficial({ ...official, secondary_email: e.target.value })} /></label><label>Date of birth<input type="date" value={official.date_of_birth} onChange={(e) => setOfficial({ ...official, date_of_birth: e.target.value })} /></label><label>Phone<input value={official.phone} onChange={(e) => setOfficial({ ...official, phone: e.target.value })} /></label><label>Badge or level<input value={official.badge_level} onChange={(e) => setOfficial({ ...official, badge_level: e.target.value })} /></label><fieldset className="role-checkboxes" disabled={!canManageOrganizationRoles}><legend>Organization roles</legend>{organizationRoleChoices.map((role) => <label key={role}><input type="checkbox" checked={official.pending_org_roles.includes(role)} onChange={() => setOfficial({ ...official, pending_org_roles: toggleRole(official.pending_org_roles, role) })} />{roleNames[role]}</label>)}</fieldset></div><button className="primary" disabled={busy || !official.full_name.trim()} onClick={addOfficial}>{busy ? "Adding…" : "Add official"}</button></article>}
     {message && <p className="pilot-message">{message}</p>}
     <article className="panel directory-list">
-      <div className="directory-row directory-head"><span>Official</span><span className="directory-contact">Contact</span><span>Identity</span><span>Organization Roles</span><span className="directory-event">Event</span></div>
+      <div className="directory-row directory-head"><span>Official</span><span className="directory-contact">Contact</span><span>Identity</span><span>Organization Roles</span><span className="directory-average">Average Rating</span><span className="directory-event">Event</span></div>
       {filtered.map((official) => {
         const listedRoles = official.pending_org_roles?.length
           ? official.pending_org_roles
@@ -1018,6 +1030,7 @@ function OfficialsDirectory({
         <div className="directory-contact"><span>{official.email || "Email required"}</span><small>{official.phone || "No phone imported"}</small></div>
         <span className={`identity-pill ${official.linked_user_id ? "linked" : ""}`}>{official.linked_user_id ? "Account linked" : "Provisional"}</span>
         <span className="directory-roles">{roles.map((role) => <span className="role-badge" key={role}>{roleNames[role]}</span>)}</span>
+        <span className="directory-average directory-rating-score">{officialAverage(official.id)?.toFixed(2) || "—"}</span>
         <span className="directory-event">{eventOfficialIds.has(official.id) ? "Assigned" : "—"}{official.source !== "site_owner_profile" && <button className="text-button manage-role" onClick={() => beginEdit(official)}>Edit</button>}{official.source !== "site_owner_profile" && official.linked_user_id && event && !isSiteOwnerRecord && <button className="text-button manage-role" disabled={busy} onClick={() => beginManageRole(official)}>Event Access</button>}</span>
       </div>;
       })}
@@ -1071,6 +1084,13 @@ const blankCrewRating = (): CrewRatingDraft => ({
   development_focus: "",
   coach_notes: "",
 });
+
+function assessmentScore(assessment: AssessmentRecord): number | null {
+  if (assessment.evaluation_type === "basic_eval") return assessment.overall_rating;
+  const skills = [assessment.positioning, assessment.decision_making, assessment.communication, assessment.match_control]
+    .filter((score): score is number => score !== null);
+  return skills.length ? skills.reduce((sum, score) => sum + score, 0) / skills.length : null;
+}
 
 function AssessmentCenter({
   session,
@@ -1166,6 +1186,8 @@ function AssessmentCenter({
     }
     return (aGame?.starts_at || "").localeCompare(bGame?.starts_at || "");
   });
+  const filteredScores = sortedAssessments.map(assessmentScore).filter((score): score is number => score !== null);
+  const filteredAverage = filteredScores.length ? filteredScores.reduce((sum, score) => sum + score, 0) / filteredScores.length : null;
 
   function chooseGame(nextGameId: string) {
     setGameId(nextGameId);
@@ -1267,7 +1289,7 @@ function AssessmentCenter({
       {message && <p className="pilot-message assessment-message">{message}</p>}
       <div className="assessment-actions"><button className="secondary" disabled={busy || !gameAssignments.length} onClick={() => submitCrew("draft")}>Save crew draft</button><button className="primary" disabled={busy || !gameAssignments.length} onClick={() => submitCrew("submitted")}>Submit all ratings</button></div>
     </article>}
-    <article className="panel history ratings-history"><div className="panel-head"><div><p className="eyebrow">HISTORY</p><h2>{sortedAssessments.length} matching rating{sortedAssessments.length === 1 ? "" : "s"}</h2></div><div className="history-filters"><label className="compact-sort">Event<select value={historyEventId} onChange={(e) => setHistoryEventId(e.target.value)}><option value="all">All permitted events</option>{[...new Set(history.games.map((game) => game.event_id))].map((id) => <option value={id} key={id}>{events.find((item) => item.id === id)?.name || `Previous event · ${id.slice(0, 8)}`}</option>)}</select></label><label className="compact-sort">Sort by<select value={ratingSort} onChange={(e) => setRatingSort(e.target.value as typeof ratingSort)}><option value="date">Date</option><option value="gender">Gender</option><option value="age_group">Age group</option><option value="referee">Referee</option><option value="position">Position</option></select></label></div></div>
+    <article className="panel history ratings-history"><div className="panel-head"><div><p className="eyebrow">HISTORY</p><h2>{sortedAssessments.length} matching rating{sortedAssessments.length === 1 ? "" : "s"}</h2><p className="filtered-rating-average">Average Score <strong>{filteredAverage?.toFixed(2) || "—"}</strong></p></div><div className="history-filters"><label className="compact-sort">Event<select value={historyEventId} onChange={(e) => setHistoryEventId(e.target.value)}><option value="all">All permitted events</option>{[...new Set(history.games.map((game) => game.event_id))].map((id) => <option value={id} key={id}>{events.find((item) => item.id === id)?.name || `Previous event · ${id.slice(0, 8)}`}</option>)}</select></label><label className="compact-sort">Sort by<select value={ratingSort} onChange={(e) => setRatingSort(e.target.value as typeof ratingSort)}><option value="date">Date</option><option value="gender">Gender</option><option value="age_group">Age group</option><option value="referee">Referee</option><option value="position">Position</option></select></label></div></div>
       <details className="ratings-filter-panel"><summary>Filter Ratings{activeHistoryFilterCount ? ` · ${activeHistoryFilterCount} selected` : ""}</summary><div className="ratings-filter-grid">{([
         ["referees", "Referees", filterOptions.referees],
         ["ageGroups", "Age Groups", filterOptions.ageGroups],
@@ -1280,8 +1302,7 @@ function AssessmentCenter({
         return <details className="rating-filter-dropdown" key={key}><summary><span>{label}</span><small>{historyFilters[key].length ? `${historyFilters[key].length} selected` : "All"}</small></summary><div className="rating-filter-options">{key === "referees" && <input className="rating-referee-search" type="search" value={refereeFilterSearch} placeholder="Search referees…" aria-label="Search referees" onChange={(event) => setRefereeFilterSearch(event.target.value)} />}{visibleOptions.map((option) => <label key={option}><input type="checkbox" checked={historyFilters[key].includes(option)} onChange={() => toggleHistoryFilter(key, option)} /><span>{option}</span></label>)}{!visibleOptions.length && <small>No matching referees</small>}</div></details>;
       })}<fieldset className="rating-date-range"><legend>Date Range</legend><label>From<input type="date" value={historyDateRange.from} max={historyDateRange.through || undefined} onChange={(event) => setHistoryDateRange((current) => ({ ...current, from: event.target.value }))} /></label><label>Through<input type="date" value={historyDateRange.through} min={historyDateRange.from || undefined} onChange={(event) => setHistoryDateRange((current) => ({ ...current, through: event.target.value }))} /></label></fieldset></div><button className="text-button clear-rating-filters" disabled={!activeHistoryFilterCount} onClick={() => { setHistoryFilters({ referees: [], ageGroups: [], genders: [], positions: [] }); setHistoryDateRange({ from: "", through: "" }); setRefereeFilterSearch(""); }}>Clear All Filters</button></details>
       {sortedAssessments.map((assessment) => {
-      const skillAverage = [assessment.positioning, assessment.decision_making, assessment.communication, assessment.match_control].filter((item): item is number => item !== null).reduce((sum, item, _, all) => sum + item / all.length, 0);
-      const score = assessment.evaluation_type === "basic_eval" ? assessment.overall_rating : skillAverage;
+      const score = assessmentScore(assessment);
       const ratedGame = historyGameMap.get(assessment.game_id);
       return <article key={assessment.id}><div><strong>{historyOfficialMap.get(assessment.official_id)?.full_name || "Referee"}</strong><p>{ratedGame?.home_team} vs. {ratedGame?.away_team}</p><small>{assessment.evaluation_type === "basic_eval" ? "Basic Eval" : "Skills Eval"} · {assessment.visibility === "public" ? "Public" : "Admin only"}</small></div><span className="score">{score ? Number(score).toFixed(1) : "—"}</span><span className={`identity-pill ${assessment.status !== "draft" ? "linked" : ""}`}>{assessment.status}</span>{assessment.coach_id === session.user.id && ratedGame && onEditRating && <button className="secondary edit-rating-button" onClick={() => onEditRating(assessment.game_id, ratedGame.event_id)}>Edit</button>}</article>;
     })}{!sortedAssessments.length && <EmptyState>No ratings match these filters.</EmptyState>}</article>
@@ -2081,7 +2102,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.29</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.30</span></footer>
   </main>;
 }
 

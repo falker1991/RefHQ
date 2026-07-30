@@ -5,12 +5,14 @@ import { QRCodeSVG } from "qrcode.react";
 import { AuthPanel } from "./auth-panel";
 import { auth, type Law18Session } from "./auth-client";
 import {
+  archiveEvent,
   checkIn,
   claimOrganizationJoinLink,
   createCoachAssignment,
   createOrganizationJoinLink,
   beginOrganizationAction,
   completeOrganizationAction,
+  configureEventAutoArchive,
   createEvent,
   createGame,
   createOfficial,
@@ -27,6 +29,7 @@ import {
   loadEvents,
   loadAppearanceCampaigns,
   loadAppearanceThemes,
+  loadArchivedEvents,
   loadAuthorizedRatingHistory,
   loadEventCheckIns,
   loadOrganization,
@@ -43,6 +46,7 @@ import {
   saveAssessment,
   saveUserEventAccess,
   restoreDefaultAppearance,
+  restoreEvent,
   saveAppearanceTheme,
   reactivateOrganization,
   recordCurrentLogin,
@@ -587,14 +591,73 @@ function ScheduleView({ session, event, data, canEdit, canRateCrew, coachView, o
   </section>;
 }
 
+function EventLifecyclePanel({
+  session,
+  event,
+  onChanged,
+}: {
+  session: Law18Session;
+  event: EventRecord;
+  onChanged: () => Promise<void>;
+}) {
+  const initialDelay = () => {
+    if (!event.auto_archive_at) return "never";
+    const archiveDate = new Date(event.auto_archive_at);
+    const archiveDay = Date.UTC(archiveDate.getUTCFullYear(), archiveDate.getUTCMonth(), archiveDate.getUTCDate());
+    const [year, month, day] = event.ends_on.split("-").map(Number);
+    return String(Math.max(0, Math.round((archiveDay - Date.UTC(year, month - 1, day)) / 86400000) - 1));
+  };
+  const [delay, setDelay] = useState(initialDelay);
+  const [confirmingArchive, setConfirmingArchive] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  async function saveSchedule() {
+    setBusy(true);
+    setMessage("");
+    try {
+      await configureEventAutoArchive(session, event.id, delay === "never" ? null : Number(delay));
+      setMessage(delay === "never" ? "Automatic archiving is disabled." : `This event will archive ${delay === "0" ? "after its final day" : `${delay} day${delay === "1" ? "" : "s"} after it ends`}.`);
+      await onChanged();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to save the event archive setting.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function archiveNow() {
+    setBusy(true);
+    setMessage("");
+    try {
+      await archiveEvent(session, event.id);
+      setConfirmingArchive(false);
+      await onChanged();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to archive this event.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <article className="panel event-lifecycle-panel">
+    <div><p className="eyebrow">EVENT LIFECYCLE</p><h2>Archive {event.name}</h2><p>Archiving removes the event from active views while preserving schedules, check-ins, ratings, and audit history.</p></div>
+    <label>Automatic archive<select value={delay} onChange={(event) => setDelay(event.target.value)}><option value="never">Never</option><option value="0">After the final event day</option><option value="1">1 day after completion</option><option value="3">3 days after completion</option><option value="7">7 days after completion</option><option value="14">14 days after completion</option><option value="30">30 days after completion</option></select></label>
+    <div className="event-lifecycle-actions"><button className="secondary" disabled={busy} onClick={saveSchedule}>{busy ? "Saving…" : "Save Archive Schedule"}</button><button className="danger-button" disabled={busy} onClick={() => setConfirmingArchive(true)}>Archive Now</button></div>
+    {event.auto_archive_at && <small>Currently scheduled for {new Intl.DateTimeFormat([], { dateStyle: "medium", timeStyle: "short" }).format(new Date(event.auto_archive_at))}.</small>}
+    {message && <p className="pilot-message">{message}</p>}
+    {confirmingArchive && <div className="confirmation-backdrop" role="presentation"><section className="confirmation-dialog" role="dialog" aria-modal="true"><p className="eyebrow">ARCHIVE EVENT</p><h2>Archive {event.name} now?</h2><p>The event will leave active dashboards and selectors. Organization administrators can restore it later from Activity.</p><div><button className="secondary" disabled={busy} onClick={() => setConfirmingArchive(false)}>Cancel</button><button className="danger-button" disabled={busy} onClick={archiveNow}>{busy ? "Archiving…" : "Archive Event"}</button></div></section></div>}
+  </article>;
+}
+
 function ImportView({
   session,
   profile,
   organizationId,
   organization,
   events,
+  activeEvent,
   canCreateEvent,
+  canManageLifecycle,
   canConfigureAliases,
+  onEventsChanged,
   onImported,
 }: {
   session: Law18Session;
@@ -602,8 +665,11 @@ function ImportView({
   organizationId: string;
   organization: OrganizationRecord;
   events: EventRecord[];
+  activeEvent?: EventRecord;
   canCreateEvent: boolean;
+  canManageLifecycle: boolean;
   canConfigureAliases: boolean;
+  onEventsChanged: () => Promise<void>;
   onImported: (event: EventRecord) => void;
 }) {
   const [mode, setMode] = useState<"schedule" | "officials">("schedule");
@@ -827,6 +893,7 @@ function ImportView({
       </div>
       <button className="primary" disabled={busy || !eventDetails.name.trim() || !eventDetails.venue_name.trim() || !eventDetails.starts_on || !eventDetails.ends_on || eventDetails.ends_on < eventDetails.starts_on} onClick={confirmEventCreation}>{busy ? "Creating…" : "Create Event"}</button>
     </article>}
+    {activeEvent && canManageLifecycle && <EventLifecyclePanel session={session} event={activeEvent} onChanged={onEventsChanged} />}
     <div className="segmented import-tabs">
       <button className={mode === "schedule" ? "active" : ""} onClick={() => switchImportMode("schedule")}>Schedule export</button>
       <button className={mode === "officials" ? "active" : ""} onClick={() => switchImportMode("officials")}>Officials export</button>
@@ -1715,22 +1782,27 @@ function DashboardHome({
 function OrganizationActivity({
   session,
   organization,
+  onEventsChanged,
 }: {
   session: Law18Session;
   organization: OrganizationRecord;
+  onEventsChanged: () => Promise<void>;
 }) {
   const [activity, setActivity] = useState<AuditRecord[]>([]);
   const [links, setLinks] = useState<OrganizationJoinLink[]>([]);
+  const [archivedEvents, setArchivedEvents] = useState<EventRecord[]>([]);
   const [label, setLabel] = useState("Officials join link");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const refresh = useCallback(async () => {
+    const nextArchivedEvents = await loadArchivedEvents(session, organization.id);
     const [nextActivity, nextLinks] = await Promise.all([
       loadOrganizationActivity(session, organization.id),
       loadOrganizationJoinLinks(session, organization.id),
     ]);
     setActivity(nextActivity);
     setLinks(nextLinks);
+    setArchivedEvents(nextArchivedEvents);
   }, [organization.id, session]);
   useEffect(() => {
     // Activity is loaded from the remote organization audit stream.
@@ -1773,6 +1845,19 @@ function OrganizationActivity({
       window.prompt("Copy this Join Group link:", url);
     }
   }
+  async function restoreArchivedEvent(event: EventRecord) {
+    setBusy(true);
+    setMessage("");
+    try {
+      await restoreEvent(session, event.id);
+      setMessage(`${event.name} was restored. Automatic archiving was cleared.`);
+      await Promise.all([refresh(), onEventsChanged()]);
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to restore the event.");
+    } finally {
+      setBusy(false);
+    }
+  }
   const actionLabel = (action: string) => action.split(".").map((part) =>
     part.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
   ).join(" · ");
@@ -1783,6 +1868,7 @@ function OrganizationActivity({
       <article className="panel join-link-creator"><div className="panel-head"><div><p className="eyebrow">JOIN GROUP</p><h2>Create an invitation link</h2><p>Signed-in users join immediately. New users create an account first and are then added automatically.</p></div></div><label>Link label<input value={label} maxLength={100} onChange={(event) => setLabel(event.target.value)} /></label><button className="primary" disabled={busy || !label.trim()} onClick={createLink}>Create Join Group Link</button></article>
       <article className="panel join-link-list"><div className="panel-head"><div><p className="eyebrow">ACTIVE LINKS</p><h2>{links.filter((link) => link.active).length} available</h2></div></div>{links.map((link) => <div className={`join-link-row ${link.active ? "" : "disabled"}`} key={link.id}><div><strong>{link.label}</strong><small>{link.active ? "Active" : "Disabled"} · Used {link.use_count} time{link.use_count === 1 ? "" : "s"}</small></div><button className="secondary" disabled={!link.active} onClick={() => copyLink(link)}>Copy</button><button className="text-button" disabled={busy} onClick={() => toggleLink(link)}>{link.active ? "Disable" : "Enable"}</button></div>)}{!links.length && <EmptyState>No Join Group links have been created.</EmptyState>}</article>
     </div>
+    <article className="panel archived-event-list"><div className="panel-head"><div><p className="eyebrow">ARCHIVED EVENTS</p><h2>{archivedEvents.length} preserved</h2><p>Archived events are hidden from active selectors, but their schedules, attendance, ratings, and history remain available after restoration.</p></div></div>{archivedEvents.map((event) => <div className="archived-event-row" key={event.id}><div><strong>{event.name}</strong><small>{formatDate(event.starts_on)} through {formatDate(event.ends_on)} · {event.archive_reason === "automatic" ? "Automatically archived" : "Manually archived"}</small></div><button className="secondary" disabled={busy} onClick={() => restoreArchivedEvent(event)}>Restore Event</button></div>)}{!archivedEvents.length && <EmptyState>No events are archived.</EmptyState>}</article>
     <article className="panel activity-log"><div className="panel-head"><div><p className="eyebrow">AUDIT LOG</p><h2>Organization activity</h2><p>Ratings, imports, schedules, assignments, members, events, check-ins, and other meaningful changes appear here.</p></div></div>
       <div className="activity-log-head"><span>Action</span><span>Performed by</span><span>Record</span><span>Date</span></div>
       {activity.map((item) => <div className="activity-log-row" key={item.id}><strong>{actionLabel(item.action)}</strong><span>{item.actor_name}</span><span>{item.entity_type.replace(/_/g, " ")}</span><time>{new Intl.DateTimeFormat([], { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at))}</time></div>)}
@@ -2055,8 +2141,8 @@ function Dashboard({ session }: { session: Law18Session }) {
   ])];
   const helpByRole: Record<MembershipRole, { title: string; items: string[] }> = {
     site_owner: { title: "Site Owner Navigation", items: ["Use the organization selector below the header to open the group you want to manage.", "Open Groups from your initials menu to create, open, archive, or restore organizations.", "Open Site Appearance from your initials menu to edit, save, schedule, or restore site themes.", "Open Activity within an organization to review its audit log or manage Join Group links.", "After selecting an organization and event, use the same event tabs described for organization administrators."] },
-    organization_admin: { title: "Organization Admin Navigation", items: ["Choose the organization and active event from the selectors below the header.", "Open Officials to add or edit people, review last login, set organization roles, remove a member, merge accounts, or open Event Access.", "Open Activity to review meaningful changes and create, copy, enable, or disable Join Group links.", "Open Import to add officials or upload an Assignr schedule into the selected event.", "Open Assignment Board or Schedule to review the day, Check-In to manage arrivals, Coaching to assign coaches, and Ratings to configure or review evaluations."] },
-    event_admin: { title: "Event Admin Navigation", items: ["Select an assigned event from the Active Event menu below the header.", "Open Officials, then Event Access, to add or update event staff for that event.", "Open Import for event schedule data, Schedule for game details, Check-In for arrivals, Coaching for coach assignments, and Ratings for evaluation settings and history."] },
+    organization_admin: { title: "Organization Admin Navigation", items: ["Choose the organization and active event from the selectors below the header.", "Open Officials to add or edit people, review last login, set organization roles, remove a member, merge accounts, or open Event Access.", "Open Activity to review meaningful changes, manage Join Group links, or restore an archived event.", "Open Import to add officials, upload an Assignr schedule, configure automatic archiving, or archive the selected event now.", "Open Assignment Board or Schedule to review the day, Check-In to manage arrivals, Coaching to assign coaches, and Ratings to configure or review evaluations."] },
+    event_admin: { title: "Event Admin Navigation", items: ["Select an assigned event from the Active Event menu below the header.", "Open Officials, then Event Access, to add or update event staff for that event.", "Open Import for event schedule data and Event Lifecycle controls, including automatic archiving or Archive Now.", "Open Schedule for game details, Check-In for arrivals, Coaching for coach assignments, and Ratings for evaluation settings and history."] },
     assignor: { title: "Assignor Navigation", items: ["Select the event you are working from the Active Event menu below the header.", "Open Import to upload an authorized schedule, then use Assignment Board or Schedule to review crews.", "Open Check-In to filter arrivals, manually check someone in, undo a check-in, or select an official’s name to see their daily schedule.", "Open Coaching to place coaches on games. Use Rate Crew on a schedule game, or open Ratings and choose a game, when coaching tools are enabled."] },
     site_coordinator: { title: "Site Coordinator Navigation", items: ["Select today’s event from the Active Event menu.", "Open Assignment Board or Schedule to review the games in your event scope.", "Open Check-In to monitor arrivals. Use its filters to narrow the roster, and select an official’s name to view that person’s full schedule for the day."] },
     referee_coach: { title: "Referee Coach Navigation", items: ["Select the event you are coaching from the My Event menu.", "Open Schedule to see games and crews in your coaching scope.", "Select Rate Crew on a game to open its evaluation form, complete the crew ratings, and submit them together.", "You can also open Ratings, choose a game in the modal, and use the page underneath to review rating history.", "When Check-In appears, open it at the venue, select Scan QR Code, and scan the code displayed by event staff."] },
@@ -2232,6 +2318,20 @@ function Dashboard({ session }: { session: Law18Session }) {
     await switchEvent(newEvent.id);
   }
 
+  async function handleEventsChanged() {
+    if (!organization) return;
+    const nextEvents = await loadEvents(session);
+    const organizationEvents = nextEvents.filter((item) => item.organization_id === organization.id);
+    setAllEvents(nextEvents);
+    setEvents(organizationEvents);
+    const nextEventId = organizationEvents.some((item) => item.id === eventId) ? eventId : organizationEvents[0]?.id || "";
+    setEventId(nextEventId);
+    const memberships = await loadMemberships(session);
+    setEventRoles(memberships.events.filter((membership) => membership.event_id === nextEventId).map((membership) => membership.role));
+    setEventAccess(memberships.events.filter((membership) => membership.event_id === nextEventId));
+    setData(nextEventId ? await loadEventData(session, nextEventId) : { games: [], assignments: [], officials: [], checkIns: [], assessments: [], coachAssignments: [] });
+  }
+
   function handleEventUpdated(updated: EventRecord) {
     setEvents((current) => current.map((item) => item.id === updated.id ? updated : item));
     setAllEvents((current) => current.map((item) => item.id === updated.id ? updated : item));
@@ -2308,8 +2408,8 @@ function Dashboard({ session }: { session: Law18Session }) {
       {isAdministrativeStaff && profile && organization && view === "officials" && <OfficialsDirectory session={session} profile={profile} organizationRoles={organizationRoles} eventRoles={eventRoles} canManageOrganizationRoles={Boolean(profile.is_site_owner || organizationRoles.includes("organization_admin"))} organizationId={organization.id} officials={organizationOfficials} data={data} event={event} events={events} onCreated={() => loadOrganizationOfficials(session, organization.id).then(setOrganizationOfficials)} />}
       {event && view === "coaching" && isAdministrativeStaff && <CoachWorkspace session={session} event={event} data={data} organizationOfficials={organizationOfficials} canManage onSaved={() => refresh(event.id)} />}
       {event && organization && view === "assessments" && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={canConfigureRatings} hideWorkspace={canAssess} onOpenRating={() => setRatingModalGameId("")} onEditRating={async (gameId, targetEventId) => { if (targetEventId !== event.id) await switchEvent(targetEventId); setRatingModalGameId(gameId); }} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      {isAdministrativeStaff && organization && view === "import" && profile && <ImportView session={session} profile={profile} organizationId={organization.id} organization={organization} events={events} canCreateEvent={Boolean(profile.is_site_owner || organizationRoles.includes("organization_admin") || organizationRoles.includes("event_admin"))} canConfigureAliases={canConfigureRatings} onImported={handleImported} />}
-      {organization && view === "activity" && Boolean(profile?.is_site_owner || organizationRoles.includes("organization_admin")) && <OrganizationActivity session={session} organization={organization} />}
+      {isAdministrativeStaff && organization && view === "import" && profile && <ImportView session={session} profile={profile} organizationId={organization.id} organization={organization} events={events} activeEvent={event} canCreateEvent={Boolean(profile.is_site_owner || organizationRoles.includes("organization_admin") || organizationRoles.includes("event_admin"))} canManageLifecycle={Boolean(profile.is_site_owner || organizationRoles.includes("organization_admin") || eventRoles.includes("event_admin"))} canConfigureAliases={canConfigureRatings} onEventsChanged={handleEventsChanged} onImported={handleImported} />}
+      {organization && view === "activity" && Boolean(profile?.is_site_owner || organizationRoles.includes("organization_admin")) && <OrganizationActivity session={session} organization={organization} onEventsChanged={handleEventsChanged} />}
       {profile && view === "account" && <AccountSettings session={session} profile={profile} onUpdated={setProfile} />}
       {view === "groups" && (allRoles.has("site_owner")
         ? <SiteGroupsAdmin session={session} ownerEmail={profile?.primary_email || profile?.email || session.user.email || ""} onOpen={(organizationId) => switchOrganization(organizationId, "dashboard")} />
@@ -2317,7 +2417,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.6.0</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.6.1</span></footer>
   </main>;
 }
 

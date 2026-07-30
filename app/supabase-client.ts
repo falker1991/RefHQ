@@ -61,6 +61,10 @@ export type EventRecord = {
   rating_type: "skills_eval" | "basic_eval";
   ratings_admin_only: boolean;
   position_title_aliases: Record<string, string>;
+  auto_archive_at?: string | null;
+  archived_at?: string | null;
+  archived_by?: string | null;
+  archive_reason?: string | null;
 };
 
 export type GameRecord = {
@@ -510,7 +514,43 @@ export async function linkCurrentReferee(session: Law18Session) {
 }
 
 export async function loadEvents(session: Law18Session) {
+  await rest(session, "rpc/materialize_due_event_archives", {
+    method: "POST",
+    body: "{}",
+  });
   return rest<EventRecord[]>(session, "events?select=*&order=starts_on.desc");
+}
+
+export async function configureEventAutoArchive(
+  session: Law18Session,
+  eventId: string,
+  daysAfterEnd: number | null,
+) {
+  return rest<string | null>(session, "rpc/configure_event_auto_archive", {
+    method: "POST",
+    body: JSON.stringify({ target_event: eventId, days_after_end: daysAfterEnd }),
+  });
+}
+
+export async function archiveEvent(session: Law18Session, eventId: string) {
+  await rest(session, "rpc/archive_event", {
+    method: "POST",
+    body: JSON.stringify({ target_event: eventId }),
+  }, "return=minimal");
+}
+
+export async function loadArchivedEvents(session: Law18Session, organizationId: string) {
+  return rest<EventRecord[]>(session, "rpc/organization_event_archive", {
+    method: "POST",
+    body: JSON.stringify({ target_organization: organizationId }),
+  });
+}
+
+export async function restoreEvent(session: Law18Session, eventId: string) {
+  await rest(session, "rpc/restore_event", {
+    method: "POST",
+    body: JSON.stringify({ target_event: eventId }),
+  }, "return=minimal");
 }
 
 export async function createEvent(

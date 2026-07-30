@@ -121,6 +121,86 @@
   font-size: 10px;
 }
 
+.event-lifecycle-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, .6fr);
+  gap: 16px 24px;
+  align-items: end;
+  margin-bottom: 18px;
+  padding: 24px;
+}
+
+.event-lifecycle-panel h2 {
+  margin: 5px 0 8px;
+  font: 700 22px Inter, Arial, Helvetica, sans-serif;
+}
+
+.event-lifecycle-panel > div:first-child > p:last-child,
+.archived-event-list .panel-head p:last-child {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.event-lifecycle-panel > label {
+  display: grid;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.event-lifecycle-panel select {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px;
+  background: #fff;
+}
+
+.event-lifecycle-actions {
+  display: flex;
+  grid-column: 2;
+  gap: 9px;
+  justify-content: flex-end;
+}
+
+.event-lifecycle-panel > small,
+.event-lifecycle-panel > .pilot-message {
+  grid-column: 1 / -1;
+}
+
+.event-lifecycle-panel > small {
+  color: var(--muted);
+}
+
+.archived-event-list {
+  margin-bottom: 18px;
+  overflow: hidden;
+}
+
+.archived-event-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 15px 22px;
+  border-top: 1px solid var(--line);
+}
+
+.archived-event-row > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.archived-event-row small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
 @media (max-width: 800px) {
   .activity-admin-grid {
     grid-template-columns: 1fr;
@@ -149,5 +229,28 @@
 
   .official-edit-actions .remove-member-button {
     margin-right: 0;
+  }
+
+  .event-lifecycle-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .event-lifecycle-actions,
+  .event-lifecycle-panel > small,
+  .event-lifecycle-panel > .pilot-message {
+    grid-column: 1;
+  }
+
+  .event-lifecycle-actions {
+    flex-direction: column;
+  }
+
+  .event-lifecycle-actions button,
+  .archived-event-row button {
+    width: 100%;
+  }
+
+  .archived-event-row {
+    grid-template-columns: 1fr;
   }
 }

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.6.0 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.6.1 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.6.0 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.6\.0/);
+  assert.match(page, /Version 0\.6\.1/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.6.0");
+  assert.equal(JSON.parse(packageJson).version, "0.6.1");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -371,4 +371,39 @@ test("Join Group tokens survive account creation and are claimed after authentic
   assert.match(page, /claimOrganizationJoinLink\(session, joinToken\)/);
   assert.match(migration, /create or replace function public\.claim_organization_join_link/);
   assert.match(migration, /membership\.joined_via_link/);
+});
+
+test("authorized event staff can manually or automatically archive events", async () => {
+  const [page, client, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/202607300024_event_lifecycle_archiving.sql"),
+  ]);
+  assert.match(page, /EVENT LIFECYCLE/);
+  assert.match(page, /Save Archive Schedule/);
+  assert.match(page, /Archive Now/);
+  assert.match(page, /After the final event day/);
+  assert.match(client, /export async function configureEventAutoArchive/);
+  assert.match(client, /export async function archiveEvent/);
+  assert.match(migration, /create or replace function public\.configure_event_auto_archive/);
+  assert.match(migration, /array\['event_admin'\]::public\.membership_role\[\]/);
+  assert.match(migration, /event\.manually_archived/);
+});
+
+test("past-due events leave active views and organization admins can restore them", async () => {
+  const [page, client, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/202607300024_event_lifecycle_archiving.sql"),
+  ]);
+  assert.match(page, /ARCHIVED EVENTS/);
+  assert.match(page, /Restore Event/);
+  assert.match(page, /Automatic archiving was cleared/);
+  assert.match(client, /rpc\/materialize_due_event_archives/);
+  assert.match(client, /export async function loadArchivedEvents/);
+  assert.match(client, /export async function restoreEvent/);
+  assert.match(migration, /auto_archive_at <= now\(\)/);
+  assert.match(migration, /e\.auto_archive_at is null or e\.auto_archive_at > now\(\)/);
+  assert.match(migration, /event\.automatically_archived/);
+  assert.match(migration, /event\.restored/);
 });

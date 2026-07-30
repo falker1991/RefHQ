@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.6.0 adds organization audit history, officials’ last-login visibility, recoverable member removal, and secure reusable Join Group links that continue through sign-in or new-account creation.
+Version 0.6.1 adds manual and automatic event archiving. Archived events leave active dashboards and selectors while preserving their operational history, and organization administrators can restore them from Activity.
 
 ## What is included
 
@@ -15,6 +15,9 @@ Version 0.6.0 adds organization audit history, officials’ last-login visibilit
 - Last-login visibility in the Officials directory
 - Organization-member removal that preserves historical assignments, check-ins, ratings, and audit records
 - Reusable Join Group links for existing users and new-account onboarding
+- Manual event archiving for organization administrators and assigned event administrators
+- Optional automatic archiving immediately after an event’s final day or after a configured delay
+- Archived-event restoration for organization administrators, with schedules, check-ins, ratings, and audit history preserved
 - Full-day field/time assignment board with checked-in referees highlighted
 - Assignment-board grid, collapsible field, and first-assignment attendance views
 - Tournament QR and authenticated self check-in
@@ -52,7 +55,7 @@ Open the local address shown in the terminal.
    - `supabase/migrations/202607250005_tournament_operations_v020.sql`
    - `supabase/migrations/202607250006_remove_v010_checkin_compat.sql`
    - `supabase/migrations/202607250007_fix_event_policy_recursion.sql`
-   - Continue with every later migration in filename order, including `supabase/migrations/202607300023_audit_join_links_and_member_removal.sql`.
+   - Continue with every later migration in filename order, including `supabase/migrations/202607300023_audit_join_links_and_member_removal.sql` and `supabase/migrations/202607300024_event_lifecycle_archiving.sql`.
 3. Create at least one user in **Authentication → Users**.
 4. Add that user to `public.profiles`, using the auth user ID and the demo organization ID.
 5. Optionally run `supabase/seed.sql` for the Capital Cup event and demo games.

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.36 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.37 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.36 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.36/);
+  assert.match(page, /Version 0\.5\.37/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.36");
+  assert.equal(JSON.parse(packageJson).version, "0.5.37");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -308,4 +308,14 @@ test("assignment board exposes all three Phase 1 views", async () => {
   assert.match(page, /const timeOrder = a\.game\.starts_at\.localeCompare\(b\.game\.starts_at\)/);
   assert.match(page, /const fieldOrder = a\.game\.field_name\.localeCompare\(b\.game\.field_name, undefined, \{ numeric: true, sensitivity: "base" \}\)/);
   assert.match(page, /return aLastName\.localeCompare\(bLastName/);
+});
+
+test("roadmap records organization capability and check-in method controls", async () => {
+  const readme = await read("README.md");
+  assert.match(readme, /Organization capability controls/);
+  assert.match(readme, /Control access to check-ins, assigning, and ratings\/coaching independently/);
+  assert.match(readme, /enable or disable every supported evaluation form type independently/);
+  assert.match(readme, /enable or disable public evaluations/);
+  assert.match(readme, /daily QR code, reusable NFC tag, and administrator manual check-in/);
+  assert.match(readme, /reject related database\/API mutations/);
 });

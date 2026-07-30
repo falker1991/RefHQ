@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.5.36 is the Phase 1 pilot-administration release. The Assignment Board’s First Assignment view is ordered by first assignment time, then field, then official last name.
+Version 0.5.37 is the Phase 1 pilot-administration release. The future roadmap now includes site-owner-controlled organization capabilities for assigning, check-in methods, coaching, ratings, evaluation forms, and public evaluation visibility.
 
 ## What is included
 
@@ -133,6 +133,18 @@ The hosted pilot uses Supabase as its source of truth. Do not use it as the sole
 - Add audit-log retention, privacy terms, backups, and monitoring before handling real youth-referee or assessment data.
 
 ## Future tournament-operations roadmap
+
+### Organization capability controls
+
+- Let the site owner enable or disable major product capabilities separately for each organization.
+- Control access to check-ins, assigning, and ratings/coaching independently.
+- When a capability is disabled, remove its navigation and actions for the organization and reject related database/API mutations rather than relying only on hidden interface controls.
+- Let the site owner enable or disable every supported evaluation form type independently for an organization.
+- Let the site owner enable or disable public evaluations. When public evaluations are disabled, force all new organization evaluations to private and prevent event staff from overriding that restriction.
+- Configure the check-in methods available to each organization: daily QR code, reusable NFC tag, and administrator manual check-in.
+- Support any permitted combination of check-in methods, including manual-only operation.
+- Preserve organization capability changes in an audit history with the site owner, timestamp, previous value, and new value.
+- Define safe behavior for existing events and records when a capability is disabled, retaining historical data while preventing new activity.
 
 ### Assignment-core live operations
 

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.32 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.33 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.32 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.32/);
+  assert.match(page, /Version 0\.5\.33/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.32");
+  assert.equal(JSON.parse(packageJson).version, "0.5.33");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -186,6 +186,16 @@ test("check-in roster sorts by first assignment field instead of site", async ()
   assert.match(page, /rosterSort === "field"/);
   assert.match(page, /<option value="field">Field<\/option>/);
   assert.doesNotMatch(page, /<option value="site">Site<\/option><\/select><\/label><label>Site/);
+});
+
+test("authorized administrators can create an event without importing a schedule", async () => {
+  const [page, client] = await Promise.all([read("app/page.tsx"), read("app/supabase-client.ts")]);
+  assert.match(page, /Create New Event/);
+  assert.match(page, /Create an event without a schedule/);
+  assert.match(page, /canCreateEvent=\{Boolean\(profile\.is_site_owner \|\| organizationRoles\.includes\("organization_admin"\) \|\| organizationRoles\.includes\("event_admin"\)\)\}/);
+  assert.match(client, /export async function createEvent\(/);
+  assert.match(client, /The end date cannot be before the start date/);
+  assert.match(client, /check_in_slug: `\$\{slugBase\}-\$\{Date\.now\(\)\.toString\(36\)\}`/);
 });
 
 test("Rate Crew buttons and rating choices exclude HQ and operational games", async () => {

@@ -9,6 +9,7 @@ import {
   createCoachAssignment,
   beginOrganizationAction,
   completeOrganizationAction,
+  createEvent,
   createGame,
   createOfficial,
   createOrganization,
@@ -566,6 +567,7 @@ function ImportView({
   organizationId,
   organization,
   events,
+  canCreateEvent,
   canConfigureAliases,
   onImported,
 }: {
@@ -574,6 +576,7 @@ function ImportView({
   organizationId: string;
   organization: OrganizationRecord;
   events: EventRecord[];
+  canCreateEvent: boolean;
   canConfigureAliases: boolean;
   onImported: (event: EventRecord) => void;
 }) {
@@ -590,6 +593,14 @@ function ImportView({
   const [details, setDetails] = useState({ name: "", venue: "", startsOn: "", endsOn: "" });
   const [aliasScope, setAliasScope] = useState<"organization" | "event">("organization");
   const [aliasText, setAliasText] = useState("");
+  const [creatingEvent, setCreatingEvent] = useState(false);
+  const [eventDetails, setEventDetails] = useState({
+    name: "",
+    venue_name: "",
+    starts_on: "",
+    ends_on: "",
+    timezone: "America/New_York",
+  });
   const destinationEvent = events.find((event) => event.id === destinationEventId);
 
   useEffect(() => {
@@ -759,10 +770,37 @@ function ImportView({
     }
   }
 
+  async function confirmEventCreation() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const event = await createEvent(session, profile, organizationId, eventDetails);
+      setMessage(`${event.name} was created. You can now import a schedule or add games manually.`);
+      setCreatingEvent(false);
+      setEventDetails({ name: "", venue_name: "", starts_on: "", ends_on: "", timezone: "America/New_York" });
+      onImported(event);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to create the event.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const games = new Set(rows.map((row) => row.external_id)).size;
   const referees = new Set(rows.map((row) => row.official_email)).size;
   return <section className="page-section">
-    <div className="section-title"><div><p className="eyebrow">ASSIGNR BRIDGE</p><h1>Import center</h1><p>Import the official directory separately, then add one or more schedule days to an event.</p></div></div>
+    <div className="section-title"><div><p className="eyebrow">EVENTS & ASSIGNR BRIDGE</p><h1>Import center</h1><p>Create an empty event, import the official directory separately, or add one or more schedule days.</p></div>{canCreateEvent && <button className="primary" onClick={() => setCreatingEvent((value) => !value)}>{creatingEvent ? "Cancel" : "Create New Event"}</button>}</div>
+    {creatingEvent && <article className="panel manual-entry-form empty-event-form">
+      <div><p className="eyebrow">NEW EVENT</p><h2>Create an event without a schedule</h2><p>Schedules and individual games can be added after the event is created.</p></div>
+      <div className="manual-form-grid">
+        <label>Event name<input value={eventDetails.name} maxLength={160} onChange={(event) => setEventDetails({ ...eventDetails, name: event.target.value })} /></label>
+        <label>Default venue<input value={eventDetails.venue_name} maxLength={160} onChange={(event) => setEventDetails({ ...eventDetails, venue_name: event.target.value })} /></label>
+        <label>Starts<input type="date" value={eventDetails.starts_on} onChange={(event) => setEventDetails({ ...eventDetails, starts_on: event.target.value, ends_on: eventDetails.ends_on || event.target.value })} /></label>
+        <label>Ends<input type="date" min={eventDetails.starts_on} value={eventDetails.ends_on} onChange={(event) => setEventDetails({ ...eventDetails, ends_on: event.target.value })} /></label>
+        <label>Time zone<select value={eventDetails.timezone} onChange={(event) => setEventDetails({ ...eventDetails, timezone: event.target.value })}><option value="America/New_York">Eastern Time</option><option value="America/Chicago">Central Time</option><option value="America/Denver">Mountain Time</option><option value="America/Phoenix">Arizona Time</option><option value="America/Los_Angeles">Pacific Time</option><option value="America/Anchorage">Alaska Time</option><option value="Pacific/Honolulu">Hawaii Time</option></select></label>
+      </div>
+      <button className="primary" disabled={busy || !eventDetails.name.trim() || !eventDetails.venue_name.trim() || !eventDetails.starts_on || !eventDetails.ends_on || eventDetails.ends_on < eventDetails.starts_on} onClick={confirmEventCreation}>{busy ? "Creating…" : "Create Event"}</button>
+    </article>}
     <div className="segmented import-tabs">
       <button className={mode === "schedule" ? "active" : ""} onClick={() => switchImportMode("schedule")}>Schedule export</button>
       <button className={mode === "officials" ? "active" : ""} onClick={() => switchImportMode("officials")}>Officials export</button>
@@ -2128,7 +2166,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {isAdministrativeStaff && profile && organization && view === "officials" && <OfficialsDirectory session={session} profile={profile} organizationRoles={organizationRoles} eventRoles={eventRoles} canManageOrganizationRoles={Boolean(profile.is_site_owner || organizationRoles.includes("organization_admin"))} organizationId={organization.id} officials={organizationOfficials} data={data} event={event} events={events} onCreated={() => loadOrganizationOfficials(session, organization.id).then(setOrganizationOfficials)} />}
       {event && view === "coaching" && isAdministrativeStaff && <CoachWorkspace session={session} event={event} data={data} organizationOfficials={organizationOfficials} canManage onSaved={() => refresh(event.id)} />}
       {event && organization && view === "assessments" && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={canConfigureRatings} hideWorkspace={canAssess} onOpenRating={() => setRatingModalGameId("")} onEditRating={async (gameId, targetEventId) => { if (targetEventId !== event.id) await switchEvent(targetEventId); setRatingModalGameId(gameId); }} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      {isAdministrativeStaff && organization && view === "import" && profile && <ImportView session={session} profile={profile} organizationId={organization.id} organization={organization} events={events} canConfigureAliases={canConfigureRatings} onImported={handleImported} />}
+      {isAdministrativeStaff && organization && view === "import" && profile && <ImportView session={session} profile={profile} organizationId={organization.id} organization={organization} events={events} canCreateEvent={Boolean(profile.is_site_owner || organizationRoles.includes("organization_admin") || organizationRoles.includes("event_admin"))} canConfigureAliases={canConfigureRatings} onImported={handleImported} />}
       {profile && view === "account" && <AccountSettings session={session} profile={profile} onUpdated={setProfile} />}
       {view === "groups" && (allRoles.has("site_owner")
         ? <SiteGroupsAdmin session={session} ownerEmail={profile?.primary_email || profile?.email || session.user.email || ""} onOpen={(organizationId) => switchOrganization(organizationId, "dashboard")} />
@@ -2136,7 +2174,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.32</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.33</span></footer>
   </main>;
 }
 

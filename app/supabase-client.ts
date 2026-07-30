@@ -409,6 +409,46 @@ export async function loadEvents(session: Law18Session) {
   return rest<EventRecord[]>(session, "events?select=*&order=starts_on.desc");
 }
 
+export async function createEvent(
+  session: Law18Session,
+  profile: Profile,
+  organizationId: string,
+  values: {
+    name: string;
+    venue_name: string;
+    starts_on: string;
+    ends_on: string;
+    timezone: string;
+  },
+) {
+  if (!organizationId) throw new Error("Select an organization before creating an event.");
+  if (!values.name.trim()) throw new Error("Enter an event name.");
+  if (!values.venue_name.trim()) throw new Error("Enter a default venue.");
+  if (!values.starts_on || !values.ends_on) throw new Error("Enter the event dates.");
+  if (values.ends_on < values.starts_on) throw new Error("The end date cannot be before the start date.");
+  const slugBase = values.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "event";
+  const rows = await rest<EventRecord[]>(
+    session,
+    "events",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        organization_id: organizationId,
+        name: values.name.trim(),
+        venue_name: values.venue_name.trim(),
+        starts_on: values.starts_on,
+        ends_on: values.ends_on,
+        timezone: values.timezone,
+        check_in_slug: `${slugBase}-${Date.now().toString(36)}`,
+        created_by: profile.id,
+      }),
+    },
+    "return=representation",
+  );
+  if (!rows[0]) throw new Error("The event could not be created.");
+  return rows[0];
+}
+
 export async function loadEventData(session: Law18Session, eventId: string) {
   const games = await rest<GameRecord[]>(
     session,

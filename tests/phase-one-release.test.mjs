@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.34 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.35 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.34 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.34/);
+  assert.match(page, /Version 0\.5\.35/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.34");
+  assert.equal(JSON.parse(packageJson).version, "0.5.35");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -163,7 +163,8 @@ test("check-in schedule modal uses one-column game cards with positions and crew
   assert.match(page, /GAME CREW/);
   assert.match(page, /data\.assignments\.filter\(\(item\) => item\.game_id === game\.id\)/);
   assert.match(page, /positionLabel\(crewAssignment\.position, crewAssignment\.position_title\)/);
-  assert.match(css, /\.checkin-day-schedule\{display:grid;grid-template-columns:minmax\(0,1fr\)/);
+  assert.match(css, /\.checkin-day-schedule\{display:flex;flex-direction:column;align-items:stretch/);
+  assert.match(css, /\.checkin-day-schedule>\.checkin-game-card\{display:block;flex:0 0 auto;box-sizing:border-box;width:100%/);
   assert.match(css, /\.checkin-crew-member\.selected-official/);
 });
 

@@ -9,6 +9,7 @@ type AuthPanelProps = {
 };
 
 export function AuthPanel({ onSession, recovery = false }: AuthPanelProps) {
+  const [joinToken, setJoinToken] = useState("");
   const [mode, setMode] = useState<"login" | "signup" | "recovery">(recovery ? "recovery" : "login");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("falkref91@gmail.com");
@@ -20,6 +21,13 @@ export function AuthPanel({ onSession, recovery = false }: AuthPanelProps) {
   // Recovery is an external authentication state transition.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMode(recovery ? "recovery" : "login"), [recovery]);
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get("join") || localStorage.getItem("law18ref-join-token") || "";
+    if (token) localStorage.setItem("law18ref-join-token", token);
+    // Join context is sourced from the browser after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setJoinToken(token);
+  }, []);
 
   async function signIn(event: FormEvent) {
     event.preventDefault();
@@ -71,7 +79,10 @@ export function AuthPanel({ onSession, recovery = false }: AuthPanelProps) {
     setBusy(true);
     setMessage("");
     try {
-      const result = await auth.signUp(email, password, fullName);
+      const redirect = joinToken
+        ? `${window.location.origin}/?join=${encodeURIComponent(joinToken)}`
+        : window.location.origin;
+      const result = await auth.signUp(email, password, fullName, redirect);
       if (result.access_token) onSession(result);
       else setMessage("Check your email to confirm your account, then sign in.");
     } catch (error) {
@@ -87,14 +98,14 @@ export function AuthPanel({ onSession, recovery = false }: AuthPanelProps) {
         <span className="auth-logo-lockup"><img src="/logo-draft-law18referee-management-v4.png" alt="Law18Referee Management" /></span>
       </section>
       <section className="auth-card">
-        <p className="eyebrow">WELCOME TO LAW18REFEREE MANAGEMENT</p>
+        <p className="eyebrow">{joinToken ? "JOIN GROUP INVITATION" : "WELCOME TO LAW18REFEREE MANAGEMENT"}</p>
         <h1>{mode === "recovery" ? "Create your password" : mode === "signup" ? "Create referee account" : "Sign in"}</h1>
         <p className="auth-intro">
           {mode === "recovery"
             ? "Choose a secure password to finish setting up your account."
             : mode === "signup"
-              ? "Use the same email address your assignor imported from Assignr."
-              : "Access tournament check-in, schedules, coaching, and ratings."}
+              ? joinToken ? "Create your account to join the organization connected to this invitation." : "Use the same email address your assignor imported from Assignr."
+              : joinToken ? "Sign in to join the organization connected to this invitation." : "Access tournament check-in, schedules, coaching, and ratings."}
         </p>
         <form onSubmit={mode === "recovery" ? updatePassword : mode === "signup" ? createAccount : signIn}>
           {mode === "signup" && <label>Full name<input value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" required /></label>}

@@ -104,14 +104,14 @@ export const auth = {
       body: JSON.stringify({ email, create_user: false }),
     });
   },
-  async signUp(email: string, password: string, fullName: string) {
+  async signUp(email: string, password: string, fullName: string, redirectTo = window.location.origin) {
     return request("/signup", {
       method: "POST",
       body: JSON.stringify({
         email,
         password,
         data: { full_name: fullName },
-        email_redirect_to: window.location.origin,
+        email_redirect_to: redirectTo,
       }),
     }) as Promise<Law18Session>;
   },

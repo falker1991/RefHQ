@@ -1,0 +1,153 @@
+/* Organization audit, membership, and join-link administration */
+.directory-row {
+  grid-template-columns: 1.15fr .9fr .62fr .82fr .48fr .72fr .52fr;
+  gap: 12px;
+}
+
+.directory-login {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.official-edit-actions .remove-member-button {
+  margin-right: auto;
+}
+
+.activity-admin-grid {
+  display: grid;
+  grid-template-columns: .85fr 1.15fr;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.join-link-creator {
+  padding-bottom: 24px;
+}
+
+.join-link-creator .panel-head p:last-child,
+.activity-log .panel-head p:last-child {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.join-link-creator > label {
+  display: grid;
+  gap: 7px;
+  margin: 0 24px 14px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.join-link-creator input {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px;
+  background: #fff;
+}
+
+.join-link-creator > .primary {
+  margin-left: 24px;
+}
+
+.join-link-list,
+.activity-log {
+  overflow: hidden;
+}
+
+.join-link-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 13px 20px;
+  border-top: 1px solid var(--line);
+}
+
+.join-link-row.disabled {
+  background: #f7f8fa;
+  opacity: .75;
+}
+
+.join-link-row > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.join-link-row small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.join-link-row button {
+  padding: 7px 10px;
+  font-size: 9px;
+}
+
+.activity-log-head,
+.activity-log-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr .8fr 1fr;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 22px;
+}
+
+.activity-log-head {
+  background: #f7f9fb;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.activity-log-row {
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+}
+
+.activity-log-row span,
+.activity-log-row time {
+  color: var(--muted);
+}
+
+.activity-log-row time {
+  font-size: 10px;
+}
+
+@media (max-width: 800px) {
+  .activity-admin-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .activity-log-head {
+    display: none;
+  }
+
+  .activity-log-row {
+    grid-template-columns: 1fr auto;
+  }
+
+  .activity-log-row span:nth-of-type(2) {
+    display: none;
+  }
+
+  .activity-log-row time {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .directory-login {
+    display: none;
+  }
+
+  .official-edit-actions .remove-member-button {
+    margin-right: 0;
+  }
+}

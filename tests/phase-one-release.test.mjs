@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.38 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.6.0 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.38 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.38/);
+  assert.match(page, /Version 0\.6\.0/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.38");
+  assert.equal(JSON.parse(packageJson).version, "0.6.0");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -322,4 +322,53 @@ test("roadmap records organization capability and check-in method controls", asy
   assert.match(readme, /enable or disable public evaluations/);
   assert.match(readme, /daily QR code, reusable NFC tag, and administrator manual check-in/);
   assert.match(readme, /reject related database\/API mutations/);
+});
+
+test("organization admins can review audited actions and manage Join Group links", async () => {
+  const [page, client, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/202607300023_audit_join_links_and_member_removal.sql"),
+  ]);
+  assert.match(page, /Activity & Join Links/);
+  assert.match(page, /Create Join Group Link/);
+  assert.match(page, /organizationRoles\.includes\("organization_admin"\).*"activity"/);
+  assert.match(client, /export async function loadOrganizationActivity/);
+  assert.match(client, /export async function createOrganizationJoinLink/);
+  assert.match(migration, /create table if not exists public\.organization_join_links/);
+  assert.match(migration, /create or replace function public\.audit_organization_mutation/);
+  for (const table of ["events", "games", "assignments", "officials", "assessments", "check_ins", "coach_assignments", "import_jobs", "organization_memberships", "event_memberships"]) {
+    assert.match(migration, new RegExp(`'${table}'`));
+  }
+});
+
+test("officials directory shows last login and supports recoverable member removal", async () => {
+  const [page, client, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/202607300023_audit_join_links_and_member_removal.sql"),
+  ]);
+  assert.match(page, />Last Login</);
+  assert.match(page, /Remove From Organization/);
+  assert.match(page, /Their Law18Ref account, assignments, ratings, check-ins, and audit history are preserved/);
+  assert.match(client, /last_login_at\?: string \| null/);
+  assert.match(client, /export async function removeOrganizationMember/);
+  assert.match(migration, /create or replace function public\.record_current_login/);
+  assert.match(migration, /The last organization administrator cannot be removed/);
+  assert.match(migration, /set status = 'archived'/);
+});
+
+test("Join Group tokens survive account creation and are claimed after authentication", async () => {
+  const [authPanel, authClient, page, migration] = await Promise.all([
+    read("app/auth-panel.tsx"),
+    read("app/auth-client.ts"),
+    read("app/page.tsx"),
+    read("supabase/migrations/202607300023_audit_join_links_and_member_removal.sql"),
+  ]);
+  assert.match(authPanel, /law18ref-join-token/);
+  assert.match(authPanel, /JOIN GROUP INVITATION/);
+  assert.match(authClient, /email_redirect_to: redirectTo/);
+  assert.match(page, /claimOrganizationJoinLink\(session, joinToken\)/);
+  assert.match(migration, /create or replace function public\.claim_organization_join_link/);
+  assert.match(migration, /membership\.joined_via_link/);
 });

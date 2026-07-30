@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./admin-features.css";
 
 export async function generateMetadata(): Promise<Metadata> {
   const title = "Law18Referee Management — Tournament referee operations";

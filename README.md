@@ -4,13 +4,17 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.5.38 is the Phase 1 pilot-administration release. The future organization-capability roadmap now uses a two-level permission model: site-owner limits establish each organization’s maximum feature set, and organization administrators can further restrict enabled capabilities for their members.
+Version 0.6.0 adds organization audit history, officials’ last-login visibility, recoverable member removal, and secure reusable Join Group links that continue through sign-in or new-account creation.
 
 ## What is included
 
 - Separate Assignr Users official-directory import and Assignr Games schedule import
 - Repeat schedule imports that append new days or update matching games in an existing event
 - Multiple-event switcher for assignors and officials
+- Organization-admin and site-owner Activity view for meaningful changes such as ratings, imports, schedules, assignments, officials, roles, events, and check-ins
+- Last-login visibility in the Officials directory
+- Organization-member removal that preserves historical assignments, check-ins, ratings, and audit records
+- Reusable Join Group links for existing users and new-account onboarding
 - Full-day field/time assignment board with checked-in referees highlighted
 - Assignment-board grid, collapsible field, and first-assignment attendance views
 - Tournament QR and authenticated self check-in
@@ -48,6 +52,7 @@ Open the local address shown in the terminal.
    - `supabase/migrations/202607250005_tournament_operations_v020.sql`
    - `supabase/migrations/202607250006_remove_v010_checkin_compat.sql`
    - `supabase/migrations/202607250007_fix_event_policy_recursion.sql`
+   - Continue with every later migration in filename order, including `supabase/migrations/202607300023_audit_join_links_and_member_removal.sql`.
 3. Create at least one user in **Authentication → Users**.
 4. Add that user to `public.profiles`, using the auth user ID and the demo organization ID.
 5. Optionally run `supabase/seed.sql` for the Capital Cup event and demo games.

@@ -92,10 +92,36 @@ export type OfficialRecord = {
   source_official_id?: string | null;
   source_display_name?: string | null;
   linked_user_id?: string | null;
+  last_login_at?: string | null;
   identity_status?: string;
   merged_into_official_id?: string | null;
   pending_org_role?: MembershipRole;
   pending_org_roles?: MembershipRole[];
+};
+
+export type OrganizationJoinLink = {
+  id: string;
+  organization_id: string;
+  token: string;
+  label: string;
+  default_role: MembershipRole;
+  active: boolean;
+  created_at: string;
+  expires_at: string | null;
+  last_used_at: string | null;
+  use_count: number;
+};
+
+export type AuditRecord = {
+  id: number;
+  event_id: string | null;
+  actor_id: string | null;
+  actor_name: string;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  details: Record<string, unknown>;
+  created_at: string;
 };
 
 export type AssignmentRecord = {
@@ -295,6 +321,84 @@ export async function loadMemberships(session: Law18Session) {
     rest<EventMembership[]>(session, "event_memberships?select=*"),
   ]);
   return { organizations, events };
+}
+
+export async function recordCurrentLogin(session: Law18Session) {
+  await rest(session, "rpc/record_current_login", {
+    method: "POST",
+    body: "{}",
+  }, "return=minimal");
+}
+
+export async function loadOrganizationActivity(
+  session: Law18Session,
+  organizationId: string,
+  limit = 250,
+) {
+  return rest<AuditRecord[]>(session, "rpc/organization_activity", {
+    method: "POST",
+    body: JSON.stringify({ target_organization: organizationId, result_limit: limit }),
+  });
+}
+
+export async function loadOrganizationJoinLinks(
+  session: Law18Session,
+  organizationId: string,
+) {
+  return rest<OrganizationJoinLink[]>(
+    session,
+    `organization_join_links?organization_id=eq.${enc(organizationId)}&select=*&order=created_at.desc`,
+  );
+}
+
+export async function createOrganizationJoinLink(
+  session: Law18Session,
+  organizationId: string,
+  label: string,
+  role: MembershipRole = "referee",
+  expiresAt: string | null = null,
+) {
+  const rows = await rest<OrganizationJoinLink[]>(session, "rpc/create_organization_join_link", {
+    method: "POST",
+    body: JSON.stringify({
+      target_organization: organizationId,
+      link_label: label,
+      link_role: role,
+      link_expires_at: expiresAt,
+    }),
+  });
+  return rows[0];
+}
+
+export async function setOrganizationJoinLinkActive(
+  session: Law18Session,
+  linkId: string,
+  active: boolean,
+) {
+  await rest(session, "rpc/set_organization_join_link_active", {
+    method: "POST",
+    body: JSON.stringify({ join_link_id: linkId, enabled: active }),
+  }, "return=minimal");
+}
+
+export async function claimOrganizationJoinLink(session: Law18Session, token: string) {
+  const rows = await rest<{ organization_id: string; organization_name: string }[]>(
+    session,
+    "rpc/claim_organization_join_link",
+    { method: "POST", body: JSON.stringify({ join_token: token }) },
+  );
+  return rows[0];
+}
+
+export async function removeOrganizationMember(
+  session: Law18Session,
+  organizationId: string,
+  userId: string,
+) {
+  await rest(session, "rpc/remove_organization_member", {
+    method: "POST",
+    body: JSON.stringify({ target_organization: organizationId, target_user: userId }),
+  }, "return=minimal");
 }
 
 export async function loadAppearanceCampaigns(session: Law18Session) {
@@ -818,7 +922,7 @@ export function normalizePosition(position: string): AssignmentRecord["position"
 export async function loadOrganizationOfficials(session: Law18Session, organizationId: string, includeMerged = false) {
   return rest<OfficialRecord[]>(
     session,
-    `officials?organization_id=eq.${enc(organizationId)}${includeMerged ? "" : "&merged_into_official_id=is.null"}&select=*&order=full_name.asc`,
+    `officials?organization_id=eq.${enc(organizationId)}${includeMerged ? "" : "&merged_into_official_id=is.null&identity_status=neq.removed"}&select=*&order=full_name.asc`,
   );
 }
 

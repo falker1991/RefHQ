@@ -301,6 +301,27 @@ export async function loadAppearanceCampaigns(session: Law18Session) {
   return rest<AppearanceCampaign[]>(session, "site_appearance_campaigns?select=*&order=starts_at.desc");
 }
 
+export async function uploadAppearanceLogo(session: Law18Session, file: File) {
+  if (!baseUrl || !anonKey) throw new Error("Supabase is not configured.");
+  const extension = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "png";
+  const objectPath = `${session.user.id}/${crypto.randomUUID()}.${extension}`;
+  const response = await fetch(`${baseUrl}/storage/v1/object/appearance-logos/${objectPath}`, {
+    method: "POST",
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${session.access_token}`,
+      "Content-Type": file.type,
+      "x-upsert": "false",
+    },
+    body: file,
+  });
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}));
+    throw new Error(result.message || result.error || "Unable to upload the logo.");
+  }
+  return `${baseUrl}/storage/v1/object/public/appearance-logos/${objectPath.split("/").map(enc).join("/")}`;
+}
+
 export async function createAppearanceCampaign(
   session: Law18Session,
   values: Omit<AppearanceCampaign, "id">,

@@ -44,6 +44,7 @@ import {
   updateOfficial,
   updateEventRatingSettings,
   updatePositionTitleAliases,
+  uploadAppearanceLogo,
   positionAliasKey,
   updateOwnProfile,
   undoCheckIn,
@@ -1321,11 +1322,37 @@ function AppearanceSettings({ session }: { session: Law18Session }) {
     ends_at: "",
   });
   const [message, setMessage] = useState("");
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoDragging, setLogoDragging] = useState(false);
+  const [logoFileName, setLogoFileName] = useState("");
   useEffect(() => {
     Promise.all([loadAppearanceCampaigns(session), loadAppearanceThemes(session)])
       .then(([nextCampaigns, nextThemes]) => { setCampaigns(nextCampaigns); setThemes(nextThemes); })
       .catch(() => undefined);
   }, [session]);
+  async function selectLogo(file?: File) {
+    if (!file) return;
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      setMessage("Choose a PNG, JPEG, or WebP logo.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setMessage("The logo must be 5 MB or smaller.");
+      return;
+    }
+    setLogoUploading(true);
+    setMessage("Uploading temporary logo…");
+    try {
+      const logoUrl = await uploadAppearanceLogo(session, file);
+      setForm((current) => ({ ...current, logo_url: logoUrl }));
+      setLogoFileName(file.name);
+      setMessage(`${file.name} is ready to preview, save, or schedule.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to upload the logo.");
+    } finally {
+      setLogoUploading(false);
+    }
+  }
   async function schedule() {
     try {
       await createAppearanceCampaign(session, {
@@ -1385,6 +1412,7 @@ function AppearanceSettings({ session }: { session: Law18Session }) {
       primary_color: theme.primary_color,
       accent_color: theme.accent_color,
     });
+    setLogoFileName(theme.logo_url ? "Saved custom logo" : "");
     displayAppearance(theme);
     setMessage(`${theme.name} loaded. Choose dates to schedule it, or adjust it and save as another theme.`);
   }
@@ -1407,13 +1435,18 @@ function AppearanceSettings({ session }: { session: Law18Session }) {
     <div className="appearance-grid">
       <article className="panel settings-card appearance-form">
         <label>Theme or campaign name<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
-        <label>Temporary logo URL<input type="url" value={form.logo_url} onChange={(event) => setForm({ ...form, logo_url: event.target.value })} placeholder="Optional HTTPS image URL" /></label>
+        <div className={`appearance-logo-upload ${logoDragging ? "dragging" : ""} ${form.logo_url ? "has-logo" : ""}`} onDragEnter={(event) => { event.preventDefault(); setLogoDragging(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { event.preventDefault(); if (event.currentTarget === event.target) setLogoDragging(false); }} onDrop={(event) => { event.preventDefault(); setLogoDragging(false); void selectLogo(event.dataTransfer.files[0]); }}>
+          <span className="upload-icon">↑</span>
+          <div><strong>{logoUploading ? "Uploading…" : form.logo_url ? logoFileName || "Custom logo selected" : "Drop a temporary logo here"}</strong><small>PNG, JPEG, or WebP · maximum 5 MB</small></div>
+          <label className="secondary file-button">{form.logo_url ? "Replace File" : "Choose File"}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={logoUploading} onChange={(event) => { void selectLogo(event.target.files?.[0]); event.target.value = ""; }} /></label>
+          {form.logo_url && <><img src={form.logo_url} alt="Temporary logo preview" /><button className="text-button appearance-logo-remove" type="button" onClick={() => { setForm({ ...form, logo_url: "" }); setLogoFileName(""); }}>Use Default Logo</button></>}
+        </div>
         <label>Primary color<input type="color" value={form.primary_color} onChange={(event) => setForm({ ...form, primary_color: event.target.value })} /></label>
         <label>Accent color<input type="color" value={form.accent_color} onChange={(event) => setForm({ ...form, accent_color: event.target.value })} /></label>
         <label>Starts<input type="datetime-local" value={form.starts_at} onChange={(event) => setForm({ ...form, starts_at: event.target.value })} /></label>
         <label>Ends<input type="datetime-local" value={form.ends_at} onChange={(event) => setForm({ ...form, ends_at: event.target.value })} /></label>
         {message && <p className="pilot-message">{message}</p>}
-        <div className="appearance-form-actions"><button className="secondary" onClick={() => displayAppearance({ primary_color: form.primary_color, accent_color: form.accent_color, logo_url: form.logo_url || null })}>Preview</button><button className="secondary" disabled={form.name.trim().length < 2} onClick={saveTheme}>Save to theme library</button><button className="primary" disabled={!form.name || !form.starts_at || !form.ends_at} onClick={schedule}>Schedule appearance</button></div>
+        <div className="appearance-form-actions"><button className="secondary" disabled={logoUploading} onClick={() => displayAppearance({ primary_color: form.primary_color, accent_color: form.accent_color, logo_url: form.logo_url || null })}>Preview</button><button className="secondary" disabled={logoUploading || form.name.trim().length < 2} onClick={saveTheme}>Save to theme library</button><button className="primary" disabled={logoUploading || !form.name || !form.starts_at || !form.ends_at} onClick={schedule}>Schedule appearance</button></div>
       </article>
       <article className="panel campaign-list"><div className="panel-head"><div><p className="eyebrow">SCHEDULE</p><h2>Appearance campaigns</h2></div></div>{campaigns.map((campaign) => {
         const now = Date.now();
@@ -2102,7 +2135,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.30</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.31</span></footer>
   </main>;
 }
 

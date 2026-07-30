@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.30 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.31 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.30 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.30/);
+  assert.match(page, /Version 0\.5\.31/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.30");
+  assert.equal(JSON.parse(packageJson).version, "0.5.31");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -68,6 +68,21 @@ test("top bar has an accessible page refresh button beside the account menu", as
   assert.match(page, /className="topbar-account-actions"/);
   assert.match(page, /className="page-refresh-button" aria-label="Refresh page"/);
   assert.match(page, /window\.location\.reload\(\)/);
+});
+
+test("site owner appearance supports secure drag-and-drop logo uploads", async () => {
+  const [page, client, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/202607290025_appearance_logo_storage.sql"),
+  ]);
+  assert.match(page, /className=\{`appearance-logo-upload/);
+  assert.match(page, /onDrop=\{\(event\) =>/);
+  assert.match(page, /accept="image\/png,image\/jpeg,image\/webp"/);
+  assert.match(page, /uploadAppearanceLogo\(session, file\)/);
+  assert.match(client, /storage\/v1\/object\/appearance-logos/);
+  assert.match(migration, /file_size_limit/);
+  assert.match(migration, /public\.is_site_owner\(\)/);
 });
 
 test("coach schedule lists crews and opens the selected game's rating modal", async () => {

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.31 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.32 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.31 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.31/);
+  assert.match(page, /Version 0\.5\.32/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.31");
+  assert.equal(JSON.parse(packageJson).version, "0.5.32");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -178,6 +178,14 @@ test("administrative roster supports immediate manual check-in and undo", async 
   assert.doesNotMatch(page, /confirm\([^)]*check.?in/i);
   assert.match(client, /export async function undoCheckIn/);
   assert.match(client, /method: "DELETE"/);
+});
+
+test("check-in roster sorts by first assignment field instead of site", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /firstField: firstGame\?\.field_name \|\| "Unspecified field"/);
+  assert.match(page, /rosterSort === "field"/);
+  assert.match(page, /<option value="field">Field<\/option>/);
+  assert.doesNotMatch(page, /<option value="site">Site<\/option><\/select><\/label><label>Site/);
 });
 
 test("Rate Crew buttons and rating choices exclude HQ and operational games", async () => {

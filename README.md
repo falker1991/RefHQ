@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.5.37 is the Phase 1 pilot-administration release. The future roadmap now includes site-owner-controlled organization capabilities for assigning, check-in methods, coaching, ratings, evaluation forms, and public evaluation visibility.
+Version 0.5.38 is the Phase 1 pilot-administration release. The future organization-capability roadmap now uses a two-level permission model: site-owner limits establish each organization’s maximum feature set, and organization administrators can further restrict enabled capabilities for their members.
 
 ## What is included
 
@@ -136,14 +136,18 @@ The hosted pilot uses Supabase as its source of truth. Do not use it as the sole
 
 ### Organization capability controls
 
-- Let the site owner enable or disable major product capabilities separately for each organization.
+- Use a two-level capability model: site-owner organization entitlements followed by organization-admin member permissions.
+- Let the site owner enable or disable major product capabilities separately for each organization. These settings are the organization’s capability ceiling.
+- Let organization administrators remove any site-owner-enabled capability from the organization generally, from a role, or from an individual member.
+- Never let an organization administrator enable a capability that the site owner has disabled for that organization.
+- Calculate effective access from the intersection of the site-owner entitlement, organization setting, role permission, individual-member permission, event assignment, and the user’s active role.
 - Control access to check-ins, assigning, and ratings/coaching independently.
 - When a capability is disabled, remove its navigation and actions for the organization and reject related database/API mutations rather than relying only on hidden interface controls.
 - Let the site owner enable or disable every supported evaluation form type independently for an organization.
 - Let the site owner enable or disable public evaluations. When public evaluations are disabled, force all new organization evaluations to private and prevent event staff from overriding that restriction.
 - Configure the check-in methods available to each organization: daily QR code, reusable NFC tag, and administrator manual check-in.
 - Support any permitted combination of check-in methods, including manual-only operation.
-- Preserve organization capability changes in an audit history with the site owner, timestamp, previous value, and new value.
+- Preserve capability changes in an audit history with the acting site owner or organization administrator, affected organization/member, timestamp, previous value, and new value.
 - Define safe behavior for existing events and records when a capability is disabled, retaining historical data while preventing new activity.
 
 ### Assignment-core live operations

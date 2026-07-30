@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.37 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.38 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.37 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.37/);
+  assert.match(page, /Version 0\.5\.38/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.37");
+  assert.equal(JSON.parse(packageJson).version, "0.5.38");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -313,6 +313,10 @@ test("assignment board exposes all three Phase 1 views", async () => {
 test("roadmap records organization capability and check-in method controls", async () => {
   const readme = await read("README.md");
   assert.match(readme, /Organization capability controls/);
+  assert.match(readme, /site-owner organization entitlements followed by organization-admin member permissions/);
+  assert.match(readme, /organization’s capability ceiling/);
+  assert.match(readme, /remove any site-owner-enabled capability from the organization generally, from a role, or from an individual member/);
+  assert.match(readme, /Never let an organization administrator enable a capability that the site owner has disabled/);
   assert.match(readme, /Control access to check-ins, assigning, and ratings\/coaching independently/);
   assert.match(readme, /enable or disable every supported evaluation form type independently/);
   assert.match(readme, /enable or disable public evaluations/);

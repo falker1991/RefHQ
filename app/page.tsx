@@ -504,7 +504,15 @@ function CheckInView({ event, data, session, canManageCheckIns, onRefresh }: { e
       <div className="checkin-day-schedule">{scheduleOfficial.games.map((game) => {
         const assignment = data.assignments.find((item) => item.game_id === game.id && item.official_id === scheduleOfficial.official.id);
         const isCoachingGame = data.coachAssignments.some((item) => item.coach_id === scheduleOfficial.official.linked_user_id && (item.full_schedule || item.game_id === game.id));
-        return <article key={game.id}><time>{formatTime(game.starts_at)}</time><div><strong>{game.home_team} vs. {game.away_team}</strong><span>{game.venue_name || event.venue_name} · {game.field_name}</span><small>{assignment ? positionLabel(assignment.position, assignment.position_title) : isCoachingGame ? "Referee Coach" : "Event assignment"}</small></div></article>;
+        const selectedPosition = assignment ? positionLabel(assignment.position, assignment.position_title) : isCoachingGame ? "Referee Coach" : "Event assignment";
+        const crew = data.assignments.filter((item) => item.game_id === game.id).map((item) => ({
+          assignment: item,
+          official: data.officials.find((official) => official.id === item.official_id),
+        })).filter((item) => Boolean(item.official));
+        return <article className="checkin-game-card" key={game.id}>
+          <div className="checkin-game-card-head"><div><time>{formatTime(game.starts_at)}</time><strong>{game.home_team} vs. {game.away_team}</strong><span>{game.venue_name || event.venue_name} · {game.field_name}</span></div><span className="selected-position">{selectedPosition}</span></div>
+          <div className="checkin-game-crew"><p className="eyebrow">GAME CREW</p>{crew.map(({ assignment: crewAssignment, official }) => <div className={`checkin-crew-member ${official!.id === scheduleOfficial.official.id ? "selected-official" : ""}`} key={crewAssignment.id}><span className="avatar">{initials(official!.full_name)}</span><div><strong>{official!.full_name}</strong><small>{positionLabel(crewAssignment.position, crewAssignment.position_title)}</small></div>{official!.id === scheduleOfficial.official.id && <span className="you-marker">Selected</span>}</div>)}{!crew.length && <p className="empty-crew">No referee crew is assigned.</p>}</div>
+        </article>;
       })}{!scheduleOfficial.games.length && <EmptyState>No scheduled games are available for this event day.</EmptyState>}</div>
     </section></div>}
   </section>;
@@ -2174,7 +2182,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.33</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.34</span></footer>
   </main>;
 }
 

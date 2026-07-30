@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.33 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.34 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.33 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.33/);
+  assert.match(page, /Version 0\.5\.34/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.33");
+  assert.equal(JSON.parse(packageJson).version, "0.5.34");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -154,6 +154,17 @@ test("check-in roster names open a complete daily schedule modal", async () => {
   assert.match(page, /className="confirmation-dialog checkin-schedule-dialog"/);
   assert.match(page, /className="checkin-day-schedule"/);
   assert.match(css, /\.checkin-schedule-dialog/);
+});
+
+test("check-in schedule modal uses one-column game cards with positions and crews", async () => {
+  const [page, css] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
+  assert.match(page, /className="checkin-game-card"/);
+  assert.match(page, /className="selected-position"/);
+  assert.match(page, /GAME CREW/);
+  assert.match(page, /data\.assignments\.filter\(\(item\) => item\.game_id === game\.id\)/);
+  assert.match(page, /positionLabel\(crewAssignment\.position, crewAssignment\.position_title\)/);
+  assert.match(css, /\.checkin-day-schedule\{display:grid;grid-template-columns:minmax\(0,1fr\)/);
+  assert.match(css, /\.checkin-crew-member\.selected-official/);
 });
 
 test("rating configuration requires an explicit save and Basic Eval stores notes", async () => {

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.5.35 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.5.36 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.5.35 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.5\.35/);
+  assert.match(page, /Version 0\.5\.36/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.5.35");
+  assert.equal(JSON.parse(packageJson).version, "0.5.36");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -305,4 +305,7 @@ test("assignment board exposes all three Phase 1 views", async () => {
   assert.match(page, /Time and Field Grid/);
   assert.match(page, />By Field</);
   assert.match(page, />First Assignment</);
+  assert.match(page, /const timeOrder = a\.game\.starts_at\.localeCompare\(b\.game\.starts_at\)/);
+  assert.match(page, /const fieldOrder = a\.game\.field_name\.localeCompare\(b\.game\.field_name, undefined, \{ numeric: true, sensitivity: "base" \}\)/);
+  assert.match(page, /return aLastName\.localeCompare\(bLastName/);
 });

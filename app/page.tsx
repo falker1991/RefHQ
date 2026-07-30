@@ -191,7 +191,16 @@ function AssignmentBoard({ data }: { data: EventData }) {
       .sort((a, b) => a.game.starts_at.localeCompare(b.game.starts_at))[0];
     return first ? { official, ...first } : null;
   }).filter((item): item is { official: OfficialRecord; assignment: AssignmentRecord; game: GameRecord } => Boolean(item))
-    .sort((a, b) => a.game.starts_at.localeCompare(b.game.starts_at) || a.official.full_name.localeCompare(b.official.full_name));
+    .sort((a, b) => {
+      const timeOrder = a.game.starts_at.localeCompare(b.game.starts_at);
+      if (timeOrder) return timeOrder;
+      const fieldOrder = a.game.field_name.localeCompare(b.game.field_name, undefined, { numeric: true, sensitivity: "base" });
+      if (fieldOrder) return fieldOrder;
+      const aLastName = a.official.full_name.trim().split(/\s+/).at(-1) || a.official.full_name;
+      const bLastName = b.official.full_name.trim().split(/\s+/).at(-1) || b.official.full_name;
+      return aLastName.localeCompare(bLastName, undefined, { sensitivity: "base" })
+        || a.official.full_name.localeCompare(b.official.full_name, undefined, { sensitivity: "base" });
+    });
   if (!data.games.length) return <EmptyState>Import a schedule to populate the assignment board.</EmptyState>;
   return (
     <section className="page-section">
@@ -2182,7 +2191,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.35</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.5.36</span></footer>
   </main>;
 }
 

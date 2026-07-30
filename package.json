@@ -1,6 +1,6 @@
 {
   "name": "law18referee-management",
-  "version": "0.5.35",
+  "version": "0.5.36",
   "private": true,
   "engines": {
     "node": ">=22.13.0"

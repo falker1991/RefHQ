@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.5.35 is the Phase 1 pilot-administration release. Check-in schedule game cards are now explicitly stacked vertically at every screen size, with one full-width game per row.
+Version 0.5.36 is the Phase 1 pilot-administration release. The Assignment Board’s First Assignment view is ordered by first assignment time, then field, then official last name.
 
 ## What is included
 

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.9.2 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.9.3 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.9.2 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.9\.2/);
+  assert.match(page, /Version 0\.9\.3/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.9.2");
+  assert.equal(JSON.parse(packageJson).version, "0.9.3");
 });
 
 test("sessions refresh automatically and non-auth failures preserve login", async () => {
@@ -57,7 +57,7 @@ test("public ratings support approval, unread referee badges, and retained delet
 });
 
 test("ratings can be filtered and sorted by score with match crews in position order", async () => {
-  const page = await read("app/page.tsx");
+  const [page, css] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
   assert.match(page, /scores: \[\] as string\[\]/);
   assert.match(page, /<option value="score">Rating Score<\/option>/);
   assert.match(page, /\["scores", "Rating Scores", filterOptions\.scores\]/);
@@ -436,7 +436,7 @@ test("rating drafts are readable only by their creator", async () => {
 });
 
 test("ratings history supports multi-select filters independent of sorting", async () => {
-  const page = await read("app/page.tsx");
+  const [page, css] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
   assert.match(page, /historyFilters/);
   assert.match(page, /toggleHistoryFilter/);
   assert.match(page, /Filter Ratings/);
@@ -454,6 +454,9 @@ test("ratings history supports multi-select filters independent of sorting", asy
   assert.doesNotMatch(page, /\["dates", "Dates"/);
   assert.match(page, /const filteredAverage = filteredScores\.length/);
   assert.match(page, /Average Score <strong>\{filteredAverage\?\.toFixed\(2\) \|\| "—"\}/);
+  assert.match(css, /grid-template-columns:repeat\(5,minmax\(110px,1fr\)\) minmax\(220px,1\.35fr\)/);
+  assert.match(css, /@media\(max-width:900px\)\{\.ratings-filter-grid\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(css, /@media\(max-width:520px\)\{\.ratings-filter-grid\{grid-template-columns:1fr/);
 });
 
 test("ratings history survives event archiving and supports grouped export and lifecycle controls", async () => {

@@ -69,7 +69,7 @@ export function AuthPanel({ onSession, recovery = false, initialMessage = "" }: 
     try {
       const { session } = auth.initialize();
       if (!session) throw new Error("This password link has expired. Request a new one.");
-      onSession(await auth.updatePassword(session, password));
+      onSession(await auth.updatePassword(await auth.ensureValidSession(session), password));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to save your password.");
     } finally {

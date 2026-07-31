@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { AuthPanel } from "./auth-panel";
-import { auth, type Law18Session } from "./auth-client";
+import { auth, isSessionExpiredError, type Law18Session } from "./auth-client";
 import {
   archiveEvent,
   approvePublicRating,
@@ -2481,6 +2481,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
   const [eventId, setEventId] = useState("");
   const [data, setData] = useState<EventData>({ games: [], assignments: [], officials: [], checkIns: [], assessments: [], coachAssignments: [] });
   const [loading, setLoading] = useState(true);
+  const [dashboardLoadError, setDashboardLoadError] = useState("");
   const [accountOpen, setAccountOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [ratingModalGameId, setRatingModalGameId] = useState<string | null>(null);
@@ -2535,6 +2536,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
 
   useEffect(() => {
     (async () => {
+      setDashboardLoadError("");
       try {
         const joinToken = new URLSearchParams(window.location.search).get("join") || localStorage.getItem("law18ref-join-token");
         if (joinToken) {
@@ -2614,12 +2616,13 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
         sessionStorage.removeItem("law18ref-refresh-view");
         sessionStorage.removeItem("law18ref-refresh-event");
       } catch (reason) {
-        onSessionExpired();
+        if (isSessionExpiredError(reason)) onSessionExpired();
+        else setDashboardLoadError(reason instanceof Error ? reason.message : "Law18Ref could not load. Check your connection and try again.");
       } finally {
         setLoading(false);
       }
     })();
-  }, [session, onSessionExpired]);
+  }, [session.user.id, onSessionExpired]);
 
   useEffect(() => {
     const challengeId = new URLSearchParams(window.location.search).get("organization_action");
@@ -2763,6 +2766,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       : [["dashboard", "Dashboard"], ["board", "My Assignments"], ...(refereeHasCurrentOrFutureAssignment ? [["checkin", "Check-In"] as [View, string]] : []), ["assessments", "My Evals"]];
 
   if (loading) return <main className="auth-page"><p className="auth-loading">Loading Dashboard</p></main>;
+  if (dashboardLoadError) return <main className="auth-page"><section className="auth-card"><p className="eyebrow">CONNECTION ISSUE</p><h1>Unable to Load Law18Ref</h1><p>{dashboardLoadError}</p><p>Your login is still saved.</p><button className="primary" onClick={() => window.location.reload()}>Try Again</button></section></main>;
   return <main>
     <header className="topbar">
       <button className="brand" aria-label="Law18Referee Management dashboard" onClick={() => setView("dashboard")}><Mark /></button>
@@ -2812,7 +2816,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.9.0</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.9.1</span></footer>
   </main>;
 }
 

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.9.0 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.9.1 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,27 @@ test("Version 0.9.0 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.9\.0/);
+  assert.match(page, /Version 0\.9\.1/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.9.0");
+  assert.equal(JSON.parse(packageJson).version, "0.9.1");
+});
+
+test("sessions refresh automatically and non-auth failures preserve login", async () => {
+  const [authClient, dataClient, page] = await Promise.all([
+    read("app/auth-client.ts"),
+    read("app/supabase-client.ts"),
+    read("app/page.tsx"),
+  ]);
+  assert.match(authClient, /grant_type=refresh_token/);
+  assert.match(authClient, /refreshLeadSeconds = 120/);
+  assert.match(authClient, /navigator\.locks\.request\("law18ref-session-refresh"/);
+  assert.match(authClient, /document\.addEventListener\("visibilitychange"/);
+  assert.match(authClient, /window\.addEventListener\("online"/);
+  assert.match(dataClient, /if \(response\.status === 401\)/);
+  assert.match(dataClient, /ensureValidSession\(activeSession, true\)/);
+  assert.match(page, /if \(isSessionExpiredError\(reason\)\) onSessionExpired\(\)/);
+  assert.match(page, /Your login is still saved\./);
 });
 
 test("public ratings support approval, unread referee badges, and retained deletion", async () => {
@@ -174,11 +191,12 @@ test("responsive shell and header remain contained within the viewport", async (
   assert.match(css, /\.eventbar>div\{display:grid;width:100%;grid-template-columns:35px repeat\(2,minmax\(0,1fr\)\)/);
 });
 
-test("failed dashboard startup returns to login with a session-expired notice", async () => {
+test("only an expired auth session returns to login", async () => {
   const [page, authPanel] = await Promise.all([read("app/page.tsx"), read("app/auth-panel.tsx")]);
   assert.doesNotMatch(page, /Setup needed/);
   assert.match(page, /Log back in, session expired\./);
-  assert.match(page, /onSessionExpired\(\)/);
+  assert.match(page, /isSessionExpiredError\(reason\)/);
+  assert.match(page, /dashboardLoadError/);
   assert.match(authPanel, /initialMessage/);
 });
 

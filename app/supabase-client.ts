@@ -1,4 +1,4 @@
-import type { Law18Session } from "./auth-client";
+import { auth, type Law18Session } from "./auth-client";
 
 const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -242,16 +242,22 @@ async function rest<T>(
   prefer?: string,
 ): Promise<T> {
   const config = configuration();
-  const response = await fetch(`${config.baseUrl}/rest/v1/${path}`, {
-    ...init,
-    headers: {
-      apikey: config.anonKey,
-      Authorization: `Bearer ${session.access_token}`,
-      "Content-Type": "application/json",
-      ...(prefer ? { Prefer: prefer } : {}),
-      ...init.headers,
-    },
-  });
+  let activeSession = await auth.ensureValidSession(session);
+  const perform = (accessToken: string) => fetch(`${config.baseUrl}/rest/v1/${path}`, {
+      ...init,
+      headers: {
+        apikey: config.anonKey,
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        ...(prefer ? { Prefer: prefer } : {}),
+        ...init.headers,
+      },
+    });
+  let response = await perform(activeSession.access_token);
+  if (response.status === 401) {
+    activeSession = await auth.ensureValidSession(activeSession, true);
+    response = await perform(activeSession.access_token);
+  }
   const text = await response.text();
   const payload = text ? JSON.parse(text) : null;
   if (!response.ok) {

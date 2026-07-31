@@ -84,6 +84,7 @@ import {
 } from "./supabase-client";
 
 type View = "dashboard" | "board" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "activity" | "appearance" | "account" | "groups";
+const refreshableViews: View[] = ["dashboard", "board", "checkin", "schedule", "officials", "coaching", "assessments", "import", "activity", "appearance", "account", "groups"];
 type EventData = {
   games: GameRecord[];
   assignments: AssignmentRecord[];
@@ -2493,7 +2494,12 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
         }
         const organizationEvents = availableEvents.filter((item) => item.organization_id === organizationId);
         setEvents(organizationEvents);
-        const selected = organizationEvents.find((item) => item.check_in_slug === eventSlug)?.id || organizationEvents[0]?.id || "";
+        const refreshEventId = sessionStorage.getItem("law18ref-refresh-event");
+        const refreshView = sessionStorage.getItem("law18ref-refresh-view") as View | null;
+        const selected = organizationEvents.find((item) => item.check_in_slug === eventSlug)?.id
+          || organizationEvents.find((item) => item.id === refreshEventId)?.id
+          || organizationEvents[0]?.id
+          || "";
         setOrganizationRoles(memberships.organizations.filter((membership) => membership.organization_id === organizationId).map((membership) => membership.role));
         setEventRoles(memberships.events.filter((membership) => membership.event_id === selected).map((membership) => membership.role));
         setEventAccess(memberships.events.filter((membership) => membership.event_id === selected));
@@ -2525,6 +2531,9 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
           }
           setData(selectedData);
         }
+        if (!eventSlug && refreshView && refreshableViews.includes(refreshView)) setView(refreshView);
+        sessionStorage.removeItem("law18ref-refresh-view");
+        sessionStorage.removeItem("law18ref-refresh-event");
       } catch (reason) {
         onSessionExpired();
       } finally {
@@ -2566,6 +2575,13 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     } finally {
       setLoading(false);
     }
+  }
+
+  function refreshCurrentPage() {
+    sessionStorage.setItem("law18ref-refresh-view", view);
+    if (eventId) sessionStorage.setItem("law18ref-refresh-event", eventId);
+    else sessionStorage.removeItem("law18ref-refresh-event");
+    window.location.reload();
   }
 
   async function switchOrganization(nextId: string, nextView?: View) {
@@ -2657,7 +2673,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       <nav>{nav.map(([id, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}>{label}</button>)}</nav>
       <div className="topbar-account-actions">
         <button className="help-button" aria-label="Open role help" title="Help and how-to" onClick={() => setHelpOpen(true)}>?</button>
-        <button className="page-refresh-button" aria-label="Refresh page" title="Refresh page" onClick={() => window.location.reload()}>↻</button>
+        <button className="page-refresh-button" aria-label="Refresh page" title="Refresh page" onClick={refreshCurrentPage}>↻</button>
         <div className="account-menu">
           <button className="avatar account-avatar" aria-label="Open account menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((open) => !open)}>{initials(profile?.full_name || session.user.email || "RH")}</button>
           {accountOpen && <div className="account-popover">
@@ -2700,7 +2716,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.8.0</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.8.1</span></footer>
   </main>;
 }
 

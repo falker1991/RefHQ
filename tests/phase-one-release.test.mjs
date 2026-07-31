@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.8.0 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.8.1 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,19 @@ test("Version 0.8.0 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.8\.0/);
+  assert.match(page, /Version 0\.8\.1/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.8.0");
+  assert.equal(JSON.parse(packageJson).version, "0.8.1");
+});
+
+test("page refresh restores the current view and active event", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /function refreshCurrentPage\(\)/);
+  assert.match(page, /sessionStorage\.setItem\("law18ref-refresh-view", view\)/);
+  assert.match(page, /sessionStorage\.setItem\("law18ref-refresh-event", eventId\)/);
+  assert.match(page, /refreshableViews\.includes\(refreshView\)/);
+  assert.match(page, /onClick=\{refreshCurrentPage\}/);
 });
 
 test("organization administrators can upload a logo for the active organization bar", async () => {

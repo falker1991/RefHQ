@@ -165,7 +165,11 @@ The hosted pilot uses Supabase as its source of truth. Do not use it as the sole
 - When importing a schedule that already contains assigned officials, require the importer to choose an assignment treatment for that import:
   - **Already accepted** — create confirmed assignments without asking officials to accept, supporting organizations that continue assigning in another platform and use Law18Ref for check-in and ratings.
   - **Require acceptance** — create new published offers that each official must accept or decline in Law18Ref.
-- Keep this choice at the import-batch level, show it in the import review before committing, and audit the selected treatment with the importer and affected assignments.
+- Let an organization configure its assignment-import policy as **Ask on each import**, **Always already accepted**, or **Always require acceptance**.
+- Let an event inherit the organization policy or override it with one of those three choices.
+- When the effective organization/event policy is **Always already accepted** or **Always require acceptance**, apply it automatically and do not show an assignment-treatment choice to the person importing the schedule.
+- Show the effective locked treatment in the import review summary so the importer understands what will happen without being able to change it.
+- Apply the effective treatment at the import-batch level, show it in the import review before committing, and audit the treatment, its policy source, the importer, and affected assignments.
 - Do not notify officials while an assignment remains a draft. When assignments are published, notify each affected official according to the selected treatment and clearly distinguish confirmed imports from offers awaiting a response.
 - Add an unread notification badge to **My Assignments** whenever an official receives a newly published assignment or one of their existing assignments is materially changed.
 - Clear the assignment badge when the official opens **My Assignments**, and mark an edited assignment unread again even if the official previously viewed or accepted it.

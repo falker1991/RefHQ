@@ -1388,6 +1388,11 @@ export async function updateOfficial(
     }, "return=representation");
     if (official.linked_user_id && syncMembershipRoles) {
       const managedRoles = ["organization_admin", "assignor", "referee_coach", "referee"];
+      const existingMemberships = await rest<{ role: MembershipRole }[]>(
+        session,
+        `organization_memberships?organization_id=eq.${enc(official.organization_id)}&user_id=eq.${enc(official.linked_user_id)}&select=role`,
+      );
+      const existingRoles = new Set(existingMemberships.map((membership) => membership.role));
       const removedRoles = managedRoles.filter((role) => !intendedRoles.includes(role as MembershipRole));
       if (removedRoles.length) {
         await rest(session,
@@ -1396,9 +1401,10 @@ export async function updateOfficial(
           "return=minimal",
         );
       }
-      await rest(session, "organization_memberships?on_conflict=organization_id,user_id,role", {
+      const addedRoles = intendedRoles.filter((role) => !existingRoles.has(role));
+      if (addedRoles.length) await rest(session, "organization_memberships?on_conflict=organization_id,user_id,role", {
         method: "POST",
-        body: JSON.stringify(intendedRoles.map((role) => ({
+        body: JSON.stringify(addedRoles.map((role) => ({
           organization_id: official.organization_id,
           user_id: official.linked_user_id,
           role,
@@ -1478,21 +1484,25 @@ export async function saveUserEventAccess(
     ratingsHistoryScope: "none" | "specific" | "all";
     ratingsEventIds: string[];
     assignedGameIds: string[];
+    preserveEventAdmin?: boolean;
   },
 ) {
+  const managedRoles = options.preserveEventAdmin
+    ? roles.filter((role) => role !== "event_admin")
+    : roles;
   await rest(
     session,
-    `event_memberships?event_id=eq.${enc(eventId)}&user_id=eq.${enc(userId)}`,
+    `event_memberships?event_id=eq.${enc(eventId)}&user_id=eq.${enc(userId)}${options.preserveEventAdmin ? "&role=neq.event_admin" : ""}`,
     { method: "DELETE" },
     "return=minimal",
   );
-  if (!roles.length) return [];
+  if (!managedRoles.length) return [];
   return rest<EventMembership[]>(
     session,
     "event_memberships",
     {
       method: "POST",
-      body: JSON.stringify(roles.map((role) => ({
+      body: JSON.stringify(managedRoles.map((role) => ({
         event_id: eventId,
         user_id: userId,
         role,

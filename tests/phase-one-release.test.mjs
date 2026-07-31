@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.7.4 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.7.5 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,27 @@ test("Version 0.7.4 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.7\.4/);
+  assert.match(page, /Version 0\.7\.5/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.7.4");
+  assert.equal(JSON.parse(packageJson).version, "0.7.5");
+});
+
+test("site owner and delegated administrator access follow protected removal hierarchy", async () => {
+  const [page, client, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/202607300027_protected_administrator_roles.sql"),
+  ]);
+  assert.match(page, /Site-owner and organization-admin accounts cannot be mass deleted/);
+  assert.match(page, /protectedAdminRole/);
+  assert.match(page, /protectedEventAdmin && !canRemoveProtectedEventAdmin/);
+  assert.match(client, /preserveEventAdmin/);
+  assert.match(migration, /The site-owner account cannot be removed/);
+  assert.match(migration, /Organization administrators can only remove their own access/);
+  assert.match(migration, /last organization administrator must deactivate the organization before leaving/);
+  assert.match(migration, /Site owners and organization administrators cannot be deleted in bulk/);
+  assert.match(migration, /role <> 'event_admin' or user_id = auth\.uid\(\)/);
 });
 
 test("archived event selection and restore control share one compact row", async () => {

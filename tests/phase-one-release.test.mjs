@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.8.5 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.8.6 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,23 @@ test("Version 0.8.5 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.8\.5/);
+  assert.match(page, /Version 0\.8\.6/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.8.5");
+  assert.equal(JSON.parse(packageJson).version, "0.8.6");
+});
+
+test("rating history identifies each rating submitter", async () => {
+  const [page, client, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/202607300029_rating_submitter_names.sql"),
+  ]);
+  assert.match(page, /Submitted by \{ratingSubmitterMap\.get\(assessment\.coach_id\) \|\| "Unknown user"\}/);
+  assert.match(client, /submitters: \{ id: string; full_name: string \}\[\]/);
+  assert.match(migration, /visible_submitters as/);
+  assert.match(migration, /join visible_assessments a on a\.coach_id = p\.id/);
+  assert.match(migration, /'submitters'/);
 });
 
 test("full-game ratings use one collapsible horizontal official row", async () => {

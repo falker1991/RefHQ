@@ -198,6 +198,7 @@ export type RatingHistory = {
   assignments: AssignmentRecord[];
   officials: OfficialRecord[];
   events: EventRecord[];
+  submitters: { id: string; full_name: string }[];
 };
 
 export type AppearanceCampaign = {

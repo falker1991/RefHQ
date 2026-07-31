@@ -6,21 +6,25 @@ import { auth, type Law18Session } from "./auth-client";
 type AuthPanelProps = {
   onSession: (session: Law18Session) => void;
   recovery?: boolean;
+  initialMessage?: string;
 };
 
-export function AuthPanel({ onSession, recovery = false }: AuthPanelProps) {
+export function AuthPanel({ onSession, recovery = false, initialMessage = "" }: AuthPanelProps) {
   const [joinToken, setJoinToken] = useState("");
   const [mode, setMode] = useState<"login" | "signup" | "recovery">(recovery ? "recovery" : "login");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("falkref91@gmail.com");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(initialMessage);
   const [busy, setBusy] = useState(false);
 
   // Recovery is an external authentication state transition.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMode(recovery ? "recovery" : "login"), [recovery]);
+  useEffect(() => {
+    if (initialMessage) setMessage(initialMessage);
+  }, [initialMessage]);
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get("join") || localStorage.getItem("law18ref-join-token") || "";
     if (token) localStorage.setItem("law18ref-join-token", token);

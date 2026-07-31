@@ -2291,7 +2291,7 @@ function SiteGroupsAdmin({ session, ownerEmail, onOpen }: { session: Law18Sessio
   </section>;
 }
 
-function Dashboard({ session }: { session: Law18Session }) {
+function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSessionExpired: () => void }) {
   const [view, setView] = useState<View>("dashboard");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [organization, setOrganization] = useState<OrganizationRecord | null>(null);
@@ -2305,7 +2305,6 @@ function Dashboard({ session }: { session: Law18Session }) {
   const [eventId, setEventId] = useState("");
   const [data, setData] = useState<EventData>({ games: [], assignments: [], officials: [], checkIns: [], assessments: [], coachAssignments: [] });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [accountOpen, setAccountOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [ratingModalGameId, setRatingModalGameId] = useState<string | null>(null);
@@ -2423,12 +2422,12 @@ function Dashboard({ session }: { session: Law18Session }) {
           setData(selectedData);
         }
       } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Unable to load Law18Referee Management.");
+        onSessionExpired();
       } finally {
         setLoading(false);
       }
     })();
-  }, [session]);
+  }, [session, onSessionExpired]);
 
   useEffect(() => {
     const challengeId = new URLSearchParams(window.location.search).get("organization_action");
@@ -2548,8 +2547,6 @@ function Dashboard({ session }: { session: Law18Session }) {
       : [["dashboard", "Dashboard"], ["board", "My Assignments"], ...(refereeHasCurrentOrFutureAssignment ? [["checkin", "Check-In"] as [View, string]] : []), ["assessments", "My Evals"]];
 
   if (loading) return <main className="auth-page"><p className="auth-loading">Loading Dashboard</p></main>;
-  if (error) return <main className="auth-page"><section className="auth-card"><h1>Setup needed</h1><p className="auth-intro">{error}</p><p>Run the latest Law18Referee Management Supabase migration, then reload this page.</p><button className="secondary wide" onClick={() => auth.signOut()}>Sign out</button></section></main>;
-
   return <main>
     <header className="topbar">
       <button className="brand" aria-label="Law18Referee Management dashboard" onClick={() => setView("dashboard")}><Mark /></button>
@@ -2599,7 +2596,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.7.1</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.7.2</span></footer>
   </main>;
 }
 
@@ -2607,9 +2604,15 @@ export default function Home() {
   const [session, setSession] = useState<Law18Session | null>(null);
   const [recovery, setRecovery] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [authMessage, setAuthMessage] = useState("");
   const handleSession = useCallback((nextSession: Law18Session) => {
     setRecovery(false);
+    setAuthMessage("");
     setSession(nextSession);
+  }, []);
+  const handleSessionExpired = useCallback(() => {
+    setAuthMessage("Log back in, session expired.");
+    auth.signOut();
   }, []);
   useEffect(() => {
     const initial = auth.initialize();
@@ -2624,6 +2627,6 @@ export default function Home() {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
   }, []);
   if (loading) return <main className="auth-page"><p className="auth-loading">Loading Dashboard</p></main>;
-  if (!session || recovery) return <AuthPanel onSession={handleSession} recovery={recovery} />;
-  return <Dashboard session={session} />;
+  if (!session || recovery) return <AuthPanel onSession={handleSession} recovery={recovery} initialMessage={authMessage} />;
+  return <Dashboard session={session} onSessionExpired={handleSessionExpired} />;
 }

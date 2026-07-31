@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.7.1 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.7.2 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,18 @@ test("Version 0.7.1 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.7\.1/);
+  assert.match(page, /Version 0\.7\.2/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.7.1");
+  assert.equal(JSON.parse(packageJson).version, "0.7.2");
+});
+
+test("failed dashboard startup returns to login with a session-expired notice", async () => {
+  const [page, authPanel] = await Promise.all([read("app/page.tsx"), read("app/auth-panel.tsx")]);
+  assert.doesNotMatch(page, /Setup needed/);
+  assert.match(page, /Log back in, session expired\./);
+  assert.match(page, /onSessionExpired\(\)/);
+  assert.match(authPanel, /initialMessage/);
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.8.1 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.8.2 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,23 @@ test("Version 0.8.1 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.8\.1/);
+  assert.match(page, /Version 0\.8\.2/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.8.1");
+  assert.equal(JSON.parse(packageJson).version, "0.8.2");
+});
+
+test("event members and assigned referee coaches load into officials and check-in rosters", async () => {
+  const [page, client] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+  ]);
+  assert.ok(client.includes("event_memberships?event_id=eq.${enc(eventId)}&select=user_id"));
+  assert.match(client, /coachAssignments\.map\(\(assignment\) => assignment\.coach_id\)/);
+  assert.ok(client.includes("officials?organization_id=eq.${enc(eventOrganizationId)}&linked_user_id=in.(${eventUserIds.join(\",\")})"));
+  assert.match(client, /new Map\(\[\.\.\.assignedOfficials, \.\.\.linkedEventOfficials\]/);
+  assert.match(page, /const eventOfficialIds = new Set\(data\.officials\.map/);
+  assert.match(page, /data\.officials\.find\(\(official\) => official\.linked_user_id === assignment\.coach_id\)/);
 });
 
 test("page refresh restores the current view and active event", async () => {

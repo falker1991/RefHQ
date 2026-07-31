@@ -642,32 +642,38 @@ export async function createEvent(
 }
 
 export async function loadEventData(session: Law18Session, eventId: string) {
-  const games = await rest<GameRecord[]>(
-    session,
-    `games?event_id=eq.${enc(eventId)}&select=*&order=starts_at.asc`,
-  );
-  const coachAssignments = await rest<CoachAssignmentRecord[]>(
-    session,
-    `coach_assignments?event_id=eq.${enc(eventId)}&select=*`,
-  );
-  if (!games.length) return { games, assignments: [], officials: [], checkIns: [], assessments: [], coachAssignments };
+  const [games, coachAssignments, eventMembers, eventRows] = await Promise.all([
+    rest<GameRecord[]>(session, `games?event_id=eq.${enc(eventId)}&select=*&order=starts_at.asc`),
+    rest<CoachAssignmentRecord[]>(session, `coach_assignments?event_id=eq.${enc(eventId)}&select=*`),
+    rest<{ user_id: string }[]>(session, `event_memberships?event_id=eq.${enc(eventId)}&select=user_id`),
+    rest<{ organization_id: string }[]>(session, `events?id=eq.${enc(eventId)}&select=organization_id`),
+  ]);
+  const eventOrganizationId = eventRows[0]?.organization_id;
   const gameIds = games.map((game) => game.id).join(",");
-  const assignments = await rest<AssignmentRecord[]>(
-    session,
-    `assignments?game_id=in.(${gameIds})&select=*`,
-  );
-  const officialIds = [...new Set(assignments.map((assignment) => assignment.official_id).filter(Boolean))];
-  const officials = officialIds.length
-    ? await rest<OfficialRecord[]>(session, `officials?id=in.(${officialIds.join(",")})&select=*`)
+  const assignments = gameIds
+    ? await rest<AssignmentRecord[]>(session, `assignments?game_id=in.(${gameIds})&select=*`)
     : [];
+  const officialIds = [...new Set(assignments.map((assignment) => assignment.official_id).filter(Boolean))];
+  const eventUserIds = [...new Set([
+    ...eventMembers.map((membership) => membership.user_id),
+    ...coachAssignments.map((assignment) => assignment.coach_id),
+  ].filter(Boolean))];
+  const [assignedOfficials, linkedEventOfficials] = await Promise.all([
+    officialIds.length
+    ? await rest<OfficialRecord[]>(session, `officials?id=in.(${officialIds.join(",")})&select=*`)
+      : [],
+    eventUserIds.length && eventOrganizationId
+      ? await rest<OfficialRecord[]>(session, `officials?organization_id=eq.${enc(eventOrganizationId)}&linked_user_id=in.(${eventUserIds.join(",")})&select=*`)
+      : [],
+  ]);
+  const officials = [...new Map([...assignedOfficials, ...linkedEventOfficials].map((official) => [official.id, official])).values()];
   const checkIns = await rest<CheckInRecord[]>(
     session,
     `check_ins?event_id=eq.${enc(eventId)}&select=*`,
   );
-  const assessments = await rest<AssessmentRecord[]>(
-    session,
-    `assessments?game_id=in.(${gameIds})&select=*`,
-  );
+  const assessments = gameIds
+    ? await rest<AssessmentRecord[]>(session, `assessments?game_id=in.(${gameIds})&select=*`)
+    : [];
   return { games, assignments, officials, checkIns, assessments, coachAssignments };
 }
 

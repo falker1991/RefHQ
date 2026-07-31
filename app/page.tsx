@@ -1391,9 +1391,9 @@ function AssessmentCenter({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [configuration, setConfiguration] = useState({ ratingType: event.rating_type, adminOnly: event.ratings_admin_only });
-  const [ratingSort, setRatingSort] = useState<"date" | "gender" | "age_group" | "referee" | "position">("date");
+  const [ratingSort, setRatingSort] = useState<"date" | "gender" | "age_group" | "referee" | "position" | "score">("date");
   const [historyEventId, setHistoryEventId] = useState("all");
-  const [historyFilters, setHistoryFilters] = useState({ referees: [] as string[], ageGroups: [] as string[], genders: [] as string[], positions: [] as string[] });
+  const [historyFilters, setHistoryFilters] = useState({ referees: [] as string[], ageGroups: [] as string[], genders: [] as string[], positions: [] as string[], scores: [] as string[] });
   const [refereeFilterSearch, setRefereeFilterSearch] = useState("");
   const [historyDateRange, setHistoryDateRange] = useState({ from: "", through: "" });
   const [historyView, setHistoryView] = useState<"individual" | "game">("individual");
@@ -1425,12 +1425,41 @@ function AssessmentCenter({
   const historyGameMap = new Map(history.games.map((game) => [game.id, game]));
   const gameAssignments = [...new Map(data.assignments.filter((assignment) => assignment.game_id === gameId).map((assignment) => [assignment.official_id, assignment])).values()];
   const eligibleGames = data.games.filter(isRateableGame).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
-  const historyPosition = (assessment: AssessmentRecord) => history.assignments.find((item) => item.game_id === assessment.game_id && item.official_id === assessment.official_id)?.position_title || "Unspecified position";
+  const historyAssignment = (assessment: AssessmentRecord) => history.assignments.find((item) => item.game_id === assessment.game_id && item.official_id === assessment.official_id);
+  const historyPosition = (assessment: AssessmentRecord) => historyAssignment(assessment)?.position_title || "Unspecified position";
+  const ratingScoreLabel = (assessment: AssessmentRecord) => {
+    const score = assessmentScore(assessment);
+    return score === null ? "Unscored" : Number(score.toFixed(2)).toString();
+  };
+  const crewPositionPriority = (assessment: AssessmentRecord) => {
+    const assignment = historyAssignment(assessment);
+    const position = assignment?.position || "";
+    const title = (assignment?.position_title || "").trim().toLowerCase();
+    if (position === "referee" || /^(center |centre )?referee$/.test(title)) return 0;
+    if (position === "assistant_referee" || /^(ar(?:\s*\d+)?|assistant referee(?:\s*\d+)?|asst\.? referee(?:\s*\d+)?)$/.test(title)) return 1;
+    if (position === "fourth_official" || /^(4th|fourth) official$/.test(title)) return 2;
+    return 3;
+  };
+  const crewAssignmentOrder = (assessment: AssessmentRecord) => {
+    const index = history.assignments.findIndex((assignment) => assignment.game_id === assessment.game_id && assignment.official_id === assessment.official_id);
+    return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+  };
+  const orderGameRatings = (ratings: AssessmentRecord[]) => ratings.map((assessment, index) => ({ assessment, index })).sort((a, b) => {
+    const priorityDifference = crewPositionPriority(a.assessment) - crewPositionPriority(b.assessment);
+    if (priorityDifference) return priorityDifference;
+    const assignmentDifference = crewAssignmentOrder(a.assessment) - crewAssignmentOrder(b.assessment);
+    return assignmentDifference || a.index - b.index;
+  }).map(({ assessment }) => assessment);
   const filterOptions = {
     referees: [...new Set(history.assessments.map((item) => historyOfficialMap.get(item.official_id)?.full_name).filter((item): item is string => Boolean(item)))].sort(),
     ageGroups: [...new Set(history.games.map((game) => game.age_group || "Unspecified age group"))].sort(),
     genders: [...new Set(history.games.map((game) => game.gender || "Unspecified gender"))].sort(),
     positions: [...new Set(history.assessments.map(historyPosition))].sort(),
+    scores: [...new Set(history.assessments.map(ratingScoreLabel))].sort((a, b) => {
+      if (a === "Unscored") return 1;
+      if (b === "Unscored") return -1;
+      return Number(b) - Number(a);
+    }),
   };
   const toggleHistoryFilter = (key: keyof typeof historyFilters, value: string) => setHistoryFilters((current) => ({
     ...current,
@@ -1448,6 +1477,7 @@ function AssessmentCenter({
       && (!historyFilters.ageGroups.length || historyFilters.ageGroups.includes(game?.age_group || "Unspecified age group"))
       && (!historyFilters.genders.length || historyFilters.genders.includes(game?.gender || "Unspecified gender"))
       && (!historyFilters.positions.length || historyFilters.positions.includes(historyPosition(item)))
+      && (!historyFilters.scores.length || historyFilters.scores.includes(ratingScoreLabel(item)))
       && (!historyDateRange.from || gameDate >= historyDateRange.from)
       && (!historyDateRange.through || gameDate <= historyDateRange.through);
   }).sort((a, b) => {
@@ -1460,6 +1490,12 @@ function AssessmentCenter({
       const aPosition = historyPosition(a);
       const bPosition = historyPosition(b);
       return aPosition.localeCompare(bPosition);
+    }
+    if (ratingSort === "score") {
+      const aScore = assessmentScore(a);
+      const bScore = assessmentScore(b);
+      if (aScore === null || bScore === null) return aScore === bScore ? 0 : aScore === null ? 1 : -1;
+      return bScore - aScore;
     }
     return (aGame?.starts_at || "").localeCompare(bGame?.starts_at || "");
   });
@@ -1664,20 +1700,21 @@ function AssessmentCenter({
       {message && <p className="pilot-message assessment-message">{message}</p>}
       <div className="assessment-actions"><button className="secondary" disabled={busy || !gameAssignments.length} onClick={() => submitCrew("draft")}>Save crew draft</button><button className="primary" disabled={busy || !gameAssignments.length} onClick={() => submitCrew("submitted")}>Submit all ratings</button></div>
     </article>}
-    <article className="panel history ratings-history"><div className="panel-head"><div><p className="eyebrow">HISTORY</p><h2>{sortedAssessments.length} matching rating{sortedAssessments.length === 1 ? "" : "s"}</h2><p className="filtered-rating-average">Average Score <strong>{filteredAverage?.toFixed(2) || "—"}</strong></p></div><div className="rating-history-toolbar"><div className="segmented-control" aria-label="Rating history view"><button className={historyView === "individual" ? "active" : ""} onClick={() => setHistoryView("individual")}>Individual Ratings</button><button className={historyView === "game" ? "active" : ""} onClick={() => setHistoryView("game")}>Full Game Ratings</button></div><button className="secondary" disabled={!sortedAssessments.length} onClick={exportRatings}>Export Spreadsheet</button></div><div className="history-filters"><label className="compact-sort">Event<select value={historyEventId} onChange={(e) => setHistoryEventId(e.target.value)}><option value="all">All permitted events</option>{[...new Set(history.games.map((game) => game.event_id))].map((id) => <option value={id} key={id}>{history.events.find((item) => item.id === id)?.name || events.find((item) => item.id === id)?.name || `Previous event · ${id.slice(0, 8)}`}</option>)}</select></label><label className="compact-sort">Sort by<select value={ratingSort} onChange={(e) => setRatingSort(e.target.value as typeof ratingSort)}><option value="date">Date</option><option value="gender">Gender</option><option value="age_group">Age group</option><option value="referee">Referee</option><option value="position">Position</option></select></label><label className="show-archived-ratings"><input type="checkbox" checked={showArchivedRatings} onChange={(event) => setShowArchivedRatings(event.target.checked)} /> Show Archived Ratings</label></div></div>
+    <article className="panel history ratings-history"><div className="panel-head"><div><p className="eyebrow">HISTORY</p><h2>{sortedAssessments.length} matching rating{sortedAssessments.length === 1 ? "" : "s"}</h2><p className="filtered-rating-average">Average Score <strong>{filteredAverage?.toFixed(2) || "—"}</strong></p></div><div className="rating-history-toolbar"><div className="segmented-control" aria-label="Rating history view"><button className={historyView === "individual" ? "active" : ""} onClick={() => setHistoryView("individual")}>Individual Ratings</button><button className={historyView === "game" ? "active" : ""} onClick={() => setHistoryView("game")}>Full Game Ratings</button></div><button className="secondary" disabled={!sortedAssessments.length} onClick={exportRatings}>Export Spreadsheet</button></div><div className="history-filters"><label className="compact-sort">Event<select value={historyEventId} onChange={(e) => setHistoryEventId(e.target.value)}><option value="all">All permitted events</option>{[...new Set(history.games.map((game) => game.event_id))].map((id) => <option value={id} key={id}>{history.events.find((item) => item.id === id)?.name || events.find((item) => item.id === id)?.name || `Previous event · ${id.slice(0, 8)}`}</option>)}</select></label><label className="compact-sort">Sort by<select value={ratingSort} onChange={(e) => setRatingSort(e.target.value as typeof ratingSort)}><option value="date">Date</option><option value="gender">Gender</option><option value="age_group">Age group</option><option value="referee">Referee</option><option value="position">Position</option><option value="score">Rating Score</option></select></label><label className="show-archived-ratings"><input type="checkbox" checked={showArchivedRatings} onChange={(event) => setShowArchivedRatings(event.target.checked)} /> Show Archived Ratings</label></div></div>
       {canConfigure && <div className="bulk-action-bar"><label><input type="checkbox" checked={sortedAssessments.length > 0 && sortedAssessments.every((item) => selectedRatingIds.includes(item.id))} onChange={(event) => setSelectedRatingIds(event.target.checked ? sortedAssessments.map((item) => item.id) : [])} /> Select All Visible</label><strong>{selectedRatingIds.length} selected</strong><button className="secondary" disabled={busy || !selectedRatingIds.length} onClick={() => bulkRatings("archive")}>Archive</button>{showArchivedRatings && <button className="secondary" disabled={busy || !selectedRatingIds.length} onClick={() => bulkRatings("restore")}>Restore</button>}<button className="danger-button" disabled={busy || !selectedRatingIds.length} onClick={() => bulkRatings("delete")}>Delete</button></div>}
       <details className="ratings-filter-panel"><summary>Filter Ratings{activeHistoryFilterCount ? ` · ${activeHistoryFilterCount} selected` : ""}</summary><div className="ratings-filter-grid" ref={filterDropdownsRef}>{([
         ["referees", "Referees", filterOptions.referees],
         ["ageGroups", "Age Groups", filterOptions.ageGroups],
         ["genders", "Genders", filterOptions.genders],
         ["positions", "Positions", filterOptions.positions],
+        ["scores", "Rating Scores", filterOptions.scores],
       ] as const).map(([key, label, options]) => {
         const visibleOptions = key === "referees" && refereeFilterSearch.trim()
           ? options.filter((option) => option.toLowerCase().includes(refereeFilterSearch.trim().toLowerCase()))
           : options;
         const allSelected = options.length > 0 && options.every((option) => historyFilters[key].includes(option));
         return <details className="rating-filter-dropdown" key={key}><summary><span>{label}</span><small>{historyFilters[key].length ? `${historyFilters[key].length} selected` : "All"}</small></summary><div className="rating-filter-options">{key === "referees" && <input className="rating-referee-search" type="search" value={refereeFilterSearch} placeholder="Search referees…" aria-label="Search referees" onChange={(event) => setRefereeFilterSearch(event.target.value)} />}<label className="rating-select-all"><input type="checkbox" checked={allSelected} onChange={() => setHistoryFilters((current) => ({ ...current, [key]: allSelected ? [] : [...options] }))} /><strong>Select All</strong></label>{visibleOptions.map((option) => <label key={option}><input type="checkbox" checked={historyFilters[key].includes(option)} onChange={() => toggleHistoryFilter(key, option)} /><span>{option}</span></label>)}{!visibleOptions.length && <small>No matching referees</small>}</div></details>;
-      })}<fieldset className="rating-date-range"><legend>Date Range</legend><label>From<input type="date" value={historyDateRange.from} max={historyDateRange.through || undefined} onChange={(event) => setHistoryDateRange((current) => ({ ...current, from: event.target.value }))} /></label><label>Through<input type="date" value={historyDateRange.through} min={historyDateRange.from || undefined} onChange={(event) => setHistoryDateRange((current) => ({ ...current, through: event.target.value }))} /></label></fieldset></div><button className="text-button clear-rating-filters" disabled={!activeHistoryFilterCount} onClick={() => { setHistoryFilters({ referees: [], ageGroups: [], genders: [], positions: [] }); setHistoryDateRange({ from: "", through: "" }); setRefereeFilterSearch(""); }}>Clear All Filters</button></details>
+      })}<fieldset className="rating-date-range"><legend>Date Range</legend><label>From<input type="date" value={historyDateRange.from} max={historyDateRange.through || undefined} onChange={(event) => setHistoryDateRange((current) => ({ ...current, from: event.target.value }))} /></label><label>Through<input type="date" value={historyDateRange.through} min={historyDateRange.from || undefined} onChange={(event) => setHistoryDateRange((current) => ({ ...current, through: event.target.value }))} /></label></fieldset></div><button className="text-button clear-rating-filters" disabled={!activeHistoryFilterCount} onClick={() => { setHistoryFilters({ referees: [], ageGroups: [], genders: [], positions: [], scores: [] }); setHistoryDateRange({ from: "", through: "" }); setRefereeFilterSearch(""); }}>Clear All Filters</button></details>
       {message && <p className="pilot-message assessment-message">{message}</p>}
       {historyView === "individual" && sortedAssessments.map((assessment) => {
       const score = assessmentScore(assessment);
@@ -1688,7 +1725,7 @@ function AssessmentCenter({
         const ratedGame = historyGameMap.get(ratedGameId);
         const gameSelected = ratings.every((assessment) => selectedRatingIds.includes(assessment.id));
         const collapsed = collapsedRatingGameIds.includes(ratedGameId);
-        return <article className={`game-rating-history-card ${collapsed ? "collapsed" : ""}`} key={ratedGameId}><header>{canConfigure && <input className="bulk-row-check" type="checkbox" aria-label="Select all ratings for this game" checked={gameSelected} onChange={(change) => setSelectedRatingIds((current) => change.target.checked ? [...new Set([...current, ...ratings.map((item) => item.id)])] : current.filter((id) => !ratings.some((item) => item.id === id)))} />}<div><strong>{ratedGame?.home_team} vs. {ratedGame?.away_team}</strong><p>{ratedGame ? `${formatDate(ratedGame.starts_at)} · ${formatTime(ratedGame.starts_at)} · ${ratedGame.field_name}` : "Game details unavailable"}</p></div><span>{ratings.length} official{ratings.length === 1 ? "" : "s"}</span><button className="game-rating-collapse" aria-label={`${collapsed ? "Expand" : "Collapse"} ratings for this game`} aria-expanded={!collapsed} onClick={() => setCollapsedRatingGameIds((current) => current.includes(ratedGameId) ? current.filter((id) => id !== ratedGameId) : [...current, ratedGameId])}>{collapsed ? "▾" : "▴"}</button></header>{!collapsed && <div className="game-rating-officials">{ratings.map((assessment) => <div className={assessment.archived_at ? "archived-rating" : ""} key={assessment.id}><div><strong>{historyOfficialMap.get(assessment.official_id)?.full_name || "Referee"}</strong><small>{historyPosition(assessment)}{assessment.archived_at ? " · Archived" : ""}</small><small className="rating-submitter">Submitted by {ratingSubmitterMap.get(assessment.coach_id) || "Unknown user"}</small></div><span className="score">{assessmentScore(assessment)?.toFixed(1) || "—"}</span>{ratingActions(assessment, ratedGame)}</div>)}</div>}</article>;
+        return <article className={`game-rating-history-card ${collapsed ? "collapsed" : ""}`} key={ratedGameId}><header>{canConfigure && <input className="bulk-row-check" type="checkbox" aria-label="Select all ratings for this game" checked={gameSelected} onChange={(change) => setSelectedRatingIds((current) => change.target.checked ? [...new Set([...current, ...ratings.map((item) => item.id)])] : current.filter((id) => !ratings.some((item) => item.id === id)))} />}<div><strong>{ratedGame?.home_team} vs. {ratedGame?.away_team}</strong><p>{ratedGame ? `${formatDate(ratedGame.starts_at)} · ${formatTime(ratedGame.starts_at)} · ${ratedGame.field_name}` : "Game details unavailable"}</p></div><span>{ratings.length} official{ratings.length === 1 ? "" : "s"}</span><button className="game-rating-collapse" aria-label={`${collapsed ? "Expand" : "Collapse"} ratings for this game`} aria-expanded={!collapsed} onClick={() => setCollapsedRatingGameIds((current) => current.includes(ratedGameId) ? current.filter((id) => id !== ratedGameId) : [...current, ratedGameId])}>{collapsed ? "▾" : "▴"}</button></header>{!collapsed && <div className="game-rating-officials">{orderGameRatings(ratings).map((assessment) => <div className={assessment.archived_at ? "archived-rating" : ""} key={assessment.id}><div><strong>{historyOfficialMap.get(assessment.official_id)?.full_name || "Referee"}</strong><small>{historyPosition(assessment)}{assessment.archived_at ? " · Archived" : ""}</small><small className="rating-submitter">Submitted by {ratingSubmitterMap.get(assessment.coach_id) || "Unknown user"}</small></div><span className="score">{assessmentScore(assessment)?.toFixed(1) || "—"}</span>{ratingActions(assessment, ratedGame)}</div>)}</div>}</article>;
       })}
       {!sortedAssessments.length && <EmptyState>No ratings match these filters.</EmptyState>}</article>
   </section>;
@@ -2719,7 +2756,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.8.6</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.8.7</span></footer>
   </main>;
 }
 

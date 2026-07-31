@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.8.6 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.8.7 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,22 @@ test("Version 0.8.6 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.8\.6/);
+  assert.match(page, /Version 0\.8\.7/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.8.6");
+  assert.equal(JSON.parse(packageJson).version, "0.8.7");
+});
+
+test("ratings can be filtered and sorted by score with match crews in position order", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /scores: \[\] as string\[\]/);
+  assert.match(page, /<option value="score">Rating Score<\/option>/);
+  assert.match(page, /\["scores", "Rating Scores", filterOptions\.scores\]/);
+  assert.match(page, /if \(ratingSort === "score"\)/);
+  assert.match(page, /const crewPositionPriority/);
+  assert.match(page, /position === "assistant_referee"/);
+  assert.match(page, /position === "fourth_official"/);
+  assert.match(page, /orderGameRatings\(ratings\)\.map/);
 });
 
 test("rating history identifies each rating submitter", async () => {

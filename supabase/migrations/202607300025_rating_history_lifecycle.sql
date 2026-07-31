@@ -56,7 +56,7 @@ as $$
           )
         )
       )
-  )
+  );
 $$;
 
 create or replace function public.can_manage_assessment(target_assessment uuid)
@@ -78,7 +78,7 @@ as $$
         or public.has_org_role(e.organization_id, array['organization_admin']::public.membership_role[])
         or public.has_event_role(e.id, array['event_admin','assignor']::public.membership_role[])
       )
-  )
+  );
 $$;
 
 grant execute on function public.can_review_assessment(uuid) to authenticated;
@@ -123,7 +123,7 @@ as $$
     'assignments', coalesce((select jsonb_agg(to_jsonb(a)) from visible_assignments a), '[]'::jsonb),
     'officials', coalesce((select jsonb_agg(to_jsonb(o)) from visible_officials o), '[]'::jsonb),
     'events', coalesce((select jsonb_agg(to_jsonb(e)) from visible_events e), '[]'::jsonb)
-  )
+  );
 $$;
 
 grant execute on function public.authorized_rating_history() to authenticated;

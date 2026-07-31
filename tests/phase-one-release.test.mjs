@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.7.7 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.7.8 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.7.7 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.7\.7/);
+  assert.match(page, /Version 0\.7\.8/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.7.7");
+  assert.equal(JSON.parse(packageJson).version, "0.7.8");
 });
 
 test("official directory sorts populated values before missing values", async () => {
@@ -410,14 +410,16 @@ test("roadmap records organization capability and check-in method controls", asy
   assert.match(readme, /reject related database\/API mutations/);
 });
 
-test("organization admins can review audited actions and manage Join Group links", async () => {
+test("organization admins can review audited actions and copy one officials join link", async () => {
   const [page, client, migration] = await Promise.all([
     read("app/page.tsx"),
     read("app/supabase-client.ts"),
     read("supabase/migrations/202607300023_audit_join_links_and_member_removal.sql"),
   ]);
-  assert.match(page, /Activity & Join Links/);
-  assert.match(page, /Create Join Group Link/);
+  assert.match(page, /Copy Join Link/);
+  assert.match(page, /async function copyJoinLink/);
+  assert.doesNotMatch(page, /Create Join Group Link/);
+  assert.doesNotMatch(page, /ACTIVE LINKS/);
   assert.match(page, /organizationRoles\.includes\("organization_admin"\).*"activity"/);
   assert.match(client, /export async function loadOrganizationActivity/);
   assert.match(client, /export async function createOrganizationJoinLink/);

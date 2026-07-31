@@ -78,7 +78,6 @@ import {
   type AssessmentRecord,
   type MembershipRole,
   type OrganizationRecord,
-  type OrganizationJoinLink,
   type AuditRecord,
   type Profile,
 } from "./supabase-client";
@@ -1065,6 +1064,31 @@ function OfficialsDirectory({
       setBusy(false);
     }
   }
+  async function copyJoinLink() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const existingLinks = await loadOrganizationJoinLinks(session, organizationId);
+      let joinLink = existingLinks.find((link) => link.active) || existingLinks[0];
+      if (!joinLink) {
+        joinLink = await createOrganizationJoinLink(session, organizationId, "Officials join link");
+      } else if (!joinLink.active) {
+        await setOrganizationJoinLinkActive(session, joinLink.id, true);
+      }
+      if (!joinLink) throw new Error("The officials join link could not be created.");
+      const url = `${window.location.origin}/?join=${encodeURIComponent(joinLink.token)}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        setMessage("Officials join link copied.");
+      } catch {
+        window.prompt("Copy this officials join link:", url);
+      }
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to copy the officials join link.");
+    } finally {
+      setBusy(false);
+    }
+  }
   async function saveEventRole() {
     if (!managing?.linked_user_id || !event) return;
     setBusy(true);
@@ -1231,7 +1255,7 @@ function OfficialsDirectory({
     ? ["site_owner", ...organizationRoleChoices]
     : organizationRoleChoices;
   return <section className="page-section">
-    <div className="section-title"><div><p className="eyebrow">OFFICIALS</p><h1>Referee directory</h1><p>Organization officials and the active event roster.</p></div></div>
+    <div className="section-title"><div><p className="eyebrow">OFFICIALS</p><h1>Referee directory</h1><p>Organization officials and the active event roster.</p></div>{canManageOrganizationRoles && <button className="primary" disabled={busy} onClick={copyJoinLink}>{busy ? "Preparing…" : "Copy Join Link"}</button>}</div>
     <div className="directory-tools">
       <div className="segmented"><button className={scope === "organization" ? "active" : ""} onClick={() => setScope("organization")}>Organization</button><button className={scope === "event" ? "active" : ""} onClick={() => setScope("event")}>Active event</button></div>
       <input className="search" type="search" placeholder="Search name, email, or badge…" value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -1994,20 +2018,14 @@ function OrganizationActivity({
   onEventsChanged: () => Promise<void>;
 }) {
   const [activity, setActivity] = useState<AuditRecord[]>([]);
-  const [links, setLinks] = useState<OrganizationJoinLink[]>([]);
   const [archivedEvents, setArchivedEvents] = useState<EventRecord[]>([]);
-  const [label, setLabel] = useState("Officials join link");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [selectedEventIds, setSelectedEventIds] = useState<string[]>([]);
   const refresh = useCallback(async () => {
     const nextArchivedEvents = await loadArchivedEvents(session, organization.id);
-    const [nextActivity, nextLinks] = await Promise.all([
-      loadOrganizationActivity(session, organization.id),
-      loadOrganizationJoinLinks(session, organization.id),
-    ]);
+    const nextActivity = await loadOrganizationActivity(session, organization.id);
     setActivity(nextActivity);
-    setLinks(nextLinks);
     setArchivedEvents(nextArchivedEvents);
   }, [organization.id, session]);
   useEffect(() => {
@@ -2015,42 +2033,6 @@ function OrganizationActivity({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh().catch((reason) => setMessage(reason instanceof Error ? reason.message : "Unable to load organization activity."));
   }, [refresh]);
-  async function createLink() {
-    setBusy(true);
-    setMessage("");
-    try {
-      const created = await createOrganizationJoinLink(session, organization.id, label);
-      if (!created) throw new Error("The Join Group link could not be created.");
-      setMessage("Join Group link created. Anyone with this link can join as a referee.");
-      await refresh();
-    } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "Unable to create the Join Group link.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function toggleLink(link: OrganizationJoinLink) {
-    setBusy(true);
-    setMessage("");
-    try {
-      await setOrganizationJoinLinkActive(session, link.id, !link.active);
-      setMessage(`${link.label} ${link.active ? "disabled" : "enabled"}.`);
-      await refresh();
-    } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "Unable to update the Join Group link.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function copyLink(link: OrganizationJoinLink) {
-    const url = `${window.location.origin}/?join=${encodeURIComponent(link.token)}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      setMessage("Join Group link copied.");
-    } catch {
-      window.prompt("Copy this Join Group link:", url);
-    }
-  }
   async function restoreArchivedEvent(event: EventRecord) {
     setBusy(true);
     setMessage("");
@@ -2089,12 +2071,8 @@ function OrganizationActivity({
     part.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
   ).join(" · ");
   return <section className="page-section organization-activity-page">
-    <div className="section-title"><div><p className="eyebrow">ORGANIZATION ADMINISTRATION</p><h1>Activity & Join Links</h1><p>Review meaningful organization changes and manage reusable links for adding members.</p></div><button className="secondary" disabled={busy} onClick={() => refresh()}>{busy ? "Refreshing…" : "Refresh"}</button></div>
+    <div className="section-title"><div><p className="eyebrow">ORGANIZATION ADMINISTRATION</p><h1>Activity</h1><p>Review meaningful organization changes and manage archived events.</p></div><button className="secondary" disabled={busy} onClick={() => refresh()}>{busy ? "Refreshing…" : "Refresh"}</button></div>
     {message && <p className="pilot-message">{message}</p>}
-    <div className="activity-admin-grid">
-      <article className="panel join-link-creator"><div className="panel-head"><div><p className="eyebrow">JOIN GROUP</p><h2>Create an invitation link</h2><p>Signed-in users join immediately. New users create an account first and are then added automatically.</p></div></div><label>Link label<input value={label} maxLength={100} onChange={(event) => setLabel(event.target.value)} /></label><button className="primary" disabled={busy || !label.trim()} onClick={createLink}>Create Join Group Link</button></article>
-      <article className="panel join-link-list"><div className="panel-head"><div><p className="eyebrow">ACTIVE LINKS</p><h2>{links.filter((link) => link.active).length} available</h2></div></div>{links.map((link) => <div className={`join-link-row ${link.active ? "" : "disabled"}`} key={link.id}><div><strong>{link.label}</strong><small>{link.active ? "Active" : "Disabled"} · Used {link.use_count} time{link.use_count === 1 ? "" : "s"}</small></div><button className="secondary" disabled={!link.active} onClick={() => copyLink(link)}>Copy</button><button className="text-button" disabled={busy} onClick={() => toggleLink(link)}>{link.active ? "Disable" : "Enable"}</button></div>)}{!links.length && <EmptyState>No Join Group links have been created.</EmptyState>}</article>
-    </div>
     <article className="panel archived-event-list"><div className="panel-head"><div><p className="eyebrow">ARCHIVED EVENTS</p><h2>Bulk event actions</h2><p>Archive active events, restore archived events, or permanently delete events already in the archive.</p></div></div>
       <div className="bulk-action-bar"><strong>{selectedEventIds.length} selected</strong><button className="secondary" disabled={busy || !selectedEventIds.some((id) => events.some((item) => item.id === id))} onClick={() => bulkEvents("archive")}>Archive Selected</button><button className="secondary" disabled={busy || !selectedEventIds.some((id) => archivedEvents.some((item) => item.id === id))} onClick={() => bulkEvents("restore")}>Restore Selected</button><button className="danger-button" disabled={busy || !selectedEventIds.length || selectedEventIds.some((id) => !archivedEvents.some((item) => item.id === id))} onClick={() => bulkEvents("delete")}>Delete Archived</button></div>
       <h3 className="lifecycle-list-title">Active Events</h3>{events.map((event) => <div className="archived-event-row" key={event.id}><input className="bulk-row-check" type="checkbox" aria-label={`Select ${event.name}`} checked={selectedEventIds.includes(event.id)} onChange={(change) => setSelectedEventIds((current) => change.target.checked ? [...current, event.id] : current.filter((id) => id !== event.id))} /><div><strong>{event.name}</strong><small>{formatDate(event.starts_on)} through {formatDate(event.ends_on)}</small></div></div>)}{!events.length && <EmptyState>No active events.</EmptyState>}
@@ -2369,8 +2347,8 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     ...eventRoles,
   ])];
   const helpByRole: Record<MembershipRole, { title: string; items: string[] }> = {
-    site_owner: { title: "Site Owner Navigation", items: ["Use the organization selector below the header to open the group you want to manage.", "Open Groups from your initials menu to create, open, archive, or restore organizations.", "Open Site Appearance from your initials menu to edit, save, schedule, or restore site themes.", "Open Activity within an organization to review its audit log or manage Join Group links.", "After selecting an organization and event, use the same event tabs described for organization administrators."] },
-    organization_admin: { title: "Organization Admin Navigation", items: ["Choose the organization and active event from the selectors below the header.", "Open Officials to add or edit people, review last login, set organization roles, remove a member, merge accounts, or open Event Access. Use the selection boxes for bulk archive or deletion.", "Open Activity to review meaningful changes, manage Join Group links, or bulk archive, restore, and delete events.", "Open Import to add officials, upload an Assignr schedule, configure automatic archiving, or archive the selected event now.", "Open Assignment Board or Schedule to review the day, Check-In to manage arrivals, and Coaching to assign coaches.", "Open Ratings to configure evaluations, filter history, switch between individual and full-game views, export a spreadsheet, or use selection boxes to archive and delete ratings. Archived-event ratings remain available here."] },
+    site_owner: { title: "Site Owner Navigation", items: ["Use the organization selector below the header to open the group you want to manage.", "Open Groups from your initials menu to create, open, archive, or restore organizations.", "Open Site Appearance from your initials menu to edit, save, schedule, or restore site themes.", "Open Officials and use Copy Join Link to invite members to the active organization.", "Open Activity within an organization to review its audit log and event archive.", "After selecting an organization and event, use the same event tabs described for organization administrators."] },
+    organization_admin: { title: "Organization Admin Navigation", items: ["Choose the organization and active event from the selectors below the header.", "Open Officials to copy the organization join link, add or edit people, review last login, set organization roles, remove a member, merge accounts, or open Event Access. Use the selection boxes for bulk archive or deletion.", "Open Activity to review meaningful changes or bulk archive, restore, and delete events.", "Open Import to add officials, upload an Assignr schedule, configure automatic archiving, or archive the selected event now.", "Open Assignment Board or Schedule to review the day, Check-In to manage arrivals, and Coaching to assign coaches.", "Open Ratings to configure evaluations, filter history, switch between individual and full-game views, export a spreadsheet, or use selection boxes to archive and delete ratings. Archived-event ratings remain available here."] },
     event_admin: { title: "Event Admin Navigation", items: ["Select an assigned event from the Active Event menu below the header.", "Open Officials, then Event Access, to add or update event staff for that event.", "Open Import for event schedule data and Event Lifecycle controls, including automatic archiving or Archive Now.", "Open Schedule for game details, Check-In for arrivals, Coaching for coach assignments, and Ratings for evaluation settings and history."] },
     assignor: { title: "Assignor Navigation", items: ["Select the event you are working from the Active Event menu below the header.", "Open Import to upload an authorized schedule, then use Assignment Board or Schedule to review crews.", "Open Check-In to filter arrivals, manually check someone in, undo a check-in, or select an official’s name to see their daily schedule.", "Open Coaching to place coaches on games. Use Rate Crew on a schedule game, or open Ratings and choose a game, when coaching tools are enabled."] },
     site_coordinator: { title: "Site Coordinator Navigation", items: ["Select today’s event from the Active Event menu.", "Open Assignment Board or Schedule to review the games in your event scope.", "Open Check-In to monitor arrivals. Use its filters to narrow the roster, and select an official’s name to view that person’s full schedule for the day."] },
@@ -2644,7 +2622,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.7.7</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.7.8</span></footer>
   </main>;
 }
 

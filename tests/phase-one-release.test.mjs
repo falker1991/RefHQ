@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.8.2 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.8.3 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,20 @@ test("Version 0.8.2 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.8\.2/);
+  assert.match(page, /Version 0\.8\.3/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.8.2");
+  assert.equal(JSON.parse(packageJson).version, "0.8.3");
+});
+
+test("role help uses an isolated single-column scrollable dialog", async () => {
+  const [page, css] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
+  assert.match(page, /<aside className="role-help-roles"/);
+  assert.match(page, /<main className="role-help-content"/);
+  assert.match(page, /<footer className="role-help-actions"/);
+  assert.match(css, /\.confirmation-dialog\.role-help-dialog\{display:grid;grid-template-rows:auto auto minmax\(0,1fr\) auto/);
+  assert.match(css, /\.role-help-content\{display:block;min-width:0;min-height:0;overflow-x:hidden;overflow-y:auto/);
+  assert.match(css, /\.role-help-dialog \.modal-close-button\{flex:0 0 38px;width:38px;height:38px\}/);
 });
 
 test("event members and assigned referee coaches load into officials and check-in rosters", async () => {

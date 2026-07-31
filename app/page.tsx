@@ -1399,6 +1399,7 @@ function AssessmentCenter({
   const [historyView, setHistoryView] = useState<"individual" | "game">("individual");
   const [showArchivedRatings, setShowArchivedRatings] = useState(false);
   const [selectedRatingIds, setSelectedRatingIds] = useState<string[]>([]);
+  const [collapsedRatingGameIds, setCollapsedRatingGameIds] = useState<string[]>([]);
   const filterDropdownsRef = useRef<HTMLDivElement>(null);
   const [history, setHistory] = useState({ assessments: data.assessments, games: data.games, assignments: data.assignments, officials: data.officials, events: [] as EventRecord[] });
   const refreshRatingHistory = useCallback(() => loadAuthorizedRatingHistory(session).then(setHistory), [session]);
@@ -1685,7 +1686,8 @@ function AssessmentCenter({
       {historyView === "game" && groupedAssessments.map(([ratedGameId, ratings]) => {
         const ratedGame = historyGameMap.get(ratedGameId);
         const gameSelected = ratings.every((assessment) => selectedRatingIds.includes(assessment.id));
-        return <article className="game-rating-history-card" key={ratedGameId}><header>{canConfigure && <input className="bulk-row-check" type="checkbox" aria-label="Select all ratings for this game" checked={gameSelected} onChange={(change) => setSelectedRatingIds((current) => change.target.checked ? [...new Set([...current, ...ratings.map((item) => item.id)])] : current.filter((id) => !ratings.some((item) => item.id === id)))} />}<div><strong>{ratedGame?.home_team} vs. {ratedGame?.away_team}</strong><p>{ratedGame ? `${formatDate(ratedGame.starts_at)} · ${formatTime(ratedGame.starts_at)} · ${ratedGame.field_name}` : "Game details unavailable"}</p></div><span>{ratings.length} official{ratings.length === 1 ? "" : "s"}</span></header><div className="game-rating-officials">{ratings.map((assessment) => <div className={assessment.archived_at ? "archived-rating" : ""} key={assessment.id}><div><strong>{historyOfficialMap.get(assessment.official_id)?.full_name || "Referee"}</strong><small>{historyPosition(assessment)}{assessment.archived_at ? " · Archived" : ""}</small></div><span className="score">{assessmentScore(assessment)?.toFixed(1) || "—"}</span>{ratingActions(assessment, ratedGame)}</div>)}</div></article>;
+        const collapsed = collapsedRatingGameIds.includes(ratedGameId);
+        return <article className={`game-rating-history-card ${collapsed ? "collapsed" : ""}`} key={ratedGameId}><header>{canConfigure && <input className="bulk-row-check" type="checkbox" aria-label="Select all ratings for this game" checked={gameSelected} onChange={(change) => setSelectedRatingIds((current) => change.target.checked ? [...new Set([...current, ...ratings.map((item) => item.id)])] : current.filter((id) => !ratings.some((item) => item.id === id)))} />}<div><strong>{ratedGame?.home_team} vs. {ratedGame?.away_team}</strong><p>{ratedGame ? `${formatDate(ratedGame.starts_at)} · ${formatTime(ratedGame.starts_at)} · ${ratedGame.field_name}` : "Game details unavailable"}</p></div><span>{ratings.length} official{ratings.length === 1 ? "" : "s"}</span><button className="game-rating-collapse" aria-label={`${collapsed ? "Expand" : "Collapse"} ratings for this game`} aria-expanded={!collapsed} onClick={() => setCollapsedRatingGameIds((current) => current.includes(ratedGameId) ? current.filter((id) => id !== ratedGameId) : [...current, ratedGameId])}>{collapsed ? "▾" : "▴"}</button></header>{!collapsed && <div className="game-rating-officials">{ratings.map((assessment) => <div className={assessment.archived_at ? "archived-rating" : ""} key={assessment.id}><div><strong>{historyOfficialMap.get(assessment.official_id)?.full_name || "Referee"}</strong><small>{historyPosition(assessment)}{assessment.archived_at ? " · Archived" : ""}</small></div><span className="score">{assessmentScore(assessment)?.toFixed(1) || "—"}</span>{ratingActions(assessment, ratedGame)}</div>)}</div>}</article>;
       })}
       {!sortedAssessments.length && <EmptyState>No ratings match these filters.</EmptyState>}</article>
   </section>;
@@ -2716,7 +2718,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.8.4</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.8.5</span></footer>
   </main>;
 }
 

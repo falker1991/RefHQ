@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.8.4 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.8.5 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,19 @@ test("Version 0.8.4 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.8\.4/);
+  assert.match(page, /Version 0\.8\.5/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.8.4");
+  assert.equal(JSON.parse(packageJson).version, "0.8.5");
+});
+
+test("full-game ratings use one collapsible horizontal official row", async () => {
+  const [page, css] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
+  assert.match(page, /collapsedRatingGameIds/);
+  assert.match(page, /className="game-rating-collapse"/);
+  assert.match(page, /aria-expanded=\{!collapsed\}/);
+  assert.match(css, /\.game-rating-officials\{display:flex;align-items:stretch;overflow-x:auto/);
+  assert.match(css, /\.game-rating-officials>div\{display:grid;[\s\S]*flex:1 0 230px/);
 });
 
 test("rating selection checkbox uses a compact column beside rating information", async () => {

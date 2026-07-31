@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.7.6 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.7.7 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,14 +13,16 @@ test("Version 0.7.6 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.7\.6/);
+  assert.match(page, /Version 0\.7\.7/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.7.6");
+  assert.equal(JSON.parse(packageJson).version, "0.7.7");
 });
 
 test("official directory sorts populated values before missing values", async () => {
   const page = await read("app/page.tsx");
+  assert.match(page, /const directoryNameSortKey/);
+  assert.match(page, /name: \[directoryNameSortKey\(a\.full_name\), directoryNameSortKey\(b\.full_name\)\]/);
   assert.match(page, /const compareDirectoryValues/);
   assert.match(page, /if \(leftMissing !== rightMissing\) return leftMissing \? 1 : -1/);
   assert.match(page, /last_login: \[a\.last_login_at, b\.last_login_at\]/);

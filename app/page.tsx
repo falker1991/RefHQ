@@ -1016,6 +1016,14 @@ function OfficialsDirectory({
   } : null;
   const baseDirectoryOfficials = showArchivedOfficials ? [...officials, ...archivedOfficials] : officials;
   const directoryOfficials = selfOwnerRecord ? [...baseDirectoryOfficials, selfOwnerRecord] : baseDirectoryOfficials;
+  const directoryNameSortKey = (fullName: string) => {
+    const parts = fullName.trim().split(/\s+/).filter(Boolean);
+    const suffixes = new Set(["jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"]);
+    const lastNameIndex = parts.length > 1 && suffixes.has(parts.at(-1)!.toLowerCase())
+      ? parts.length - 2
+      : parts.length - 1;
+    return `${parts[lastNameIndex] || ""}\u0000${fullName}`;
+  };
   const compareDirectoryValues = (left: string | number | null | undefined, right: string | number | null | undefined) => {
     const leftMissing = left === null || left === undefined || left === "";
     const rightMissing = right === null || right === undefined || right === "";
@@ -1030,7 +1038,7 @@ function OfficialsDirectory({
     return haystack.includes(query.toLowerCase());
   }).sort((a, b) => {
     const values = {
-      name: [a.full_name, b.full_name],
+      name: [directoryNameSortKey(a.full_name), directoryNameSortKey(b.full_name)],
       email: [a.email, b.email],
       phone: [a.phone, b.phone],
       badge: [a.badge_level, b.badge_level],
@@ -1040,7 +1048,7 @@ function OfficialsDirectory({
       rating: [officialAverage(a.id), officialAverage(b.id)],
       last_login: [a.last_login_at, b.last_login_at],
     }[sortBy];
-    return compareDirectoryValues(values[0], values[1]) || a.full_name.localeCompare(b.full_name, undefined, { sensitivity: "base" });
+    return compareDirectoryValues(values[0], values[1]) || compareDirectoryValues(directoryNameSortKey(a.full_name), directoryNameSortKey(b.full_name));
   });
   async function addOfficial() {
     setBusy(true);
@@ -2636,7 +2644,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.7.6</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.7.7</span></footer>
   </main>;
 }
 

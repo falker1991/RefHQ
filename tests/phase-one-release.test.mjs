@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.9.1 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.9.2 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.9.1 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.9\.1/);
+  assert.match(page, /Version 0\.9\.2/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.9.1");
+  assert.equal(JSON.parse(packageJson).version, "0.9.2");
 });
 
 test("sessions refresh automatically and non-auth failures preserve login", async () => {
@@ -156,6 +156,11 @@ test("official directory sorts populated values before missing values", async ()
   assert.match(page, /if \(leftMissing !== rightMissing\) return leftMissing \? 1 : -1/);
   assert.match(page, /last_login: \[a\.last_login_at, b\.last_login_at\]/);
   assert.match(page, /rating: \[officialAverage\(a\.id\), officialAverage\(b\.id\)\]/);
+  assert.match(page, /const \[sortDirection, setSortDirection\]/);
+  assert.match(page, /direction === "desc" \? -comparison : comparison/);
+  assert.match(page, /Low–High/);
+  assert.match(page, /Newest–Oldest/);
+  assert.match(page, />Order<select/);
 });
 
 test("site owner and delegated administrator access follow protected removal hierarchy", async () => {

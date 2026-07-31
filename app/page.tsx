@@ -970,6 +970,7 @@ function OfficialsDirectory({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "email" | "phone" | "badge" | "identity" | "role" | "event" | "rating" | "last_login">("name");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [managing, setManaging] = useState<OfficialRecord | null>(null);
   const [editing, setEditing] = useState<OfficialRecord | null>(null);
   const [removing, setRemoving] = useState<OfficialRecord | null>(null);
@@ -1027,13 +1028,15 @@ function OfficialsDirectory({
       : parts.length - 1;
     return `${parts[lastNameIndex] || ""}\u0000${fullName}`;
   };
-  const compareDirectoryValues = (left: string | number | null | undefined, right: string | number | null | undefined) => {
+  const compareDirectoryValues = (left: string | number | null | undefined, right: string | number | null | undefined, direction: "asc" | "desc" = "asc") => {
     const leftMissing = left === null || left === undefined || left === "";
     const rightMissing = right === null || right === undefined || right === "";
     if (leftMissing !== rightMissing) return leftMissing ? 1 : -1;
     if (leftMissing && rightMissing) return 0;
-    if (typeof left === "number" && typeof right === "number") return left - right;
-    return String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
+    const comparison = typeof left === "number" && typeof right === "number"
+      ? left - right
+      : String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
+    return direction === "desc" ? -comparison : comparison;
   };
   const filtered = directoryOfficials.filter((official) => {
     if (scope === "event" && !eventOfficialIds.has(official.id)) return false;
@@ -1051,8 +1054,13 @@ function OfficialsDirectory({
       rating: [officialAverage(a.id), officialAverage(b.id)],
       last_login: [a.last_login_at, b.last_login_at],
     }[sortBy];
-    return compareDirectoryValues(values[0], values[1]) || compareDirectoryValues(directoryNameSortKey(a.full_name), directoryNameSortKey(b.full_name));
+    return compareDirectoryValues(values[0], values[1], sortDirection) || compareDirectoryValues(directoryNameSortKey(a.full_name), directoryNameSortKey(b.full_name), sortBy === "name" ? sortDirection : "asc");
   });
+  const sortDirectionLabels = sortBy === "rating"
+    ? { asc: "Low–High", desc: "High–Low" }
+    : sortBy === "last_login"
+      ? { asc: "Oldest–Newest", desc: "Newest–Oldest" }
+      : { asc: "A–Z", desc: "Z–A" };
   async function addOfficial() {
     setBusy(true);
     setMessage("");
@@ -1264,6 +1272,7 @@ function OfficialsDirectory({
       <div className="segmented"><button className={scope === "organization" ? "active" : ""} onClick={() => setScope("organization")}>Organization</button><button className={scope === "event" ? "active" : ""} onClick={() => setScope("event")}>Active event</button></div>
       <input className="search" type="search" placeholder="Search name, email, or badge…" value={query} onChange={(event) => setQuery(event.target.value)} />
       <label className="compact-sort">Sort by<select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}><option value="name">Name</option><option value="email">Email</option><option value="phone">Phone</option><option value="badge">Badge</option><option value="identity">Account status</option><option value="role">Organization role</option><option value="event">Event assignment</option><option value="rating">Average rating</option><option value="last_login">Last login</option></select></label>
+      <label className="compact-sort">Order<select value={sortDirection} onChange={(event) => setSortDirection(event.target.value as typeof sortDirection)}><option value="asc">{sortDirectionLabels.asc}</option><option value="desc">{sortDirectionLabels.desc}</option></select></label>
       {canManageOrganizationRoles && <label className="show-archived-ratings"><input type="checkbox" checked={showArchivedOfficials} onChange={(event) => setShowArchivedOfficials(event.target.checked)} /> Show Archived</label>}
       {canManageOrganizationRoles && <button className="secondary" disabled={linkedAccounts.length < 2} onClick={() => setMerging(true)}>Merge accounts</button>}
       <button className="secondary" onClick={() => setAdding((value) => !value)}>{adding ? "Cancel" : "Add official"}</button>
@@ -2816,7 +2825,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.9.1</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.9.2</span></footer>
   </main>;
 }
 

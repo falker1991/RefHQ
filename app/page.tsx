@@ -1680,7 +1680,7 @@ function AssessmentCenter({
       {historyView === "individual" && sortedAssessments.map((assessment) => {
       const score = assessmentScore(assessment);
       const ratedGame = historyGameMap.get(assessment.game_id);
-      return <article className={assessment.archived_at ? "archived-rating" : ""} key={assessment.id}>{canConfigure && <input className="bulk-row-check" type="checkbox" aria-label={`Select rating for ${historyOfficialMap.get(assessment.official_id)?.full_name || "official"}`} checked={selectedRatingIds.includes(assessment.id)} onChange={(event) => setSelectedRatingIds((current) => event.target.checked ? [...current, assessment.id] : current.filter((id) => id !== assessment.id))} />}<div><strong>{historyOfficialMap.get(assessment.official_id)?.full_name || "Referee"}</strong><p>{ratedGame?.home_team} vs. {ratedGame?.away_team}</p><small>{assessment.evaluation_type === "basic_eval" ? "Basic Eval" : "Skills Eval"} · {assessment.visibility === "public" ? "Public" : "Admin only"}{assessment.archived_at ? " · Archived" : ""}</small></div><span className="score">{score ? Number(score).toFixed(1) : "—"}</span><span className={`identity-pill ${assessment.status !== "draft" ? "linked" : ""}`}>{assessment.status}</span>{ratingActions(assessment, ratedGame)}</article>;
+      return <article className={`${canConfigure ? "selectable-rating-row " : ""}${assessment.archived_at ? "archived-rating" : ""}`.trim()} key={assessment.id}>{canConfigure && <input className="bulk-row-check" type="checkbox" aria-label={`Select rating for ${historyOfficialMap.get(assessment.official_id)?.full_name || "official"}`} checked={selectedRatingIds.includes(assessment.id)} onChange={(event) => setSelectedRatingIds((current) => event.target.checked ? [...current, assessment.id] : current.filter((id) => id !== assessment.id))} />}<div><strong>{historyOfficialMap.get(assessment.official_id)?.full_name || "Referee"}</strong><p>{ratedGame?.home_team} vs. {ratedGame?.away_team}</p><small>{assessment.evaluation_type === "basic_eval" ? "Basic Eval" : "Skills Eval"} · {assessment.visibility === "public" ? "Public" : "Admin only"}{assessment.archived_at ? " · Archived" : ""}</small></div><span className="score">{score ? Number(score).toFixed(1) : "—"}</span><span className={`identity-pill ${assessment.status !== "draft" ? "linked" : ""}`}>{assessment.status}</span>{ratingActions(assessment, ratedGame)}</article>;
     })}
       {historyView === "game" && groupedAssessments.map(([ratedGameId, ratings]) => {
         const ratedGame = historyGameMap.get(ratedGameId);
@@ -2716,7 +2716,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.8.3</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.8.4</span></footer>
   </main>;
 }
 

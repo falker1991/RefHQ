@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.8.3 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.8.4 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,18 @@ test("Version 0.8.3 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.8\.3/);
+  assert.match(page, /Version 0\.8\.4/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.8.3");
+  assert.equal(JSON.parse(packageJson).version, "0.8.4");
+});
+
+test("rating selection checkbox uses a compact column beside rating information", async () => {
+  const [page, css] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
+  assert.match(page, /selectable-rating-row/);
+  assert.match(css, /\.ratings-history article\.selectable-rating-row\{grid-template-columns:16px minmax\(0,1fr\) 45px 78px auto\}/);
+  assert.match(css, /\.selectable-rating-row>\.bulk-row-check\{width:16px!important;height:16px;margin:0\}/);
+  assert.match(css, /article\.selectable-rating-row\{grid-template-columns:16px minmax\(0,1fr\) 40px\}/);
 });
 
 test("role help uses an isolated single-column scrollable dialog", async () => {

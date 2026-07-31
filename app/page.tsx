@@ -21,6 +21,7 @@ import {
   deleteAppearanceCampaign,
   deleteAppearanceTheme,
   deleteCoachAssignment,
+  deleteRating,
   importTournament,
   importOfficials,
   leaveCurrentOrganization,
@@ -40,10 +41,12 @@ import {
   loadProfile,
   loadMemberships,
   loadUserEventMemberships,
+  logRatingExport,
   mergeOrganizationAccounts,
   parseAssignrCsv,
   parseAssignrOfficialsCsv,
   saveAssessment,
+  setRatingArchived,
   saveUserEventAccess,
   restoreDefaultAppearance,
   restoreEvent,
@@ -1289,10 +1292,23 @@ function AssessmentCenter({
   const [historyFilters, setHistoryFilters] = useState({ referees: [] as string[], ageGroups: [] as string[], genders: [] as string[], positions: [] as string[] });
   const [refereeFilterSearch, setRefereeFilterSearch] = useState("");
   const [historyDateRange, setHistoryDateRange] = useState({ from: "", through: "" });
-  const [history, setHistory] = useState({ assessments: data.assessments, games: data.games, assignments: data.assignments, officials: data.officials });
+  const [historyView, setHistoryView] = useState<"individual" | "game">("individual");
+  const [showArchivedRatings, setShowArchivedRatings] = useState(false);
+  const filterDropdownsRef = useRef<HTMLDivElement>(null);
+  const [history, setHistory] = useState({ assessments: data.assessments, games: data.games, assignments: data.assignments, officials: data.officials, events: [] as EventRecord[] });
+  const refreshRatingHistory = useCallback(() => loadAuthorizedRatingHistory(session).then(setHistory), [session]);
   useEffect(() => {
-    loadAuthorizedRatingHistory(session).then(setHistory).catch(() => undefined);
-  }, [session, data.assessments.length]);
+    refreshRatingHistory().catch(() => undefined);
+  }, [refreshRatingHistory, data.assessments.length]);
+  useEffect(() => {
+    const closeDropdowns = (event: PointerEvent) => {
+      filterDropdownsRef.current?.querySelectorAll<HTMLDetailsElement>("details[open]").forEach((dropdown) => {
+        if (!dropdown.contains(event.target as Node)) dropdown.removeAttribute("open");
+      });
+    };
+    document.addEventListener("pointerdown", closeDropdowns);
+    return () => document.removeEventListener("pointerdown", closeDropdowns);
+  }, []);
   useEffect(() => {
     setConfiguration({ ratingType: event.rating_type, adminOnly: event.ratings_admin_only });
   }, [event.id, event.rating_type, event.ratings_admin_only]);
@@ -1319,7 +1335,8 @@ function AssessmentCenter({
     const game = historyGameMap.get(item.game_id);
     const referee = historyOfficialMap.get(item.official_id)?.full_name || "Unknown official";
     const gameDate = game?.starts_at.slice(0, 10) || "";
-    return (historyEventId === "all" || game?.event_id === historyEventId)
+    return (showArchivedRatings || !item.archived_at)
+      && (historyEventId === "all" || game?.event_id === historyEventId)
       && (!historyFilters.referees.length || historyFilters.referees.includes(referee))
       && (!historyFilters.ageGroups.length || historyFilters.ageGroups.includes(game?.age_group || "Unspecified age group"))
       && (!historyFilters.genders.length || historyFilters.genders.includes(game?.gender || "Unspecified gender"))
@@ -1341,6 +1358,81 @@ function AssessmentCenter({
   });
   const filteredScores = sortedAssessments.map(assessmentScore).filter((score): score is number => score !== null);
   const filteredAverage = filteredScores.length ? filteredScores.reduce((sum, score) => sum + score, 0) / filteredScores.length : null;
+  const groupedAssessments = [...sortedAssessments.reduce((groups, assessment) => {
+    const key = assessment.game_id;
+    groups.set(key, [...(groups.get(key) || []), assessment]);
+    return groups;
+  }, new Map<string, AssessmentRecord[]>()).entries()];
+
+  async function changeRatingArchive(assessment: AssessmentRecord, archived: boolean) {
+    setBusy(true);
+    setMessage("");
+    try {
+      await setRatingArchived(session, assessment.id, archived);
+      await refreshRatingHistory();
+      setMessage(archived ? "Rating archived." : "Rating restored.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update the rating.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeRating(assessment: AssessmentRecord) {
+    if (!window.confirm("Permanently delete this rating? This cannot be undone.")) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      await deleteRating(session, assessment.id);
+      await refreshRatingHistory();
+      setMessage("Rating deleted.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to delete the rating.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function exportRatings() {
+    if (!groupedAssessments.length) return;
+    const maximumCrew = Math.max(...groupedAssessments.map(([, ratings]) => ratings.length));
+    const headings = ["Event", "Date", "Time", "Field", "Home Team", "Away Team", "Age Group", "Gender"];
+    for (let index = 1; index <= maximumCrew; index += 1) {
+      headings.push(
+        `Official ${index} Name`, `Official ${index} Position`, `Official ${index} Eval Type`,
+        `Official ${index} Score`, `Official ${index} Positioning`, `Official ${index} Decision Making`,
+        `Official ${index} Communication`, `Official ${index} Match Control`,
+        `Official ${index} Strengths`, `Official ${index} Development Focus`, `Official ${index} Notes`,
+      );
+    }
+    const escapeCell = (value: unknown) => `"${String(value ?? "").replaceAll("\"", "\"\"")}"`;
+    const rows = groupedAssessments.map(([gameId, ratings]) => {
+      const ratedGame = historyGameMap.get(gameId);
+      const ratedEvent = history.events.find((item) => item.id === ratedGame?.event_id);
+      const cells: unknown[] = [
+        ratedEvent?.name || "", ratedGame ? formatDate(ratedGame.starts_at) : "",
+        ratedGame ? formatTime(ratedGame.starts_at) : "", ratedGame?.field_name || "",
+        ratedGame?.home_team || "", ratedGame?.away_team || "", ratedGame?.age_group || "", ratedGame?.gender || "",
+      ];
+      ratings.forEach((rating) => cells.push(
+        historyOfficialMap.get(rating.official_id)?.full_name || "Unknown official",
+        historyPosition(rating),
+        rating.evaluation_type === "basic_eval" ? "Basic Eval" : "Skills Eval",
+        assessmentScore(rating)?.toFixed(2) || "",
+        rating.positioning ?? "", rating.decision_making ?? "", rating.communication ?? "", rating.match_control ?? "",
+        rating.strengths || "", rating.development_focus || "", rating.coach_notes || "",
+      ));
+      while (cells.length < headings.length) cells.push("");
+      return cells.map(escapeCell).join(",");
+    });
+    const csv = [headings.map(escapeCell).join(","), ...rows].join("\r\n");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    link.download = `law18ref-ratings-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    await logRatingExport(session, sortedAssessments.length, groupedAssessments.length).catch(() => undefined);
+  }
 
   function chooseGame(nextGameId: string) {
     setGameId(nextGameId);
@@ -1419,11 +1511,17 @@ function AssessmentCenter({
     }
   }
 
-  if (!canSubmit) return <section className="page-section"><div className="section-title"><div><p className="eyebrow">MY FEEDBACK</p><h1>Ratings history</h1><p>Ratings shared with you appear here.</p></div></div><EmptyState>No public ratings are available yet.</EmptyState></section>;
+  const canManageRating = (assessment: AssessmentRecord) => canConfigure || assessment.coach_id === session.user.id;
+  const ratingActions = (assessment: AssessmentRecord, ratedGame?: GameRecord) => canManageRating(assessment) ? <div className="rating-history-actions">
+    {!assessment.archived_at && ratedGame && onEditRating && <button className="secondary edit-rating-button" disabled={busy} onClick={() => onEditRating(assessment.game_id, ratedGame.event_id)}>Edit</button>}
+    <button className="secondary" disabled={busy} onClick={() => changeRatingArchive(assessment, !assessment.archived_at)}>{assessment.archived_at ? "Restore" : "Archive"}</button>
+    <button className="danger-button" disabled={busy} onClick={() => removeRating(assessment)}>Delete</button>
+  </div> : null;
+
   return <section className={`page-section ratings-page${modal ? " rating-modal" : ""}`} role={modal ? "dialog" : undefined} aria-modal={modal || undefined} aria-label={modal ? "Rate crew" : undefined} onClick={modal ? (click) => { if (click.target === click.currentTarget) onClose?.(); } : undefined}>
-    <div className="section-title"><div><p className="eyebrow">REFEREE DEVELOPMENT</p><h1>Ratings</h1><p>Rate every official assigned to a game in one view.</p></div>{hideWorkspace && <button className="primary" onClick={onOpenRating}>Rate a Crew</button>}</div>
+    <div className="section-title"><div><p className="eyebrow">{canSubmit ? "REFEREE DEVELOPMENT" : "MY FEEDBACK"}</p><h1>{canSubmit ? "Ratings" : "My Evals"}</h1><p>{canSubmit ? "Rate every official assigned to a game in one view." : "Review ratings that have been shared with you."}</p></div>{canSubmit && hideWorkspace && <button className="primary" onClick={onOpenRating}>Rate a Crew</button>}</div>
     {canConfigure && <article className="panel rating-settings"><div><p className="eyebrow">EVENT SETTINGS</p><h2>Rating configuration</h2><p>Changes remain private to this form until you save them.</p></div><label>Evaluation type<select value={configuration.ratingType} disabled={busy} onChange={(e) => setConfiguration({ ...configuration, ratingType: e.target.value as EventRecord["rating_type"] })}><option value="skills_eval">Skills Eval</option><option value="basic_eval">Basic Eval</option></select></label><label className="visibility-lock"><input type="checkbox" checked={configuration.adminOnly} disabled={busy} onChange={(e) => setConfiguration({ ...configuration, adminOnly: e.target.checked })} /><span><strong>Lock visibility to event staff</strong><small>Only administrators, event/game assignors, and referee coaches can view ratings.</small></span></label><button className="primary rating-config-save" disabled={busy || (configuration.ratingType === event.rating_type && configuration.adminOnly === event.ratings_admin_only)} onClick={saveConfiguration}>{busy ? "Saving…" : "Save Configuration"}</button></article>}
-    {!hideWorkspace && <article className="panel crew-rating-workspace">
+    {canSubmit && !hideWorkspace && <article className="panel crew-rating-workspace">
       <div className="panel-head"><div><p className="eyebrow">{event.rating_type === "skills_eval" ? "SKILLS EVAL" : "BASIC EVAL"}</p><h2>{modal ? "Rate Crew" : "Select a game"}</h2></div>{modal && <button className="modal-close" aria-label="Close rating form" onClick={onClose}>×</button>}</div>
       <div className="assessment-selects"><label>Game<select value={gameId} onChange={(e) => chooseGame(e.target.value)}><option value="">Choose a game</option>{eligibleGames.map((game) => <option value={game.id} key={game.id}>{formatDate(game.starts_at)} · {game.field_name} · {formatTime(game.starts_at)}</option>)}</select></label><label>Visibility<select value={event.ratings_admin_only ? "private" : visibility} disabled={event.ratings_admin_only} onChange={(e) => setVisibility(e.target.value as "public" | "private")}><option value="private">Private — event staff and referee coaches</option><option value="public">Public — visible to each referee</option></select></label>{event.ratings_admin_only && <p className="import-note">Visibility is locked to event staff for this event.</p>}</div>
       <div className="crew-rating-list">{gameAssignments.map((assignment) => {
@@ -1442,8 +1540,8 @@ function AssessmentCenter({
       {message && <p className="pilot-message assessment-message">{message}</p>}
       <div className="assessment-actions"><button className="secondary" disabled={busy || !gameAssignments.length} onClick={() => submitCrew("draft")}>Save crew draft</button><button className="primary" disabled={busy || !gameAssignments.length} onClick={() => submitCrew("submitted")}>Submit all ratings</button></div>
     </article>}
-    <article className="panel history ratings-history"><div className="panel-head"><div><p className="eyebrow">HISTORY</p><h2>{sortedAssessments.length} matching rating{sortedAssessments.length === 1 ? "" : "s"}</h2><p className="filtered-rating-average">Average Score <strong>{filteredAverage?.toFixed(2) || "—"}</strong></p></div><div className="history-filters"><label className="compact-sort">Event<select value={historyEventId} onChange={(e) => setHistoryEventId(e.target.value)}><option value="all">All permitted events</option>{[...new Set(history.games.map((game) => game.event_id))].map((id) => <option value={id} key={id}>{events.find((item) => item.id === id)?.name || `Previous event · ${id.slice(0, 8)}`}</option>)}</select></label><label className="compact-sort">Sort by<select value={ratingSort} onChange={(e) => setRatingSort(e.target.value as typeof ratingSort)}><option value="date">Date</option><option value="gender">Gender</option><option value="age_group">Age group</option><option value="referee">Referee</option><option value="position">Position</option></select></label></div></div>
-      <details className="ratings-filter-panel"><summary>Filter Ratings{activeHistoryFilterCount ? ` · ${activeHistoryFilterCount} selected` : ""}</summary><div className="ratings-filter-grid">{([
+    <article className="panel history ratings-history"><div className="panel-head"><div><p className="eyebrow">HISTORY</p><h2>{sortedAssessments.length} matching rating{sortedAssessments.length === 1 ? "" : "s"}</h2><p className="filtered-rating-average">Average Score <strong>{filteredAverage?.toFixed(2) || "—"}</strong></p></div><div className="rating-history-toolbar"><div className="segmented-control" aria-label="Rating history view"><button className={historyView === "individual" ? "active" : ""} onClick={() => setHistoryView("individual")}>Individual Ratings</button><button className={historyView === "game" ? "active" : ""} onClick={() => setHistoryView("game")}>Full Game Ratings</button></div><button className="secondary" disabled={!sortedAssessments.length} onClick={exportRatings}>Export Spreadsheet</button></div><div className="history-filters"><label className="compact-sort">Event<select value={historyEventId} onChange={(e) => setHistoryEventId(e.target.value)}><option value="all">All permitted events</option>{[...new Set(history.games.map((game) => game.event_id))].map((id) => <option value={id} key={id}>{history.events.find((item) => item.id === id)?.name || events.find((item) => item.id === id)?.name || `Previous event · ${id.slice(0, 8)}`}</option>)}</select></label><label className="compact-sort">Sort by<select value={ratingSort} onChange={(e) => setRatingSort(e.target.value as typeof ratingSort)}><option value="date">Date</option><option value="gender">Gender</option><option value="age_group">Age group</option><option value="referee">Referee</option><option value="position">Position</option></select></label><label className="show-archived-ratings"><input type="checkbox" checked={showArchivedRatings} onChange={(event) => setShowArchivedRatings(event.target.checked)} /> Show Archived Ratings</label></div></div>
+      <details className="ratings-filter-panel"><summary>Filter Ratings{activeHistoryFilterCount ? ` · ${activeHistoryFilterCount} selected` : ""}</summary><div className="ratings-filter-grid" ref={filterDropdownsRef}>{([
         ["referees", "Referees", filterOptions.referees],
         ["ageGroups", "Age Groups", filterOptions.ageGroups],
         ["genders", "Genders", filterOptions.genders],
@@ -1452,13 +1550,20 @@ function AssessmentCenter({
         const visibleOptions = key === "referees" && refereeFilterSearch.trim()
           ? options.filter((option) => option.toLowerCase().includes(refereeFilterSearch.trim().toLowerCase()))
           : options;
-        return <details className="rating-filter-dropdown" key={key}><summary><span>{label}</span><small>{historyFilters[key].length ? `${historyFilters[key].length} selected` : "All"}</small></summary><div className="rating-filter-options">{key === "referees" && <input className="rating-referee-search" type="search" value={refereeFilterSearch} placeholder="Search referees…" aria-label="Search referees" onChange={(event) => setRefereeFilterSearch(event.target.value)} />}{visibleOptions.map((option) => <label key={option}><input type="checkbox" checked={historyFilters[key].includes(option)} onChange={() => toggleHistoryFilter(key, option)} /><span>{option}</span></label>)}{!visibleOptions.length && <small>No matching referees</small>}</div></details>;
+        const allSelected = options.length > 0 && options.every((option) => historyFilters[key].includes(option));
+        return <details className="rating-filter-dropdown" key={key}><summary><span>{label}</span><small>{historyFilters[key].length ? `${historyFilters[key].length} selected` : "All"}</small></summary><div className="rating-filter-options">{key === "referees" && <input className="rating-referee-search" type="search" value={refereeFilterSearch} placeholder="Search referees…" aria-label="Search referees" onChange={(event) => setRefereeFilterSearch(event.target.value)} />}<label className="rating-select-all"><input type="checkbox" checked={allSelected} onChange={() => setHistoryFilters((current) => ({ ...current, [key]: allSelected ? [] : [...options] }))} /><strong>Select All</strong></label>{visibleOptions.map((option) => <label key={option}><input type="checkbox" checked={historyFilters[key].includes(option)} onChange={() => toggleHistoryFilter(key, option)} /><span>{option}</span></label>)}{!visibleOptions.length && <small>No matching referees</small>}</div></details>;
       })}<fieldset className="rating-date-range"><legend>Date Range</legend><label>From<input type="date" value={historyDateRange.from} max={historyDateRange.through || undefined} onChange={(event) => setHistoryDateRange((current) => ({ ...current, from: event.target.value }))} /></label><label>Through<input type="date" value={historyDateRange.through} min={historyDateRange.from || undefined} onChange={(event) => setHistoryDateRange((current) => ({ ...current, through: event.target.value }))} /></label></fieldset></div><button className="text-button clear-rating-filters" disabled={!activeHistoryFilterCount} onClick={() => { setHistoryFilters({ referees: [], ageGroups: [], genders: [], positions: [] }); setHistoryDateRange({ from: "", through: "" }); setRefereeFilterSearch(""); }}>Clear All Filters</button></details>
-      {sortedAssessments.map((assessment) => {
+      {message && <p className="pilot-message assessment-message">{message}</p>}
+      {historyView === "individual" && sortedAssessments.map((assessment) => {
       const score = assessmentScore(assessment);
       const ratedGame = historyGameMap.get(assessment.game_id);
-      return <article key={assessment.id}><div><strong>{historyOfficialMap.get(assessment.official_id)?.full_name || "Referee"}</strong><p>{ratedGame?.home_team} vs. {ratedGame?.away_team}</p><small>{assessment.evaluation_type === "basic_eval" ? "Basic Eval" : "Skills Eval"} · {assessment.visibility === "public" ? "Public" : "Admin only"}</small></div><span className="score">{score ? Number(score).toFixed(1) : "—"}</span><span className={`identity-pill ${assessment.status !== "draft" ? "linked" : ""}`}>{assessment.status}</span>{assessment.coach_id === session.user.id && ratedGame && onEditRating && <button className="secondary edit-rating-button" onClick={() => onEditRating(assessment.game_id, ratedGame.event_id)}>Edit</button>}</article>;
-    })}{!sortedAssessments.length && <EmptyState>No ratings match these filters.</EmptyState>}</article>
+      return <article className={assessment.archived_at ? "archived-rating" : ""} key={assessment.id}><div><strong>{historyOfficialMap.get(assessment.official_id)?.full_name || "Referee"}</strong><p>{ratedGame?.home_team} vs. {ratedGame?.away_team}</p><small>{assessment.evaluation_type === "basic_eval" ? "Basic Eval" : "Skills Eval"} · {assessment.visibility === "public" ? "Public" : "Admin only"}{assessment.archived_at ? " · Archived" : ""}</small></div><span className="score">{score ? Number(score).toFixed(1) : "—"}</span><span className={`identity-pill ${assessment.status !== "draft" ? "linked" : ""}`}>{assessment.status}</span>{ratingActions(assessment, ratedGame)}</article>;
+    })}
+      {historyView === "game" && groupedAssessments.map(([ratedGameId, ratings]) => {
+        const ratedGame = historyGameMap.get(ratedGameId);
+        return <article className="game-rating-history-card" key={ratedGameId}><header><div><strong>{ratedGame?.home_team} vs. {ratedGame?.away_team}</strong><p>{ratedGame ? `${formatDate(ratedGame.starts_at)} · ${formatTime(ratedGame.starts_at)} · ${ratedGame.field_name}` : "Game details unavailable"}</p></div><span>{ratings.length} official{ratings.length === 1 ? "" : "s"}</span></header><div className="game-rating-officials">{ratings.map((assessment) => <div className={assessment.archived_at ? "archived-rating" : ""} key={assessment.id}><div><strong>{historyOfficialMap.get(assessment.official_id)?.full_name || "Referee"}</strong><small>{historyPosition(assessment)}{assessment.archived_at ? " · Archived" : ""}</small></div><span className="score">{assessmentScore(assessment)?.toFixed(1) || "—"}</span>{ratingActions(assessment, ratedGame)}</div>)}</div></article>;
+      })}
+      {!sortedAssessments.length && <EmptyState>No ratings match these filters.</EmptyState>}</article>
   </section>;
 }
 
@@ -2141,11 +2246,11 @@ function Dashboard({ session }: { session: Law18Session }) {
   ])];
   const helpByRole: Record<MembershipRole, { title: string; items: string[] }> = {
     site_owner: { title: "Site Owner Navigation", items: ["Use the organization selector below the header to open the group you want to manage.", "Open Groups from your initials menu to create, open, archive, or restore organizations.", "Open Site Appearance from your initials menu to edit, save, schedule, or restore site themes.", "Open Activity within an organization to review its audit log or manage Join Group links.", "After selecting an organization and event, use the same event tabs described for organization administrators."] },
-    organization_admin: { title: "Organization Admin Navigation", items: ["Choose the organization and active event from the selectors below the header.", "Open Officials to add or edit people, review last login, set organization roles, remove a member, merge accounts, or open Event Access.", "Open Activity to review meaningful changes, manage Join Group links, or restore an archived event.", "Open Import to add officials, upload an Assignr schedule, configure automatic archiving, or archive the selected event now.", "Open Assignment Board or Schedule to review the day, Check-In to manage arrivals, Coaching to assign coaches, and Ratings to configure or review evaluations."] },
+    organization_admin: { title: "Organization Admin Navigation", items: ["Choose the organization and active event from the selectors below the header.", "Open Officials to add or edit people, review last login, set organization roles, remove a member, merge accounts, or open Event Access.", "Open Activity to review meaningful changes, manage Join Group links, or restore an archived event.", "Open Import to add officials, upload an Assignr schedule, configure automatic archiving, or archive the selected event now.", "Open Assignment Board or Schedule to review the day, Check-In to manage arrivals, and Coaching to assign coaches.", "Open Ratings to configure evaluations, filter history, switch between individual and full-game views, export a spreadsheet, or archive and delete ratings. Archived-event ratings remain available here."] },
     event_admin: { title: "Event Admin Navigation", items: ["Select an assigned event from the Active Event menu below the header.", "Open Officials, then Event Access, to add or update event staff for that event.", "Open Import for event schedule data and Event Lifecycle controls, including automatic archiving or Archive Now.", "Open Schedule for game details, Check-In for arrivals, Coaching for coach assignments, and Ratings for evaluation settings and history."] },
     assignor: { title: "Assignor Navigation", items: ["Select the event you are working from the Active Event menu below the header.", "Open Import to upload an authorized schedule, then use Assignment Board or Schedule to review crews.", "Open Check-In to filter arrivals, manually check someone in, undo a check-in, or select an official’s name to see their daily schedule.", "Open Coaching to place coaches on games. Use Rate Crew on a schedule game, or open Ratings and choose a game, when coaching tools are enabled."] },
     site_coordinator: { title: "Site Coordinator Navigation", items: ["Select today’s event from the Active Event menu.", "Open Assignment Board or Schedule to review the games in your event scope.", "Open Check-In to monitor arrivals. Use its filters to narrow the roster, and select an official’s name to view that person’s full schedule for the day."] },
-    referee_coach: { title: "Referee Coach Navigation", items: ["Select the event you are coaching from the My Event menu.", "Open Schedule to see games and crews in your coaching scope.", "Select Rate Crew on a game to open its evaluation form, complete the crew ratings, and submit them together.", "You can also open Ratings, choose a game in the modal, and use the page underneath to review rating history.", "When Check-In appears, open it at the venue, select Scan QR Code, and scan the code displayed by event staff."] },
+    referee_coach: { title: "Referee Coach Navigation", items: ["Select the event you are coaching from the My Event menu.", "Open Schedule to see games and crews in your coaching scope.", "Select Rate Crew on a game to open its evaluation form, complete the crew ratings, and submit them together.", "Open Ratings to choose a game, review individual or full-game history, filter results, or export the filtered ratings. Your permitted history remains available after an event is archived.", "When Check-In appears, open it at the venue, select Scan QR Code, and scan the code displayed by event staff."] },
     referee: { title: "Referee Navigation", items: ["Select the event you want from the My Event menu below the header.", "Open My Assignments to view your imported game schedule and positions.", "On an assigned event day, open Check-In, select Scan QR Code, and scan the code displayed by event staff. The scanner disappears after your check-in is recorded.", "Open My Evals to view evaluations that have been shared with you.", "Open your initials menu, then Account Settings, to update your contact and personal information."] },
   };
   const isAdministrativeStaff = ["site_owner", "organization_admin", "event_admin", "assignor"].some((role) => allRoles.has(role as MembershipRole));
@@ -2417,7 +2522,7 @@ function Dashboard({ session }: { session: Law18Session }) {
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.6.1</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.7.0</span></footer>
   </main>;
 }
 

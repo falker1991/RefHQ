@@ -185,6 +185,17 @@ export type AssessmentRecord = {
   development_focus: string | null;
   coach_notes: string | null;
   submitted_at: string | null;
+  created_at?: string;
+  archived_at?: string | null;
+  archived_by?: string | null;
+};
+
+export type RatingHistory = {
+  assessments: AssessmentRecord[];
+  games: GameRecord[];
+  assignments: AssignmentRecord[];
+  officials: OfficialRecord[];
+  events: EventRecord[];
 };
 
 export type AppearanceCampaign = {
@@ -652,20 +663,32 @@ export async function loadEventCheckIns(session: Law18Session, eventId: string) 
   );
 }
 
-export async function loadAuthorizedRatingHistory(session: Law18Session) {
-  const assessments = await rest<AssessmentRecord[]>(session, "assessments?select=*&order=created_at.desc");
-  const gameIds = [...new Set(assessments.map((item) => item.game_id))];
-  const games = gameIds.length
-    ? await rest<GameRecord[]>(session, `games?id=in.(${gameIds.join(",")})&select=*`)
-    : [];
-  const assignments = gameIds.length
-    ? await rest<AssignmentRecord[]>(session, `assignments?game_id=in.(${gameIds.join(",")})&select=*`)
-    : [];
-  const officialIds = [...new Set(assessments.map((item) => item.official_id))];
-  const officials = officialIds.length
-    ? await rest<OfficialRecord[]>(session, `officials?id=in.(${officialIds.join(",")})&select=*`)
-    : [];
-  return { assessments, games, assignments, officials };
+export async function loadAuthorizedRatingHistory(session: Law18Session): Promise<RatingHistory> {
+  return rest<RatingHistory>(session, "rpc/authorized_rating_history", {
+    method: "POST",
+    body: "{}",
+  });
+}
+
+export async function setRatingArchived(session: Law18Session, assessmentId: string, archived: boolean) {
+  await rest(session, "rpc/set_rating_archived", {
+    method: "POST",
+    body: JSON.stringify({ target_assessment: assessmentId, should_archive: archived }),
+  });
+}
+
+export async function deleteRating(session: Law18Session, assessmentId: string) {
+  await rest(session, "rpc/delete_rating", {
+    method: "POST",
+    body: JSON.stringify({ target_assessment: assessmentId }),
+  });
+}
+
+export async function logRatingExport(session: Law18Session, ratingCount: number, gameCount: number) {
+  await rest(session, "rpc/log_rating_export", {
+    method: "POST",
+    body: JSON.stringify({ rating_count: ratingCount, game_count: gameCount }),
+  });
 }
 
 export async function updateEventRatingSettings(

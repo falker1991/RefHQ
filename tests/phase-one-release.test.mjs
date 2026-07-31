@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.6.1 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.7.0 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.6.1 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.6\.1/);
+  assert.match(page, /Version 0\.7\.0/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.6.1");
+  assert.equal(JSON.parse(packageJson).version, "0.7.0");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -268,6 +268,25 @@ test("ratings history supports multi-select filters independent of sorting", asy
   assert.doesNotMatch(page, /\["dates", "Dates"/);
   assert.match(page, /const filteredAverage = filteredScores\.length/);
   assert.match(page, /Average Score <strong>\{filteredAverage\?\.toFixed\(2\) \|\| "—"\}/);
+});
+
+test("ratings history survives event archiving and supports grouped export and lifecycle controls", async () => {
+  const [page, client, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/202607300025_rating_history_lifecycle.sql"),
+  ]);
+  assert.match(page, /Individual Ratings/);
+  assert.match(page, /Full Game Ratings/);
+  assert.match(page, /Export Spreadsheet/);
+  assert.match(page, /Select All/);
+  assert.match(page, /Show Archived Ratings/);
+  assert.match(client, /rpc\/authorized_rating_history/);
+  assert.match(client, /rpc\/set_rating_archived/);
+  assert.match(client, /rpc\/delete_rating/);
+  assert.match(migration, /create or replace function public\.authorized_rating_history/);
+  assert.match(migration, /rating\.archived/);
+  assert.match(migration, /rating\.deleted/);
 });
 
 test("officials directory shows authorized submitted-rating averages", async () => {

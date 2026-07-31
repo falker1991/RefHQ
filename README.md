@@ -162,6 +162,14 @@ The hosted pilot uses Supabase as its source of truth. Do not use it as the sole
 
 ### Assignment-core live operations
 
+- When importing a schedule that already contains assigned officials, require the importer to choose an assignment treatment for that import:
+  - **Already accepted** — create confirmed assignments without asking officials to accept, supporting organizations that continue assigning in another platform and use Law18Ref for check-in and ratings.
+  - **Require acceptance** — create new published offers that each official must accept or decline in Law18Ref.
+- Keep this choice at the import-batch level, show it in the import review before committing, and audit the selected treatment with the importer and affected assignments.
+- Do not notify officials while an assignment remains a draft. When assignments are published, notify each affected official according to the selected treatment and clearly distinguish confirmed imports from offers awaiting a response.
+- Add an unread notification badge to **My Assignments** whenever an official receives a newly published assignment or one of their existing assignments is materially changed.
+- Clear the assignment badge when the official opens **My Assignments**, and mark an edited assignment unread again even if the official previously viewed or accepted it.
+- Keep assignment unread state separate from acceptance status: viewing an offer clears its badge but does not accept it, and an already-accepted imported assignment may still be unread until viewed.
 - Replace attendance polling with Supabase Realtime subscriptions during the assignment-core update.
 - Push check-in, assignment acceptance, crew changes, replacements, and operational alerts instantly to authorized dashboards.
 - Scope every subscription by organization, event, site, and user role, with reconnect handling and a manual refresh fallback.

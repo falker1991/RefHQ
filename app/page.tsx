@@ -1016,6 +1016,14 @@ function OfficialsDirectory({
   } : null;
   const baseDirectoryOfficials = showArchivedOfficials ? [...officials, ...archivedOfficials] : officials;
   const directoryOfficials = selfOwnerRecord ? [...baseDirectoryOfficials, selfOwnerRecord] : baseDirectoryOfficials;
+  const compareDirectoryValues = (left: string | number | null | undefined, right: string | number | null | undefined) => {
+    const leftMissing = left === null || left === undefined || left === "";
+    const rightMissing = right === null || right === undefined || right === "";
+    if (leftMissing !== rightMissing) return leftMissing ? 1 : -1;
+    if (leftMissing && rightMissing) return 0;
+    if (typeof left === "number" && typeof right === "number") return left - right;
+    return String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
+  };
   const filtered = directoryOfficials.filter((official) => {
     if (scope === "event" && !eventOfficialIds.has(official.id)) return false;
     const haystack = `${official.full_name} ${official.email || ""} ${official.badge_level || ""}`.toLowerCase();
@@ -1023,16 +1031,16 @@ function OfficialsDirectory({
   }).sort((a, b) => {
     const values = {
       name: [a.full_name, b.full_name],
-      email: [a.email || "", b.email || ""],
-      phone: [a.phone || "", b.phone || ""],
-      badge: [a.badge_level || "", b.badge_level || ""],
+      email: [a.email, b.email],
+      phone: [a.phone, b.phone],
+      badge: [a.badge_level, b.badge_level],
       identity: [a.linked_user_id ? "linked" : "provisional", b.linked_user_id ? "linked" : "provisional"],
-      role: [(a.pending_org_roles || [a.pending_org_role || "referee"]).join(","), (b.pending_org_roles || [b.pending_org_role || "referee"]).join(",")],
+      role: [a.pending_org_roles?.length ? a.pending_org_roles.join(",") : a.pending_org_role, b.pending_org_roles?.length ? b.pending_org_roles.join(",") : b.pending_org_role],
       event: [eventOfficialIds.has(a.id) ? "assigned" : "unassigned", eventOfficialIds.has(b.id) ? "assigned" : "unassigned"],
-      rating: [(officialAverage(a.id) ?? -1).toFixed(3), (officialAverage(b.id) ?? -1).toFixed(3)],
-      last_login: [a.last_login_at || "", b.last_login_at || ""],
+      rating: [officialAverage(a.id), officialAverage(b.id)],
+      last_login: [a.last_login_at, b.last_login_at],
     }[sortBy];
-    return values[0].localeCompare(values[1]);
+    return compareDirectoryValues(values[0], values[1]) || a.full_name.localeCompare(b.full_name, undefined, { sensitivity: "base" });
   });
   async function addOfficial() {
     setBusy(true);
@@ -2628,7 +2636,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.7.5</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.7.6</span></footer>
   </main>;
 }
 

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.7.0 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.7.1 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.7.0 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.7\.0/);
+  assert.match(page, /Version 0\.7\.1/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.7.0");
+  assert.equal(JSON.parse(packageJson).version, "0.7.1");
 });
 
 test("Assignr import supports drag and drop with CSV validation", async () => {
@@ -287,6 +287,24 @@ test("ratings history survives event archiving and supports grouped export and l
   assert.match(migration, /create or replace function public\.authorized_rating_history/);
   assert.match(migration, /rating\.archived/);
   assert.match(migration, /rating\.deleted/);
+});
+
+test("administrators can bulk manage officials, ratings, and events", async () => {
+  const [page, client, migration, readme] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/202607300026_bulk_record_lifecycle.sql"),
+    read("README.md"),
+  ]);
+  assert.match(page, /Select All Visible/);
+  assert.match(page, /Delete Eligible/);
+  assert.match(page, /Archive Selected/);
+  assert.match(page, /Delete Archived/);
+  assert.match(client, /rpc\/bulk_manage_records/);
+  assert.match(migration, /record_type not in \('officials', 'ratings', 'events'\)/);
+  assert.match(migration, /Events must be archived before permanent deletion/);
+  assert.match(migration, /officials with history must be archived, not deleted/);
+  assert.match(readme, /Games and assignments are designed to join the same workflow/);
 });
 
 test("officials directory shows authorized submitted-rating averages", async () => {

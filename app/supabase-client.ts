@@ -101,6 +101,7 @@ export type OfficialRecord = {
   merged_into_official_id?: string | null;
   pending_org_role?: MembershipRole;
   pending_org_roles?: MembershipRole[];
+  archived_at?: string | null;
 };
 
 export type OrganizationJoinLink = {
@@ -684,6 +685,18 @@ export async function deleteRating(session: Law18Session, assessmentId: string) 
   });
 }
 
+export async function bulkManageRecords(
+  session: Law18Session,
+  recordType: "officials" | "ratings" | "events",
+  action: "archive" | "restore" | "delete",
+  recordIds: string[],
+) {
+  return rest<{ processed: number; skipped: number }>(session, "rpc/bulk_manage_records", {
+    method: "POST",
+    body: JSON.stringify({ record_type: recordType, lifecycle_action: action, record_ids: recordIds }),
+  });
+}
+
 export async function logRatingExport(session: Law18Session, ratingCount: number, gameCount: number) {
   await rest(session, "rpc/log_rating_export", {
     method: "POST",
@@ -985,7 +998,7 @@ export function normalizePosition(position: string): AssignmentRecord["position"
 export async function loadOrganizationOfficials(session: Law18Session, organizationId: string, includeMerged = false) {
   return rest<OfficialRecord[]>(
     session,
-    `officials?organization_id=eq.${enc(organizationId)}${includeMerged ? "" : "&merged_into_official_id=is.null&identity_status=neq.removed"}&select=*&order=full_name.asc`,
+    `officials?organization_id=eq.${enc(organizationId)}${includeMerged ? "" : "&merged_into_official_id=is.null&identity_status=neq.removed&archived_at=is.null"}&select=*&order=full_name.asc`,
   );
 }
 

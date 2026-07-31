@@ -6,6 +6,7 @@ import { AuthPanel } from "./auth-panel";
 import { auth, type Law18Session } from "./auth-client";
 import {
   archiveEvent,
+  approvePublicRating,
   bulkManageRecords,
   checkIn,
   claimOrganizationJoinLink,
@@ -44,6 +45,7 @@ import {
   loadUserEventMemberships,
   logRatingExport,
   mergeOrganizationAccounts,
+  markEventRatingsSeen,
   parseAssignrCsv,
   parseAssignrOfficialsCsv,
   saveAssessment,
@@ -1360,6 +1362,7 @@ function AssessmentCenter({
   data,
   canSubmit,
   canConfigure,
+  canApprovePublic,
   onSaved,
   onEventUpdated,
   initialGameId,
@@ -1376,6 +1379,7 @@ function AssessmentCenter({
   data: EventData;
   canSubmit: boolean;
   canConfigure: boolean;
+  canApprovePublic: boolean;
   onSaved: () => void;
   onEventUpdated: (event: EventRecord) => void;
   initialGameId?: string;
@@ -1390,7 +1394,7 @@ function AssessmentCenter({
   const [drafts, setDrafts] = useState<Record<string, CrewRatingDraft>>({});
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [configuration, setConfiguration] = useState({ ratingType: event.rating_type, adminOnly: event.ratings_admin_only });
+  const [configuration, setConfiguration] = useState({ ratingType: event.rating_type, adminOnly: event.ratings_admin_only, approvalRole: event.public_rating_approval_role || "inherit" });
   const [ratingSort, setRatingSort] = useState<"date" | "gender" | "age_group" | "referee" | "position" | "score">("date");
   const [historyEventId, setHistoryEventId] = useState("all");
   const [historyFilters, setHistoryFilters] = useState({ referees: [] as string[], ageGroups: [] as string[], genders: [] as string[], positions: [] as string[], scores: [] as string[] });
@@ -1416,8 +1420,8 @@ function AssessmentCenter({
     return () => document.removeEventListener("pointerdown", closeDropdowns);
   }, []);
   useEffect(() => {
-    setConfiguration({ ratingType: event.rating_type, adminOnly: event.ratings_admin_only });
-  }, [event.id, event.rating_type, event.ratings_admin_only]);
+    setConfiguration({ ratingType: event.rating_type, adminOnly: event.ratings_admin_only, approvalRole: event.public_rating_approval_role || "inherit" });
+  }, [event.id, event.rating_type, event.ratings_admin_only, event.public_rating_approval_role]);
   const officialMap = new Map(data.officials.map((official) => [official.id, official]));
   const gameMap = new Map(data.games.map((game) => [game.id, game]));
   const historyOfficialMap = new Map(history.officials.map((official) => [official.id, official]));
@@ -1471,7 +1475,7 @@ function AssessmentCenter({
     const game = historyGameMap.get(item.game_id);
     const referee = historyOfficialMap.get(item.official_id)?.full_name || "Unknown official";
     const gameDate = game?.starts_at.slice(0, 10) || "";
-    return (showArchivedRatings || !item.archived_at)
+    return (!canSubmit || showArchivedRatings || !item.archived_at)
       && (historyEventId === "all" || game?.event_id === historyEventId)
       && (!historyFilters.referees.length || historyFilters.referees.includes(referee))
       && (!historyFilters.ageGroups.length || historyFilters.ageGroups.includes(game?.age_group || "Unspecified age group"))
@@ -1522,15 +1526,31 @@ function AssessmentCenter({
   }
 
   async function removeRating(assessment: AssessmentRecord) {
-    if (!window.confirm("Permanently delete this rating? This cannot be undone.")) return;
+    const canRetain = assessment.visibility === "public" && assessment.status === "shared";
+    const retainForReferee = canRetain && window.confirm("Keep this public rating in the referee’s account after removing it from administrative records?\n\nChoose OK to retain the referee’s copy. Choose Cancel to continue to the full-delete choice.");
+    if (!retainForReferee && !window.confirm("Fully delete this rating from Law18Ref? The referee will no longer be able to view it. This cannot be undone.")) return;
     setBusy(true);
     setMessage("");
     try {
-      await deleteRating(session, assessment.id);
+      await deleteRating(session, assessment.id, retainForReferee);
       await refreshRatingHistory();
-      setMessage("Rating deleted.");
+      setMessage(retainForReferee ? "Rating removed from administration and retained for the referee." : "Rating fully deleted.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to delete the rating.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approveRating(assessment: AssessmentRecord) {
+    setBusy(true);
+    setMessage("");
+    try {
+      await approvePublicRating(session, assessment.id);
+      await refreshRatingHistory();
+      setMessage("Public rating approved and shared with the referee.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to approve the rating.");
     } finally {
       setBusy(false);
     }
@@ -1660,7 +1680,7 @@ function AssessmentCenter({
     setBusy(true);
     setMessage("");
     try {
-      const updated = await updateEventRatingSettings(session, event.id, configuration.ratingType, configuration.adminOnly);
+      const updated = await updateEventRatingSettings(session, event.id, configuration.ratingType, configuration.adminOnly, configuration.approvalRole);
       onEventUpdated(updated);
       setVisibility(configuration.adminOnly ? "private" : visibility);
       setMessage("Event rating settings updated.");
@@ -1673,6 +1693,7 @@ function AssessmentCenter({
 
   const canManageRating = (assessment: AssessmentRecord) => canConfigure || assessment.coach_id === session.user.id;
   const ratingActions = (assessment: AssessmentRecord, ratedGame?: GameRecord) => canManageRating(assessment) ? <div className="rating-history-actions">
+    {canApprovePublic && assessment.visibility === "public" && assessment.status === "submitted" && <button className="primary" disabled={busy} onClick={() => approveRating(assessment)}>Approve & Share</button>}
     {!assessment.archived_at && ratedGame && onEditRating && <button className="secondary edit-rating-button" disabled={busy} onClick={() => onEditRating(assessment.game_id, ratedGame.event_id)}>Edit</button>}
     <button className="secondary" disabled={busy} onClick={() => changeRatingArchive(assessment, !assessment.archived_at)}>{assessment.archived_at ? "Restore" : "Archive"}</button>
     <button className="danger-button" disabled={busy} onClick={() => removeRating(assessment)}>Delete</button>
@@ -1680,7 +1701,7 @@ function AssessmentCenter({
 
   return <section className={`page-section ratings-page${modal ? " rating-modal" : ""}`} role={modal ? "dialog" : undefined} aria-modal={modal || undefined} aria-label={modal ? "Rate crew" : undefined} onClick={modal ? (click) => { if (click.target === click.currentTarget) onClose?.(); } : undefined}>
     <div className="section-title"><div><p className="eyebrow">{canSubmit ? "REFEREE DEVELOPMENT" : "MY FEEDBACK"}</p><h1>{canSubmit ? "Ratings" : "My Evals"}</h1><p>{canSubmit ? "Rate every official assigned to a game in one view." : "Review ratings that have been shared with you."}</p></div>{canSubmit && hideWorkspace && <button className="primary" onClick={onOpenRating}>Rate a Crew</button>}</div>
-    {canConfigure && <article className="panel rating-settings"><div><p className="eyebrow">EVENT SETTINGS</p><h2>Rating configuration</h2><p>Changes remain private to this form until you save them.</p></div><label>Evaluation type<select value={configuration.ratingType} disabled={busy} onChange={(e) => setConfiguration({ ...configuration, ratingType: e.target.value as EventRecord["rating_type"] })}><option value="skills_eval">Skills Eval</option><option value="basic_eval">Basic Eval</option></select></label><label className="visibility-lock"><input type="checkbox" checked={configuration.adminOnly} disabled={busy} onChange={(e) => setConfiguration({ ...configuration, adminOnly: e.target.checked })} /><span><strong>Lock visibility to event staff</strong><small>Only administrators, event/game assignors, and referee coaches can view ratings.</small></span></label><button className="primary rating-config-save" disabled={busy || (configuration.ratingType === event.rating_type && configuration.adminOnly === event.ratings_admin_only)} onClick={saveConfiguration}>{busy ? "Saving…" : "Save Configuration"}</button></article>}
+    {canConfigure && <article className="panel rating-settings"><div><p className="eyebrow">EVENT SETTINGS</p><h2>Rating configuration</h2><p>Changes remain private to this form until you save them.</p></div><label>Evaluation type<select value={configuration.ratingType} disabled={busy} onChange={(e) => setConfiguration({ ...configuration, ratingType: e.target.value as EventRecord["rating_type"] })}><option value="skills_eval">Skills Eval</option><option value="basic_eval">Basic Eval</option></select></label><label>Public Eval Approval<select value={configuration.approvalRole} disabled={busy || configuration.adminOnly} onChange={(e) => setConfiguration({ ...configuration, approvalRole: e.target.value as EventRecord["public_rating_approval_role"] })}><option value="inherit">Use Organization Setting</option><option value="none">No Approval — Share Immediately</option><option value="organization_admin">Organization Admin Approval</option><option value="event_admin">Event Admin Approval</option></select></label><label className="visibility-lock"><input type="checkbox" checked={configuration.adminOnly} disabled={busy} onChange={(e) => setConfiguration({ ...configuration, adminOnly: e.target.checked })} /><span><strong>Lock visibility to event staff</strong><small>Only administrators, event/game assignors, and referee coaches can view ratings.</small></span></label><button className="primary rating-config-save" disabled={busy || (configuration.ratingType === event.rating_type && configuration.adminOnly === event.ratings_admin_only && configuration.approvalRole === (event.public_rating_approval_role || "inherit"))} onClick={saveConfiguration}>{busy ? "Saving…" : "Save Configuration"}</button></article>}
     {canSubmit && !hideWorkspace && <article className="panel crew-rating-workspace">
       <div className="panel-head"><div><p className="eyebrow">{event.rating_type === "skills_eval" ? "SKILLS EVAL" : "BASIC EVAL"}</p><h2>{modal ? "Rate Crew" : "Select a game"}</h2></div>{modal && <button className="modal-close" aria-label="Close rating form" onClick={onClose}>×</button>}</div>
       <div className="assessment-selects"><label>Game<select value={gameId} onChange={(e) => chooseGame(e.target.value)}><option value="">Choose a game</option>{eligibleGames.map((game) => <option value={game.id} key={game.id}>{formatDate(game.starts_at)} · {game.field_name} · {formatTime(game.starts_at)}</option>)}</select></label><label>Visibility<select value={event.ratings_admin_only ? "private" : visibility} disabled={event.ratings_admin_only} onChange={(e) => setVisibility(e.target.value as "public" | "private")}><option value="private">Private — event staff and referee coaches</option><option value="public">Public — visible to each referee</option></select></label>{event.ratings_admin_only && <p className="import-note">Visibility is locked to event staff for this event.</p>}</div>
@@ -2246,16 +2267,18 @@ function GroupsSettings({
   const [message, setMessage] = useState("");
   const [organizationName, setOrganizationName] = useState(organization?.name || "");
   const [logoUrl, setLogoUrl] = useState(organization?.logo_url || "");
+  const [approvalRole, setApprovalRole] = useState<NonNullable<OrganizationRecord["public_rating_approval_role"]>>(organization?.public_rating_approval_role || "none");
   useEffect(() => {
     setOrganizationName(organization?.name || "");
     setLogoUrl(organization?.logo_url || "");
-  }, [organization?.id, organization?.logo_url, organization?.name]);
+    setApprovalRole(organization?.public_rating_approval_role || "none");
+  }, [organization?.id, organization?.logo_url, organization?.name, organization?.public_rating_approval_role]);
   async function saveSettings() {
     if (!organization || !canManage) return;
     setBusy(true);
     setMessage("");
     try {
-      const updated = await updateOrganizationSettings(session, organization.id, { name: organizationName, logo_url: logoUrl || null });
+      const updated = await updateOrganizationSettings(session, organization.id, { name: organizationName, logo_url: logoUrl || null, public_rating_approval_role: approvalRole });
       onUpdated(updated);
       setMessage("Organization settings saved.");
     } catch (reason) {
@@ -2281,6 +2304,7 @@ function GroupsSettings({
       <div className="panel-head"><div><p className="eyebrow">ORGANIZATION SETTINGS</p><h2>Organization identity</h2><p>The logo appears in the active-organization bar for all members.</p></div></div>
       <label>Organization name<input value={organizationName} maxLength={120} onChange={(event) => setOrganizationName(event.target.value)} /></label>
       <OrganizationLogoEditor session={session} organizationId={organization.id} logoUrl={logoUrl} onChange={setLogoUrl} onBusyChange={setBusy} onError={setMessage} />
+      <label>Default Public Eval Approval<select value={approvalRole} onChange={(event) => setApprovalRole(event.target.value as typeof approvalRole)}><option value="none">No Approval — Share Immediately</option><option value="organization_admin">Organization Admin Approval</option><option value="event_admin">Event Admin Approval</option></select><small>Events can inherit or override this setting.</small></label>
       <button className="primary" disabled={busy || organizationName.trim().length < 2} onClick={saveSettings}>{busy ? "Saving…" : "Save Organization Settings"}</button>
       {message && <p className="pilot-message">{message}</p>}
     </article>}

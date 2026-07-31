@@ -48,6 +48,7 @@ export type OrganizationRecord = {
   deactivated_at?: string | null;
   deactivated_by?: string | null;
   position_title_aliases: Record<string, string>;
+  public_rating_approval_role?: "none" | "organization_admin" | "event_admin";
 };
 
 export type EventRecord = {
@@ -61,10 +62,17 @@ export type EventRecord = {
   check_in_slug: string;
   rating_type: "skills_eval" | "basic_eval";
   ratings_admin_only: boolean;
+  public_rating_approval_role?: "inherit" | "none" | "organization_admin" | "event_admin";
   position_title_aliases: Record<string, string>;
   auto_archive_at?: string | null;
   archived_at?: string | null;
   archived_by?: string | null;
+  approved_at?: string | null;
+  approved_by?: string | null;
+  shared_at?: string | null;
+  referee_seen_at?: string | null;
+  deleted_at?: string | null;
+  retained_for_referee?: boolean;
   archive_reason?: string | null;
 };
 
@@ -318,12 +326,12 @@ export async function updateOrganizationName(session: Law18Session, organization
 export async function updateOrganizationSettings(
   session: Law18Session,
   organizationId: string,
-  values: { name: string; logo_url: string | null },
+  values: { name: string; logo_url: string | null; public_rating_approval_role?: OrganizationRecord["public_rating_approval_role"] },
 ) {
   const rows = await rest<OrganizationRecord[]>(
     session,
     `organizations?id=eq.${enc(organizationId)}`,
-    { method: "PATCH", body: JSON.stringify({ name: values.name.trim(), logo_url: values.logo_url }) },
+    { method: "PATCH", body: JSON.stringify({ name: values.name.trim(), logo_url: values.logo_url, ...(values.public_rating_approval_role ? { public_rating_approval_role: values.public_rating_approval_role } : {}) }) },
     "return=representation",
   );
   return rows[0];
@@ -721,10 +729,10 @@ export async function setRatingArchived(session: Law18Session, assessmentId: str
   });
 }
 
-export async function deleteRating(session: Law18Session, assessmentId: string) {
+export async function deleteRating(session: Law18Session, assessmentId: string, retainForReferee = false) {
   await rest(session, "rpc/delete_rating", {
     method: "POST",
-    body: JSON.stringify({ target_assessment: assessmentId }),
+    body: JSON.stringify({ target_assessment: assessmentId, keep_for_referee: retainForReferee }),
   });
 }
 
@@ -752,14 +760,29 @@ export async function updateEventRatingSettings(
   eventId: string,
   ratingType: EventRecord["rating_type"],
   ratingsAdminOnly: boolean,
+  publicRatingApprovalRole: EventRecord["public_rating_approval_role"],
 ) {
   const rows = await rest<EventRecord[]>(
     session,
     `events?id=eq.${enc(eventId)}`,
-    { method: "PATCH", body: JSON.stringify({ rating_type: ratingType, ratings_admin_only: ratingsAdminOnly }) },
+    { method: "PATCH", body: JSON.stringify({ rating_type: ratingType, ratings_admin_only: ratingsAdminOnly, public_rating_approval_role: publicRatingApprovalRole }) },
     "return=representation",
   );
   return rows[0];
+}
+
+export async function approvePublicRating(session: Law18Session, assessmentId: string) {
+  return rest<AssessmentRecord>(session, "rpc/approve_public_rating", {
+    method: "POST",
+    body: JSON.stringify({ target_assessment: assessmentId }),
+  });
+}
+
+export async function markEventRatingsSeen(session: Law18Session, eventId: string) {
+  return rest(session, "rpc/mark_event_ratings_seen", {
+    method: "POST",
+    body: JSON.stringify({ target_event: eventId }),
+  });
 }
 
 export async function checkIn(

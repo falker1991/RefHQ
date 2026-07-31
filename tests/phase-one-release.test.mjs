@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.7.8 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.7.9 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,10 @@ test("Version 0.7.8 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.7\.8/);
+  assert.match(page, /Version 0\.7\.9/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.7.8");
+  assert.equal(JSON.parse(packageJson).version, "0.7.9");
 });
 
 test("official directory sorts populated values before missing values", async () => {
@@ -47,9 +47,11 @@ test("site owner and delegated administrator access follow protected removal hie
 });
 
 test("archived event selection and restore control share one compact row", async () => {
-  const css = await read("app/globals.css");
-  assert.match(css, /\.archived-event-row\{display:grid;grid-template-columns:auto minmax\(0,1fr\) auto/);
-  assert.match(css, /\.archived-event-row>\.secondary\{width:auto;min-width:0;padding:7px 10px;white-space:nowrap/);
+  const [page, css] = await Promise.all([read("app/page.tsx"), read("app/admin-features.css")]);
+  assert.match(page, /className="archived-event-actions"><input className="bulk-row-check"/);
+  assert.match(css, /\.archived-event-row > \.archived-event-actions/);
+  assert.match(css, /\.archived-event-actions > \.secondary \{[\s\S]*width: max-content/);
+  assert.doesNotMatch(css, /\.archived-event-row button \{[\s\S]*width: 100%/);
 });
 
 test("responsive shell and header remain contained within the viewport", async () => {

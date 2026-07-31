@@ -201,6 +201,21 @@
   font-size: 10px;
 }
 
+.archived-event-row > .archived-event-actions {
+  display: flex;
+  align-items: center;
+  flex-direction: row;
+  gap: 9px;
+}
+
+.archived-event-actions > .secondary {
+  width: max-content;
+  min-width: 0;
+  padding: 7px 10px;
+  white-space: nowrap;
+  font-size: 9px;
+}
+
 @media (max-width: 800px) {
   .activity-admin-grid {
     grid-template-columns: 1fr;
@@ -245,12 +260,13 @@
     flex-direction: column;
   }
 
-  .event-lifecycle-actions button,
-  .archived-event-row button {
+  .event-lifecycle-actions button {
     width: 100%;
   }
 
   .archived-event-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 13px 16px;
   }
 }

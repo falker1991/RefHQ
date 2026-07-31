@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.7.2 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.7.3 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,18 @@ test("Version 0.7.2 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.7\.2/);
+  assert.match(page, /Version 0\.7\.3/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.7.2");
+  assert.equal(JSON.parse(packageJson).version, "0.7.3");
+});
+
+test("responsive shell and header remain contained within the viewport", async () => {
+  const css = await read("app/globals.css");
+  assert.match(css, /html,body\{width:100%;max-width:100%;overflow-x:hidden\}/);
+  assert.match(css, /\.topbar nav\{flex:1 1 auto;min-width:0;max-width:100%;overflow-x:auto/);
+  assert.match(css, /\.topbar-account-actions\{max-width:100%;min-width:0\}/);
+  assert.match(css, /\.eventbar>div\{display:grid;width:100%;grid-template-columns:35px repeat\(2,minmax\(0,1fr\)\)/);
 });
 
 test("failed dashboard startup returns to login with a session-expired notice", async () => {

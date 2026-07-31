@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.7.3 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.7.4 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,16 @@ test("Version 0.7.3 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.7\.3/);
+  assert.match(page, /Version 0\.7\.4/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.7.3");
+  assert.equal(JSON.parse(packageJson).version, "0.7.4");
+});
+
+test("archived event selection and restore control share one compact row", async () => {
+  const css = await read("app/globals.css");
+  assert.match(css, /\.archived-event-row\{display:grid;grid-template-columns:auto minmax\(0,1fr\) auto/);
+  assert.match(css, /\.archived-event-row>\.secondary\{width:auto;min-width:0;padding:7px 10px;white-space:nowrap/);
 });
 
 test("responsive shell and header remain contained within the viewport", async () => {

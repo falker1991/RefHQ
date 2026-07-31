@@ -43,6 +43,7 @@ export type OrganizationRecord = {
   id: string;
   name: string;
   slug: string;
+  logo_url?: string | null;
   active?: boolean;
   deactivated_at?: string | null;
   deactivated_by?: string | null;
@@ -313,6 +314,20 @@ export async function updateOrganizationName(session: Law18Session, organization
   return rows[0];
 }
 
+export async function updateOrganizationSettings(
+  session: Law18Session,
+  organizationId: string,
+  values: { name: string; logo_url: string | null },
+) {
+  const rows = await rest<OrganizationRecord[]>(
+    session,
+    `organizations?id=eq.${enc(organizationId)}`,
+    { method: "PATCH", body: JSON.stringify({ name: values.name.trim(), logo_url: values.logo_url }) },
+    "return=representation",
+  );
+  return rows[0];
+}
+
 export async function beginOrganizationAction(
   session: Law18Session,
   organizationId: string,
@@ -440,6 +455,27 @@ export async function uploadAppearanceLogo(session: Law18Session, file: File) {
     throw new Error(result.message || result.error || "Unable to upload the logo.");
   }
   return `${baseUrl}/storage/v1/object/public/appearance-logos/${objectPath.split("/").map(enc).join("/")}`;
+}
+
+export async function uploadOrganizationLogo(session: Law18Session, organizationId: string, file: File) {
+  if (!baseUrl || !anonKey) throw new Error("Supabase is not configured.");
+  const extension = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "png";
+  const objectPath = `${organizationId}/${crypto.randomUUID()}.${extension}`;
+  const response = await fetch(`${baseUrl}/storage/v1/object/organization-logos/${objectPath}`, {
+    method: "POST",
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${session.access_token}`,
+      "Content-Type": file.type,
+      "x-upsert": "false",
+    },
+    body: file,
+  });
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}));
+    throw new Error(result.message || result.error || "Unable to upload the organization logo.");
+  }
+  return `${baseUrl}/storage/v1/object/public/organization-logos/${objectPath.split("/").map(enc).join("/")}`;
 }
 
 export async function createAppearanceCampaign(

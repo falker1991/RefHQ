@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.7.9 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.8.0 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,28 @@ test("Version 0.7.9 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.7\.9/);
+  assert.match(page, /Version 0\.8\.0/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.7.9");
+  assert.equal(JSON.parse(packageJson).version, "0.8.0");
+});
+
+test("organization administrators can upload a logo for the active organization bar", async () => {
+  const [page, client, css, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("app/admin-features.css"),
+    read("supabase/migrations/202607300028_organization_logos.sql"),
+  ]);
+  assert.match(page, /function OrganizationLogoEditor/);
+  assert.match(page, /className="event-organization-logo"/);
+  assert.match(page, /Save Organization Settings/);
+  assert.match(client, /export async function uploadOrganizationLogo/);
+  assert.match(client, /organization-logos/);
+  assert.match(css, /\.event-organization-logo/);
+  assert.match(migration, /add column if not exists logo_url text/);
+  assert.match(migration, /public\.has_org_role/);
+  assert.match(migration, /organization_admin/);
 });
 
 test("official directory sorts populated values before missing values", async () => {

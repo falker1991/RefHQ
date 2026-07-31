@@ -1,4 +1,132 @@
 /* Organization audit, membership, and join-link administration */
+.event-organization-logo,
+.group-logo {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border-radius: 9px;
+  background: #fff;
+  object-fit: contain;
+  padding: 4px;
+}
+
+.event-organization-logo {
+  width: 35px;
+  height: 35px;
+  flex-basis: 35px;
+  border-radius: 7px;
+}
+
+.organization-profile-settings {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(320px, 1.3fr);
+  gap: 18px 24px;
+  align-items: end;
+  margin-bottom: 20px;
+  padding: 0 24px 24px;
+}
+
+.organization-profile-settings > .panel-head,
+.organization-profile-settings > .pilot-message {
+  grid-column: 1 / -1;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.organization-profile-settings > label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.organization-profile-settings > label input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px;
+}
+
+.organization-profile-settings > .primary {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+
+.organization-logo-upload {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
+  gap: 10px 14px;
+  align-items: center;
+  min-width: 0;
+  padding: 13px;
+  border: 1.5px dashed #9eb5c9;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.organization-logo-upload.dragging {
+  border-color: var(--berry);
+  background: var(--berry-soft);
+}
+
+.organization-logo-preview {
+  display: grid;
+  grid-row: 1 / 3;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+}
+
+.organization-logo-preview img {
+  width: 100%;
+  height: 100%;
+  padding: 4px;
+  object-fit: contain;
+}
+
+.organization-logo-preview span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.organization-logo-upload > div:nth-child(2) {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.organization-logo-upload small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.organization-logo-upload .file-button {
+  font-size: 10px;
+  text-align: center;
+}
+
+.organization-logo-remove {
+  grid-column: 2;
+  justify-self: start;
+  color: var(--berry);
+  font-size: 9px;
+}
+
+.organization-settings-dialog {
+  width: min(620px, calc(100vw - 28px));
+}
+
+.organization-settings-dialog .organization-logo-upload {
+  margin-top: 15px;
+}
+
 .directory-row {
   grid-template-columns: 1.15fr .9fr .62fr .82fr .48fr .72fr .52fr;
   gap: 12px;
@@ -217,6 +345,35 @@
 }
 
 @media (max-width: 800px) {
+  .organization-profile-settings {
+    grid-template-columns: 1fr;
+  }
+
+  .organization-profile-settings > .panel-head,
+  .organization-profile-settings > .pilot-message,
+  .organization-profile-settings > .primary {
+    grid-column: 1;
+  }
+
+  .organization-profile-settings > .primary {
+    width: 100%;
+  }
+
+  .organization-logo-upload {
+    grid-template-columns: 50px minmax(0, 1fr);
+  }
+
+  .organization-logo-preview {
+    width: 50px;
+    height: 50px;
+  }
+
+  .organization-logo-upload .file-button,
+  .organization-logo-remove {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
   .activity-admin-grid {
     grid-template-columns: 1fr;
   }

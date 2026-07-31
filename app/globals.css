@@ -95,6 +95,7 @@ body>main,main,.topbar,.eventbar,.shell,.page-section{width:100%;max-width:100%;
 .topbar>.brand{flex:0 1 270px;min-width:0}
 .topbar nav{flex:1 1 auto;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
 .topbar nav button{flex:0 0 auto;white-space:nowrap}
+.nav-notification-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;margin-left:6px;padding:0 5px;border-radius:999px;background:var(--accent);color:#fff;font-size:11px;font-weight:800;line-height:1}
 .topbar-account-actions{max-width:100%;min-width:0}
 .eventbar>div{min-width:0;max-width:100%}
 .eventbar label{min-width:0}

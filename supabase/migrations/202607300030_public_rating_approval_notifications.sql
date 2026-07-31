@@ -38,6 +38,33 @@ $$;
 
 grant execute on function public.effective_public_rating_approval_role(uuid) to authenticated;
 
+drop policy if exists "scoped rating visibility" on public.assessments;
+create policy "scoped rating visibility" on public.assessments for select
+  using (
+    (
+      deleted_at is null
+      and (
+        coach_id = auth.uid()
+        or public.is_site_owner()
+        or public.has_event_role(
+          (select event_id from public.games where public.games.id = assessments.game_id),
+          array['event_admin','assignor','referee_coach']::public.membership_role[]
+        )
+      )
+    )
+    or (
+      visibility = 'public'
+      and status = 'shared'
+      and not coalesce((
+        select e.ratings_admin_only
+        from public.games g join public.events e on e.id = g.event_id
+        where g.id = assessments.game_id
+      ), true)
+      and (deleted_at is null or retained_for_referee)
+      and official_id in (select id from public.officials where linked_user_id = auth.uid())
+    )
+  );
+
 create or replace function public.enforce_event_rating_settings()
 returns trigger
 language plpgsql
@@ -134,6 +161,7 @@ as $$
         or (
           a.visibility = 'public'
           and a.status = 'shared'
+          and not e.ratings_admin_only
           and (a.deleted_at is null or a.retained_for_referee)
           and exists (
             select 1 from public.officials o

@@ -67,12 +67,6 @@ export type EventRecord = {
   auto_archive_at?: string | null;
   archived_at?: string | null;
   archived_by?: string | null;
-  approved_at?: string | null;
-  approved_by?: string | null;
-  shared_at?: string | null;
-  referee_seen_at?: string | null;
-  deleted_at?: string | null;
-  retained_for_referee?: boolean;
   archive_reason?: string | null;
 };
 
@@ -198,6 +192,12 @@ export type AssessmentRecord = {
   created_at?: string;
   archived_at?: string | null;
   archived_by?: string | null;
+  approved_at?: string | null;
+  approved_by?: string | null;
+  shared_at?: string | null;
+  referee_seen_at?: string | null;
+  deleted_at?: string | null;
+  retained_for_referee?: boolean;
 };
 
 export type RatingHistory = {

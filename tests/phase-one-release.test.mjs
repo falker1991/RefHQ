@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.8.7 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.9.0 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,30 @@ test("Version 0.8.7 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.8\.7/);
+  assert.match(page, /Version 0\.9\.0/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.8.7");
+  assert.equal(JSON.parse(packageJson).version, "0.9.0");
+});
+
+test("public ratings support approval, unread referee badges, and retained deletion", async () => {
+  const [page, client, css, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("app/globals.css"),
+    read("supabase/migrations/202607300030_public_rating_approval_notifications.sql"),
+  ]);
+  assert.match(page, /Public Eval Approval/);
+  assert.match(page, /Approve & Share/);
+  assert.match(page, /nav-notification-badge/);
+  assert.match(page, /markEventRatingsSeen/);
+  assert.match(client, /approvePublicRating/);
+  assert.match(client, /keep_for_referee: retainForReferee/);
+  assert.match(css, /\.nav-notification-badge/);
+  assert.match(migration, /effective_public_rating_approval_role/);
+  assert.match(migration, /referee_seen_at/);
+  assert.match(migration, /retained_for_referee/);
+  assert.match(migration, /rating\.approved/);
 });
 
 test("ratings can be filtered and sorted by score with match crews in position order", async () => {

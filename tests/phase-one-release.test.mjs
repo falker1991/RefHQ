@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.10.2 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.10.3 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,10 +14,10 @@ test("Version 0.10.2 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.10\.2/);
+  assert.match(page, /Version 0\.10\.3/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.10.2");
+  assert.equal(JSON.parse(packageJson).version, "0.10.3");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -42,6 +42,7 @@ test("personal calendar feeds are encrypted and appear in a unified private sche
   assert.match(worker, /BEGIN:VCALENDAR/);
   assert.match(css, /\.connected-schedules-card/);
   assert.match(css, /\.unified-assignment-row/);
+  assert.match(page, /className="panel unified-assignment-list"/);
   assert.match(migration, /create table if not exists public\.personal_calendar_feeds/);
   assert.match(migration, /revoke all on public\.personal_calendar_feeds from authenticated/);
   assert.match(migration, /create or replace function public\.my_law18_assignments/);

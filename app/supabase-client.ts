@@ -253,6 +253,10 @@ export type UnifiedAssignment = {
   position_title: string | null;
   status: string;
   source_url: string | null;
+  event_id?: string | null;
+  event_name?: string | null;
+  organization_id?: string | null;
+  organization_name?: string | null;
 };
 
 function configuration() {
@@ -617,11 +621,14 @@ export async function removeCalendarFeed(session: Law18Session, feedId: string) 
 }
 
 export async function loadUnifiedAssignments(session: Law18Session) {
-  const [law18ref, external] = await Promise.all([
+  const [law18ref, external, context] = await Promise.all([
     rest<UnifiedAssignment[]>(session, "rpc/my_law18_assignments", { method: "POST", body: "{}" }),
     rest<UnifiedAssignment[]>(session, "rpc/my_external_assignments", { method: "POST", body: "{}" }),
+    rest<{ event_id: string; event_name: string; organization_id: string; organization_name: string }[]>(session, "rpc/my_law18_assignment_context", { method: "POST", body: "{}" }),
   ]);
-  return [...law18ref, ...external].sort((left, right) => left.starts_at.localeCompare(right.starts_at));
+  const byEvent = new Map(context.map((item) => [item.event_id, item]));
+  const enrichedLaw18ref = law18ref.map((item) => ({ ...item, ...byEvent.get(item.source_id) }));
+  return [...enrichedLaw18ref, ...external].sort((left, right) => left.starts_at.localeCompare(right.starts_at));
 }
 
 export async function leaveCurrentOrganization(session: Law18Session) {

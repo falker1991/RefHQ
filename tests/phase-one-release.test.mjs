@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.10.0 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.10.1 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,19 +13,20 @@ test("Version 0.10.0 uses the dashboard loading label and favicon metadata", asy
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.10\.0/);
+  assert.match(page, /Version 0\.10\.1/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.10.0");
+  assert.equal(JSON.parse(packageJson).version, "0.10.1");
 });
 
 test("personal calendar feeds are encrypted and appear in a unified private schedule", async () => {
-  const [page, client, worker, css, migration] = await Promise.all([
+  const [page, client, worker, css, migration, serviceGrants] = await Promise.all([
     read("app/page.tsx"),
     read("app/supabase-client.ts"),
     read("worker/index.ts"),
     read("app/globals.css"),
     read("supabase/migrations/202607310031_personal_calendar_feeds.sql"),
+    read("supabase/migrations/202607310032_calendar_feed_service_role_grants.sql"),
   ]);
   assert.match(page, /function ConnectedSchedules/);
   assert.match(page, /function UnifiedAssignmentsView/);
@@ -43,6 +44,8 @@ test("personal calendar feeds are encrypted and appear in a unified private sche
   assert.match(migration, /revoke all on public\.personal_calendar_feeds from authenticated/);
   assert.match(migration, /create or replace function public\.my_law18_assignments/);
   assert.match(migration, /create or replace function public\.my_external_assignments/);
+  assert.match(serviceGrants, /personal_calendar_feeds to service_role/);
+  assert.match(serviceGrants, /external_calendar_assignments to service_role/);
 });
 
 test("sessions refresh automatically and non-auth failures preserve login", async () => {

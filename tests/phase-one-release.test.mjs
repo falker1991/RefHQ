@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.9.3 uses the dashboard loading label and favicon metadata", async () => {
+test("Version 0.10.0 uses the dashboard loading label and favicon metadata", async () => {
   const [page, layout, manifest, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -13,10 +13,36 @@ test("Version 0.9.3 uses the dashboard loading label and favicon metadata", asyn
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.9\.3/);
+  assert.match(page, /Version 0\.10\.0/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.9.3");
+  assert.equal(JSON.parse(packageJson).version, "0.10.0");
+});
+
+test("personal calendar feeds are encrypted and appear in a unified private schedule", async () => {
+  const [page, client, worker, css, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("worker/index.ts"),
+    read("app/globals.css"),
+    read("supabase/migrations/202607310031_personal_calendar_feeds.sql"),
+  ]);
+  assert.match(page, /function ConnectedSchedules/);
+  assert.match(page, /function UnifiedAssignmentsView/);
+  assert.match(page, /Connect Feed/);
+  assert.match(page, /Schedule conflict/);
+  assert.match(client, /loadUnifiedAssignments/);
+  assert.match(client, /loadCalendarFeedConnections/);
+  assert.match(worker, /AES-GCM/);
+  assert.match(worker, /assertSafeFeedUrl/);
+  assert.match(worker, /async scheduled/);
+  assert.match(worker, /BEGIN:VCALENDAR/);
+  assert.match(css, /\.connected-schedules-card/);
+  assert.match(css, /\.unified-assignment-row/);
+  assert.match(migration, /create table if not exists public\.personal_calendar_feeds/);
+  assert.match(migration, /revoke all on public\.personal_calendar_feeds from authenticated/);
+  assert.match(migration, /create or replace function public\.my_law18_assignments/);
+  assert.match(migration, /create or replace function public\.my_external_assignments/);
 });
 
 test("sessions refresh automatically and non-auth failures preserve login", async () => {
@@ -409,7 +435,7 @@ test("all users have active-group role-aware help", async () => {
   assert.match(page, /className="help-button"/);
   assert.match(page, /HELP & HOW-TO/);
   assert.match(page, /How to Navigate Law18Ref/);
-  assert.match(page, /Open My Assignments to view your imported game schedule/);
+  assert.match(page, /Open My Assignments to view one schedule containing your Law18Ref games/);
   assert.match(page, /Select Rate Crew on a game to open its evaluation form/);
   assert.match(page, /activeGroupRoles/);
   assert.match(page, /Follow the directions below for your role/);

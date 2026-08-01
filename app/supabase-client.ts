@@ -230,6 +230,31 @@ export type AppearanceTheme = {
   updated_at: string;
 };
 
+export type CalendarFeedConnection = {
+  id: string;
+  provider: "assignr" | "arbiter" | "usofficials" | "refquest" | "other";
+  display_name: string;
+  active: boolean;
+  sync_status: "pending" | "syncing" | "connected" | "error" | "paused";
+  last_synced_at: string | null;
+  last_error: string | null;
+  created_at: string;
+};
+
+export type UnifiedAssignment = {
+  id: string;
+  source_id: string;
+  source_type: string;
+  source_name: string;
+  title: string;
+  starts_at: string;
+  ends_at: string | null;
+  venue: string | null;
+  position_title: string | null;
+  status: string;
+  source_url: string | null;
+};
+
 function configuration() {
   if (!baseUrl || !anonKey) throw new Error("Supabase is not configured.");
   return { baseUrl, anonKey };
@@ -549,6 +574,54 @@ export async function updateOwnProfile(
     "return=representation",
   );
   return rows[0];
+}
+
+async function calendarFeedRequest<T>(session: Law18Session, path = "", init: RequestInit = {}): Promise<T> {
+  let activeSession = await auth.ensureValidSession(session);
+  const perform = (token: string) => fetch(`/api/calendar-feeds${path}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...init.headers },
+  });
+  let response = await perform(activeSession.access_token);
+  if (response.status === 401) {
+    activeSession = await auth.ensureValidSession(activeSession, true);
+    response = await perform(activeSession.access_token);
+  }
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) : null;
+  if (!response.ok) throw new Error(payload?.message || "Connected Schedules request failed.");
+  return payload as T;
+}
+
+export function loadCalendarFeedConnections(session: Law18Session) {
+  return calendarFeedRequest<CalendarFeedConnection[]>(session);
+}
+
+export function addCalendarFeed(
+  session: Law18Session,
+  values: { provider: CalendarFeedConnection["provider"]; display_name: string; feed_url: string },
+) {
+  return calendarFeedRequest<CalendarFeedConnection>(session, "", { method: "POST", body: JSON.stringify(values) });
+}
+
+export function syncCalendarFeed(session: Law18Session, feedId: string) {
+  return calendarFeedRequest<{ synchronized: number; last_synced_at: string }>(session, `/${enc(feedId)}/sync`, { method: "POST", body: "{}" });
+}
+
+export function setCalendarFeedActive(session: Law18Session, feedId: string, active: boolean) {
+  return calendarFeedRequest<{ active: boolean; sync_status: CalendarFeedConnection["sync_status"] }>(session, `/${enc(feedId)}`, { method: "PATCH", body: JSON.stringify({ active }) });
+}
+
+export async function removeCalendarFeed(session: Law18Session, feedId: string) {
+  await calendarFeedRequest<null>(session, `/${enc(feedId)}`, { method: "DELETE" });
+}
+
+export async function loadUnifiedAssignments(session: Law18Session) {
+  const [law18ref, external] = await Promise.all([
+    rest<UnifiedAssignment[]>(session, "rpc/my_law18_assignments", { method: "POST", body: "{}" }),
+    rest<UnifiedAssignment[]>(session, "rpc/my_external_assignments", { method: "POST", body: "{}" }),
+  ]);
+  return [...law18ref, ...external].sort((left, right) => left.starts_at.localeCompare(right.starts_at));
 }
 
 export async function leaveCurrentOrganization(session: Law18Session) {

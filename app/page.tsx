@@ -6,6 +6,7 @@ import { AuthPanel } from "./auth-panel";
 import { auth, isSessionExpiredError, type Law18Session } from "./auth-client";
 import {
   archiveEvent,
+  addCalendarFeed,
   approvePublicRating,
   bulkManageRecords,
   checkIn,
@@ -34,6 +35,7 @@ import {
   loadAppearanceThemes,
   loadArchivedEvents,
   loadAuthorizedRatingHistory,
+  loadCalendarFeedConnections,
   loadEventCheckIns,
   loadOrganization,
   loadOrganizationActivity,
@@ -41,6 +43,7 @@ import {
   loadOrganizations,
   loadOrganizationOfficials,
   loadProfile,
+  loadUnifiedAssignments,
   loadMemberships,
   loadUserEventMemberships,
   logRatingExport,
@@ -57,7 +60,10 @@ import {
   reactivateOrganization,
   recordCurrentLogin,
   removeOrganizationMember,
+  removeCalendarFeed,
   setOrganizationJoinLinkActive,
+  setCalendarFeedActive,
+  syncCalendarFeed,
   updateOrganizationSettings,
   updateOfficial,
   updateEventRatingSettings,
@@ -70,6 +76,7 @@ import {
   zonedLocalDateTimeToIso,
   type AssignmentRecord,
   type CheckInRecord,
+  type CalendarFeedConnection,
   type CoachAssignmentRecord,
   type EventRecord,
   type EventMembership,
@@ -83,10 +90,11 @@ import {
   type OrganizationRecord,
   type AuditRecord,
   type Profile,
+  type UnifiedAssignment,
 } from "./supabase-client";
 
-type View = "dashboard" | "board" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "activity" | "appearance" | "account" | "groups";
-const refreshableViews: View[] = ["dashboard", "board", "checkin", "schedule", "officials", "coaching", "assessments", "import", "activity", "appearance", "account", "groups"];
+type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "activity" | "appearance" | "account" | "groups";
+const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "activity", "appearance", "account", "groups"];
 type EventData = {
   games: GameRecord[];
   assignments: AssignmentRecord[];
@@ -301,6 +309,52 @@ function RefereeDay({
         <Status checked={isChecked} />
       </article>)}
     </section>
+  </section>;
+}
+
+function UnifiedAssignmentsView({ session }: { session: Law18Session }) {
+  const [assignments, setAssignments] = useState<UnifiedAssignment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setMessage("");
+    try {
+      setAssignments(await loadUnifiedAssignments(session));
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to load your unified assignments.");
+    } finally {
+      setLoading(false);
+    }
+  }, [session]);
+  useEffect(() => { void refresh(); }, [refresh]);
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const visible = assignments.filter((item) => new Date(item.starts_at).getTime() >= cutoff);
+  const conflicts = new Set<string>();
+  for (let left = 0; left < visible.length; left += 1) {
+    const leftStart = new Date(visible[left].starts_at).getTime();
+    const leftEnd = visible[left].ends_at ? new Date(visible[left].ends_at!).getTime() : leftStart + 2 * 60 * 60 * 1000;
+    for (let right = left + 1; right < visible.length; right += 1) {
+      const rightStart = new Date(visible[right].starts_at).getTime();
+      if (rightStart >= leftEnd) break;
+      const rightEnd = visible[right].ends_at ? new Date(visible[right].ends_at!).getTime() : rightStart + 2 * 60 * 60 * 1000;
+      if (leftStart < rightEnd && rightStart < leftEnd) {
+        conflicts.add(visible[left].id);
+        conflicts.add(visible[right].id);
+      }
+    }
+  }
+  const grouped = visible.reduce<Map<string, UnifiedAssignment[]>>((groups, item) => {
+    const date = new Date(item.starts_at);
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    groups.set(key, [...(groups.get(key) || []), item]);
+    return groups;
+  }, new Map());
+  return <section className="page-section unified-assignments-page">
+    <div className="section-title"><div><p className="eyebrow">PERSONAL SCHEDULE</p><h1>My Assignments</h1><p>Your Law18Ref games and connected external calendar feeds in one view.</p></div><button className="secondary" disabled={loading} onClick={() => void refresh()}>{loading ? "Refreshing…" : "Refresh"}</button></div>
+    {message && <p className="pilot-message">{message}</p>}
+    {[...grouped.entries()].map(([date, items]) => <article className="panel unified-assignment-day" key={date}><header><h2>{new Intl.DateTimeFormat([], { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date(`${date}T12:00:00`))}</h2><small>{items.length} assignment{items.length === 1 ? "" : "s"}</small></header>{items.map((item) => <div className={`unified-assignment-row ${conflicts.has(item.id) ? "has-conflict" : ""}`} key={`${item.source_type}-${item.id}`}><time>{formatTime(item.starts_at)}</time><div><strong>{item.title || "Assignment"}</strong><p>{[item.venue, item.position_title].filter(Boolean).join(" · ") || "Details available from the source platform"}</p><small><span className={`source-badge source-${item.source_type}`}>{item.source_name}</span>{item.status === "cancelled" ? "Cancelled" : item.source_type === "law18ref" ? "Law18Ref assignment" : "External calendar"}{conflicts.has(item.id) && <b> · Schedule conflict</b>}</small></div>{item.source_url && <a className="secondary" href={item.source_url} target="_blank" rel="noreferrer">Open Source</a>}</div>)}</article>)}
+    {!loading && !visible.length && <EmptyState>No assignments are available. Add a personal calendar feed in Account Settings or ask your Law18Ref assignor to link your account.</EmptyState>}
   </section>;
 }
 
@@ -2164,6 +2218,57 @@ function OrganizationActivity({
   </section>;
 }
 
+function ConnectedSchedules({ session }: { session: Law18Session }) {
+  const [feeds, setFeeds] = useState<CalendarFeedConnection[]>([]);
+  const [provider, setProvider] = useState<CalendarFeedConnection["provider"]>("assignr");
+  const [displayName, setDisplayName] = useState("Assignr");
+  const [feedUrl, setFeedUrl] = useState("");
+  const [busyId, setBusyId] = useState("");
+  const [message, setMessage] = useState("");
+  const refresh = useCallback(() => loadCalendarFeedConnections(session).then(setFeeds), [session]);
+  useEffect(() => { refresh().catch((reason) => setMessage(reason instanceof Error ? reason.message : "Unable to load connected schedules.")); }, [refresh]);
+  async function connect() {
+    setBusyId("new"); setMessage("");
+    try {
+      await addCalendarFeed(session, { provider, display_name: displayName.trim(), feed_url: feedUrl.trim() });
+      setFeedUrl("");
+      setMessage("Calendar feed saved securely. Its first synchronization has started.");
+      await refresh();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to connect this calendar feed.");
+    } finally { setBusyId(""); }
+  }
+  async function synchronize(feed: CalendarFeedConnection) {
+    setBusyId(feed.id); setMessage("");
+    try {
+      const result = await syncCalendarFeed(session, feed.id);
+      setMessage(`${result.synchronized} calendar event${result.synchronized === 1 ? "" : "s"} synchronized from ${feed.display_name}.`);
+      await refresh();
+    } catch (reason) { setMessage(reason instanceof Error ? reason.message : "Calendar synchronization failed."); }
+    finally { setBusyId(""); }
+  }
+  async function toggle(feed: CalendarFeedConnection) {
+    setBusyId(feed.id); setMessage("");
+    try { await setCalendarFeedActive(session, feed.id, !feed.active); await refresh(); }
+    catch (reason) { setMessage(reason instanceof Error ? reason.message : "Unable to update this calendar feed."); }
+    finally { setBusyId(""); }
+  }
+  async function remove(feed: CalendarFeedConnection) {
+    if (!window.confirm(`Remove “${feed.display_name}” and its imported external assignments?`)) return;
+    setBusyId(feed.id); setMessage("");
+    try { await removeCalendarFeed(session, feed.id); setMessage(`${feed.display_name} was disconnected.`); await refresh(); }
+    catch (reason) { setMessage(reason instanceof Error ? reason.message : "Unable to remove this calendar feed."); }
+    finally { setBusyId(""); }
+  }
+  const providerNames: Record<CalendarFeedConnection["provider"], string> = { assignr: "Assignr", arbiter: "ArbiterSports", usofficials: "USOfficials", refquest: "RefQuest / RQ+", other: "Other ICS feed" };
+  return <article className="panel connected-schedules-card">
+    <div className="panel-head"><div><p className="eyebrow">CONNECTED SCHEDULES</p><h2>Personal Calendar Feeds</h2><p>Add private iCalendar/ICS feeds to combine external games with your Law18Ref assignments.</p></div></div>
+    <div className="calendar-feed-form"><label>Platform<select value={provider} onChange={(event) => { const next = event.target.value as CalendarFeedConnection["provider"]; setProvider(next); setDisplayName(providerNames[next]); }}><option value="assignr">Assignr</option><option value="arbiter">ArbiterSports</option><option value="usofficials">USOfficials</option><option value="refquest">RefQuest / RQ+</option><option value="other">Other ICS feed</option></select></label><label>Schedule name<input maxLength={80} value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label><label className="calendar-feed-url">Private calendar-feed URL<input type="url" inputMode="url" autoComplete="off" placeholder="https://…/calendar.ics" value={feedUrl} onChange={(event) => setFeedUrl(event.target.value)} /><small>The URL is encrypted and will not be displayed again after it is saved.</small></label><button className="primary" disabled={busyId === "new" || !displayName.trim() || !feedUrl.trim()} onClick={() => void connect()}>{busyId === "new" ? "Connecting…" : "Connect Feed"}</button></div>
+    {message && <p className="pilot-message">{message}</p>}
+    <div className="calendar-feed-list">{feeds.map((feed) => <section key={feed.id}><div><strong>{feed.display_name}</strong><small>{providerNames[feed.provider]} · <span className={`feed-status status-${feed.sync_status}`}>{feed.sync_status}</span></small><small>{feed.last_synced_at ? `Last synchronized ${new Intl.DateTimeFormat([], { dateStyle: "medium", timeStyle: "short" }).format(new Date(feed.last_synced_at))}` : "Waiting for first synchronization"}</small>{feed.last_error && <small className="feed-error">{feed.last_error}</small>}</div><div><button className="secondary" disabled={busyId === feed.id || !feed.active} onClick={() => void synchronize(feed)}>Sync Now</button><button className="secondary" disabled={busyId === feed.id} onClick={() => void toggle(feed)}>{feed.active ? "Pause" : "Resume"}</button><button className="danger-button" disabled={busyId === feed.id} onClick={() => void remove(feed)}>Remove</button></div></section>)}{!feeds.length && <EmptyState>No external calendar feeds are connected.</EmptyState>}</div>
+  </article>;
+}
+
 function AccountSettings({
   session,
   profile,
@@ -2221,6 +2326,7 @@ function AccountSettings({
       {message && <p className="pilot-message">{message}</p>}
       <button className="primary" disabled={busy || !fullName.trim()} onClick={save}>{busy ? "Saving…" : "Save account details"}</button>
     </article>
+    <ConnectedSchedules session={session} />
   </section>;
 }
 
@@ -2513,7 +2619,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     assignor: { title: "Assignor Navigation", items: ["Select the event you are working from the Active Event menu below the header.", "Open Import to upload an authorized schedule, then use Assignment Board or Schedule to review crews.", "Open Check-In to filter arrivals, manually check someone in, undo a check-in, or select an official’s name to see their daily schedule.", "Open Coaching to place coaches on games. Use Rate Crew on a schedule game, or open Ratings and choose a game, when coaching tools are enabled."] },
     site_coordinator: { title: "Site Coordinator Navigation", items: ["Select today’s event from the Active Event menu.", "Open Assignment Board or Schedule to review the games in your event scope.", "Open Check-In to monitor arrivals. Use its filters to narrow the roster, and select an official’s name to view that person’s full schedule for the day."] },
     referee_coach: { title: "Referee Coach Navigation", items: ["Select the event you are coaching from the My Event menu.", "Open Schedule to see games and crews in your coaching scope.", "Select Rate Crew on a game to open its evaluation form, complete the crew ratings, and submit them together.", "Open Ratings to choose a game, review individual or full-game history, filter results, or export the filtered ratings. Your permitted history remains available after an event is archived.", "When Check-In appears, open it at the venue, select Scan QR Code, and scan the code displayed by event staff."] },
-    referee: { title: "Referee Navigation", items: ["Select the event you want from the My Event menu below the header.", "Open My Assignments to view your imported game schedule and positions.", "On an assigned event day, open Check-In, select Scan QR Code, and scan the code displayed by event staff. The scanner disappears after your check-in is recorded.", "Open My Evals to view evaluations that have been shared with you.", "Open your initials menu, then Account Settings, to update your contact and personal information."] },
+    referee: { title: "Referee Navigation", items: ["Open My Assignments to view one schedule containing your Law18Ref games and any personal external calendar feeds you have connected.", "Open your initials menu, then Account Settings, to connect, synchronize, pause, or remove a private iCalendar feed.", "Select an event from the My Event menu when you need its Law18Ref check-in or evaluation tools.", "On an assigned event day, open Check-In, select Scan QR Code, and scan the code displayed by event staff. The scanner disappears after your check-in is recorded.", "Open My Evals to view evaluations that have been shared with you."] },
   };
   const isAdministrativeStaff = ["site_owner", "organization_admin", "event_admin", "assignor"].some((role) => allRoles.has(role as MembershipRole));
   const isSiteCoordinator = allRoles.has("site_coordinator");
@@ -2788,6 +2894,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
           {accountOpen && <div className="account-popover">
             <div className="account-identity"><strong>{profile?.full_name}</strong><span>{profile?.email}</span></div>
             <div className="account-roles">{[...allRoles].map((role) => <span key={role}>{roleNames[role]}</span>)}</div>
+            <button onClick={() => { setView("my_assignments"); setAccountOpen(false); }}><span>☷</span><div><strong>My assignments</strong><small>Unified personal schedule</small></div></button>
             <button onClick={() => { setView("account"); setAccountOpen(false); }}><span>⚙</span><div><strong>Account settings</strong><small>Personal information</small></div></button>
             <button onClick={() => { setView("groups"); setAccountOpen(false); }}><span>♙</span><div><strong>Groups</strong><small>Organization membership</small></div></button>
             {allRoles.has("site_owner") && <button onClick={() => { setView("appearance"); setAccountOpen(false); }}><span>◐</span><div><strong>Site appearance</strong><small>Theme and schedule</small></div></button>}
@@ -2810,7 +2917,8 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       {organizationActionMessage && <p className="pilot-message organization-message">{organizationActionMessage}</p>}
       {qrCheckInMessage && <p className="pilot-message qr-checkin-message">{qrCheckInMessage}</p>}
       {profile && view === "dashboard" && <DashboardHome profile={profile} event={event} data={data} events={events} adminView={isAdministrativeStaff} onNavigate={setView} />}
-      {event && view === "board" && (isStaff ? <AssignmentBoard data={data} /> : <RefereeDay event={event} data={data} session={session} />)}
+      {view === "board" && (isStaff ? event && <AssignmentBoard data={data} /> : <UnifiedAssignmentsView session={session} />)}
+      {view === "my_assignments" && <UnifiedAssignmentsView session={session} />}
       {event && view === "checkin" && (isStaff ? <CheckInView event={event} data={data} session={session} canManageCheckIns={isAdministrativeStaff} onRefresh={refreshCheckIns} /> : refereeHasCurrentOrFutureAssignment || coachHasCurrentOrFutureAssignment ? <RefereeCheckIn event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} /> : null)}
       {event && view === "schedule" && (isStaff || isCoach) && <ScheduleView session={session} event={event} data={data} canEdit={isAdministrativeStaff} canRateCrew={isCoach && canAssess} coachView={isCoach && !isAdministrativeStaff} onRateCrew={setRatingModalGameId} onCreated={() => refresh(event.id)} />}
       {isAdministrativeStaff && profile && organization && view === "officials" && <OfficialsDirectory session={session} profile={profile} organizationRoles={organizationRoles} eventRoles={eventRoles} canManageOrganizationRoles={Boolean(profile.is_site_owner || organizationRoles.includes("organization_admin"))} organizationId={organization.id} officials={organizationOfficials} data={data} event={event} events={events} onCreated={() => loadOrganizationOfficials(session, organization.id).then(setOrganizationOfficials)} />}
@@ -2825,7 +2933,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.9.3</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.10.0</span></footer>
   </main>;
 }
 

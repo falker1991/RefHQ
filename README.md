@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.10.3 adds private personal iCalendar feed connections and a compact unified My Assignments list combining Law18Ref and external games, with corrected server-only database privileges and deployment-safe secret preservation.
+Version 0.10.4 adds private personal iCalendar feed connections and a filterable, compact unified My Assignments list combining Law18Ref and external games, with filters for source, calendar import, event, and organization.
 
 Bulk lifecycle management remains available for officials, ratings, and events. Games and assignments are designed to join the same workflow when manual schedule editing is introduced.
 

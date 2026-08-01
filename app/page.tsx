@@ -2956,7 +2956,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.10.3</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.10.4</span></footer>
   </main>;
 }
 

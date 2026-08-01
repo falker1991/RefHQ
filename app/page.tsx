@@ -312,10 +312,19 @@ function RefereeDay({
   </section>;
 }
 
+function AssignmentFilterMenu({ label, options, selected, onChange }: { label: string; options: { id: string; name: string }[]; selected: string[]; onChange: (values: string[]) => void }) {
+  const toggle = (id: string) => onChange(selected.includes(id) ? selected.filter((value) => value !== id) : [...selected, id]);
+  return <details className="assignment-filter-menu"><summary>{label}<small>{selected.length ? `${selected.length} selected` : "All"}</small></summary><div><button type="button" className="text-button" onClick={() => onChange([])}>Select All</button>{options.map((option) => <label key={option.id}><input type="checkbox" checked={selected.includes(option.id)} onChange={() => toggle(option.id)} /><span>{option.name}</span></label>)}</div></details>;
+}
+
 function UnifiedAssignmentsView({ session }: { session: Law18Session }) {
   const [assignments, setAssignments] = useState<UnifiedAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [scheduleType, setScheduleType] = useState("all");
+  const [calendarIds, setCalendarIds] = useState<string[]>([]);
+  const [eventIds, setEventIds] = useState<string[]>([]);
+  const [organizationIds, setOrganizationIds] = useState<string[]>([]);
   const refresh = useCallback(async () => {
     setLoading(true);
     setMessage("");
@@ -329,7 +338,20 @@ function UnifiedAssignmentsView({ session }: { session: Law18Session }) {
   }, [session]);
   useEffect(() => { void refresh(); }, [refresh]);
   const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  const visible = assignments.filter((item) => new Date(item.starts_at).getTime() >= cutoff);
+  const recent = assignments.filter((item) => new Date(item.starts_at).getTime() >= cutoff);
+  const uniqueOptions = (items: { id: string; name: string }[]) => [...new Map(items.map((item) => [item.id, item])).values()].sort((left, right) => left.name.localeCompare(right.name));
+  const calendarOptions = uniqueOptions(recent.filter((item) => item.source_type !== "law18ref").map((item) => ({ id: item.source_id, name: item.source_name })));
+  const eventOptions = uniqueOptions(recent.filter((item) => item.event_id).map((item) => ({ id: item.event_id!, name: item.event_name || item.source_name })));
+  const organizationOptions = uniqueOptions(recent.filter((item) => item.organization_id).map((item) => ({ id: item.organization_id!, name: item.organization_name || "Law18Ref organization" })));
+  const visible = recent.filter((item) => {
+    if (scheduleType === "law18ref" && item.source_type !== "law18ref") return false;
+    if (scheduleType === "external" && item.source_type === "law18ref") return false;
+    if (calendarIds.length && (item.source_type === "law18ref" || !calendarIds.includes(item.source_id))) return false;
+    if (eventIds.length && (!item.event_id || !eventIds.includes(item.event_id))) return false;
+    if (organizationIds.length && (!item.organization_id || !organizationIds.includes(item.organization_id))) return false;
+    return true;
+  });
+  const filtersActive = scheduleType !== "all" || calendarIds.length > 0 || eventIds.length > 0 || organizationIds.length > 0;
   const conflicts = new Set<string>();
   for (let left = 0; left < visible.length; left += 1) {
     const leftStart = new Date(visible[left].starts_at).getTime();
@@ -353,8 +375,9 @@ function UnifiedAssignmentsView({ session }: { session: Law18Session }) {
   return <section className="page-section unified-assignments-page">
     <div className="section-title"><div><p className="eyebrow">PERSONAL SCHEDULE</p><h1>My Assignments</h1><p>Your Law18Ref games and connected external calendar feeds in one view.</p></div><button className="secondary" disabled={loading} onClick={() => void refresh()}>{loading ? "Refreshing…" : "Refresh"}</button></div>
     {message && <p className="pilot-message">{message}</p>}
+    <div className="assignment-filter-bar"><label>Schedule Type<select value={scheduleType} onChange={(event) => setScheduleType(event.target.value)}><option value="all">All Assignments</option><option value="law18ref">Law18Ref Only</option><option value="external">External Calendars Only</option></select></label><AssignmentFilterMenu label="Calendar Imports" options={calendarOptions} selected={calendarIds} onChange={setCalendarIds} /><AssignmentFilterMenu label="Law18Ref Events" options={eventOptions} selected={eventIds} onChange={setEventIds} /><AssignmentFilterMenu label="Law18Ref Organizations" options={organizationOptions} selected={organizationIds} onChange={setOrganizationIds} /><button className="text-button" disabled={!filtersActive} onClick={() => { setScheduleType("all"); setCalendarIds([]); setEventIds([]); setOrganizationIds([]); }}>Clear Filters</button></div>
     {!!grouped.size && <div className="panel unified-assignment-list">{[...grouped.entries()].map(([date, items]) => <section className="unified-assignment-day" key={date}><header><h2>{new Intl.DateTimeFormat([], { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date(`${date}T12:00:00`))}</h2><small>{items.length} assignment{items.length === 1 ? "" : "s"}</small></header>{items.map((item) => <div className={`unified-assignment-row ${conflicts.has(item.id) ? "has-conflict" : ""}`} key={`${item.source_type}-${item.id}`}><time>{formatTime(item.starts_at)}</time><div className="unified-assignment-details"><strong>{item.title || "Assignment"}</strong><span>{[item.venue, item.position_title].filter(Boolean).join(" · ") || "Details available from the source platform"}</span></div><div className="unified-assignment-meta"><span className={`source-badge source-${item.source_type}`}>{item.source_name}</span><small>{item.status === "cancelled" ? "Cancelled" : item.source_type === "law18ref" ? "Law18Ref assignment" : "External calendar"}{conflicts.has(item.id) && <b>Schedule conflict</b>}</small></div>{item.source_url ? <a className="unified-source-link" href={item.source_url} target="_blank" rel="noreferrer">Open Source</a> : <span />}</div>)}</section>)}</div>}
-    {!loading && !visible.length && <EmptyState>No assignments are available. Add a personal calendar feed in Account Settings or ask your Law18Ref assignor to link your account.</EmptyState>}
+    {!loading && !visible.length && <EmptyState>{filtersActive ? "No assignments match the selected filters." : "No assignments are available. Add a personal calendar feed in Account Settings or ask your Law18Ref assignor to link your account."}</EmptyState>}
   </section>;
 }
 

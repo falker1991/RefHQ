@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.12.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.12.2 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,10 +14,10 @@ test("Version 0.12.0 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.12\.0/);
+  assert.match(page, /Version 0\.12\.2/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.12.0");
+  assert.equal(JSON.parse(packageJson).version, "0.12.2");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -339,10 +339,13 @@ test("official editor uses structured fields and role cards", async () => {
   assert.match(page, /official-edit-actions/);
 });
 
-test("event access is discoverable and site-owner access is locked", async () => {
+test("active-event permissions are integrated into the official editor and site-owner access is locked", async () => {
   const page = await read("app/page.tsx");
-  assert.match(page, />Event Access</);
-  assert.match(page, /Open Event Access/);
+  assert.match(page, /ACTIVE EVENT PERMISSIONS/);
+  assert.match(page, /These permissions apply only to the current active event/);
+  assert.match(page, /saveUserEventAccess\(session, event\.id, editing\.linked_user_id/);
+  assert.match(page, /Full schedule access/);
+  assert.match(page, /Enable coaching tools/);
   assert.match(page, /Site Owner — Full Access/);
   assert.match(page, /owner-locked/);
 });
@@ -446,24 +449,25 @@ test("administrative dashboard shows today's check-in progress and role only", a
   assert.match(page, /Your account role/);
 });
 
-test("check-in roster names open a complete daily schedule modal", async () => {
+test("official names open the shared full-event schedule modal", async () => {
   const [page, css] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
   assert.match(page, /className="checkin-official-button"/);
-  assert.match(page, /setScheduleOfficialId\(official\.id\)/);
-  assert.match(page, /className="confirmation-dialog checkin-schedule-dialog"/);
-  assert.match(page, /className="checkin-day-schedule"/);
-  assert.match(css, /\.checkin-schedule-dialog/);
+  assert.match(page, /function OfficialEventScheduleModal/);
+  assert.match(page, /FULL EVENT SCHEDULE/);
+  assert.match(page, /onSelectOfficial=\{setScheduleOfficialId\}/);
+  assert.match(page, /Edit Official/);
+  assert.match(css, /\.official-event-schedule-dialog/);
 });
 
-test("check-in schedule modal uses one-column game cards with positions and crews", async () => {
+test("official schedule modal is scrollable and grays completed assignments", async () => {
   const [page, css] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
-  assert.match(page, /className="checkin-game-card"/);
+  assert.match(page, /completionCutoff = Date\.now\(\) - \(2 \* 60 \* 60 \* 1000\)/);
+  assert.match(page, /official-event-schedule-card \$\{completed \? "completed"/);
   assert.match(page, /className="selected-position"/);
-  assert.match(page, /GAME CREW/);
   assert.match(page, /data\.assignments\.filter\(\(item\) => item\.game_id === game\.id\)/);
   assert.match(page, /positionLabel\(crewAssignment\.position, crewAssignment\.position_title\)/);
-  assert.match(css, /\.checkin-day-schedule\{display:flex;flex-direction:column;align-items:stretch/);
-  assert.match(css, /\.checkin-day-schedule>\.checkin-game-card\{display:block;flex:0 0 auto;box-sizing:border-box;width:100%/);
+  assert.match(css, /\.official-event-schedule-list\{[^}]*overflow-y:auto/);
+  assert.match(css, /\.official-event-schedule-card\.completed/);
   assert.match(css, /\.checkin-crew-member\.selected-official/);
 });
 

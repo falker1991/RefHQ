@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.12.4 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.12.5 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,11 +14,18 @@ test("Version 0.12.4 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.12\.4/);
+  assert.match(page, /Version 0\.12\.5/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.12.4");
+  assert.equal(JSON.parse(packageJson).version, "0.12.5");
   assert.match(viteConfig, /keep_vars: true/);
+});
+
+test("application header remains visible while scrolling", async () => {
+  const css = await read("app/globals.css");
+  assert.match(css, /\.topbar\{position:fixed/);
+  assert.match(css, /\.eventbar\{margin-top:var\(--fixed-topbar-height\)/);
+  assert.match(css, /--fixed-topbar-height:120px/);
 });
 
 test("personal calendar feeds are encrypted and appear in a unified private schedule", async () => {

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.12.3 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.12.4 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,10 +14,10 @@ test("Version 0.12.3 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.12\.3/);
+  assert.match(page, /Version 0\.12\.4/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.12.3");
+  assert.equal(JSON.parse(packageJson).version, "0.12.4");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -129,6 +129,23 @@ test("users can lock personal contact fields without locking organization or eve
   assert.match(migration, /protect_locked_official_contact/);
   assert.match(migration, /Only the account owner can change the personal contact lock/);
   assert.match(migration, /This user has locked their personal contact information/);
+});
+
+test("event access can be staged for provisional officials and activates when accounts link", async () => {
+  const [page, client, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/202608040039_provisional_event_access.sql"),
+  ]);
+  assert.match(page, /Event permissions for \{event\.name\}/);
+  assert.match(page, /These permissions will activate automatically when this provisional official creates their account/);
+  assert.match(page, /saveProvisionalEventAccess\(session, event\.id, created\.id/);
+  assert.match(client, /export async function loadProvisionalEventAccess/);
+  assert.match(client, /export async function saveProvisionalEventAccess/);
+  assert.match(migration, /create table if not exists public\.provisional_event_access/);
+  assert.match(migration, /create or replace function public\.save_provisional_event_access/);
+  assert.match(migration, /insert into public\.event_memberships/);
+  assert.match(migration, /delete from public\.provisional_event_access/);
 });
 
 test("administrative operations show rating averages and richer attendance context", async () => {

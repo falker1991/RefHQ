@@ -49,6 +49,18 @@ export type EventMembership = {
   assigned_game_ids: string[];
 };
 
+export type ProvisionalEventAccess = {
+  id: string;
+  official_id: string;
+  event_id: string;
+  roles: Exclude<MembershipRole, "site_owner" | "organization_director" | "organization_admin">[];
+  full_schedule_access: boolean;
+  coaching_tools_enabled: boolean;
+  ratings_history_scope: "none" | "specific" | "all";
+  ratings_event_ids: string[];
+  assigned_game_ids: string[];
+};
+
 export type OrganizationRecord = {
   id: string;
   name: string;
@@ -1645,6 +1657,33 @@ export async function loadUserEventMemberships(
     session,
     `event_memberships?event_id=eq.${enc(eventId)}&user_id=eq.${enc(userId)}&select=*`,
   );
+}
+
+export async function loadProvisionalEventAccess(session: Law18Session, eventId: string, officialId: string) {
+  const rows = await rest<ProvisionalEventAccess[]>(session, `provisional_event_access?event_id=eq.${enc(eventId)}&official_id=eq.${enc(officialId)}&select=*`);
+  return rows[0] || null;
+}
+
+export async function saveProvisionalEventAccess(
+  session: Law18Session,
+  eventId: string,
+  officialId: string,
+  roles: Exclude<MembershipRole, "site_owner" | "organization_director" | "organization_admin">[],
+  options: { fullScheduleAccess: boolean; coachingToolsEnabled: boolean; ratingsHistoryScope: "none" | "specific" | "all"; ratingsEventIds: string[]; assignedGameIds: string[] },
+) {
+  return rest<ProvisionalEventAccess>(session, "rpc/save_provisional_event_access", {
+    method: "POST",
+    body: JSON.stringify({
+      official_uuid: officialId,
+      event_uuid: eventId,
+      requested_roles: roles.length ? roles : ["referee"],
+      requested_full_schedule: options.fullScheduleAccess,
+      requested_coaching_tools: options.coachingToolsEnabled,
+      requested_ratings_scope: options.ratingsHistoryScope,
+      requested_ratings_events: options.ratingsEventIds,
+      requested_game_ids: options.assignedGameIds,
+    }),
+  });
 }
 
 export async function saveUserEventAccess(

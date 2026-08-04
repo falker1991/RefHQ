@@ -43,6 +43,7 @@ import {
   loadOrganizations,
   loadOrganizationOfficials,
   loadProfile,
+  loadProvisionalEventAccess,
   loadUnifiedAssignments,
   loadMemberships,
   loadUserEventMemberships,
@@ -52,6 +53,7 @@ import {
   parseAssignrCsv,
   parseAssignrOfficialsCsv,
   saveAssessment,
+  saveProvisionalEventAccess,
   setRatingArchived,
   saveUserEventAccess,
   restoreDefaultAppearance,
@@ -1150,6 +1152,15 @@ function OfficialsDirectory({
   const [official, setOfficial] = useState({ full_name: "", email: "", secondary_email: "", date_of_birth: "", phone: "", badge_level: "", pending_org_roles: ["referee"] as MembershipRole[] });
   const [editValues, setEditValues] = useState({ full_name: "", email: "", secondary_email: "", date_of_birth: "", phone: "", badge_level: "", pending_org_roles: ["referee"] as MembershipRole[] });
   useEffect(() => {
+    if (!adding) return;
+    setEventRoleSelections(["referee"]);
+    setFullScheduleAccess(true);
+    setAssignedGameIds([]);
+    setCoachingToolsEnabled(false);
+    setRatingScope("none");
+    setRatingEventIds([]);
+  }, [adding]);
+  useEffect(() => {
     loadAuthorizedRatingHistory(session).then((result) => setDirectoryAssessments(result.assessments)).catch(() => setDirectoryAssessments([]));
   }, [session]);
   const refreshArchivedOfficials = useCallback(() => loadOrganizationOfficials(session, organizationId, true)
@@ -1224,10 +1235,17 @@ function OfficialsDirectory({
     setBusy(true);
     setMessage("");
     try {
-      await createOfficial(session, organizationId, official);
+      const created = await createOfficial(session, organizationId, official);
+      if (event && created) await saveProvisionalEventAccess(session, event.id, created.id, eventRoleSelections, {
+        fullScheduleAccess,
+        assignedGameIds,
+        coachingToolsEnabled,
+        ratingsHistoryScope: ratingScope,
+        ratingsEventIds: ratingEventIds,
+      });
       setOfficial({ full_name: "", email: "", secondary_email: "", date_of_birth: "", phone: "", badge_level: "", pending_org_roles: ["referee"] });
       setAdding(false);
-      setMessage("Official added to this organization. No login account or email was created.");
+      setMessage(`Official added to this organization${event ? ` with staged access for ${event.name}` : ""}. No login account or email was created.`);
       onCreated();
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "Unable to add the official.");
@@ -1281,15 +1299,15 @@ function OfficialsDirectory({
     }
   }
   async function loadEventAccess(target: OfficialRecord, openFocusedDialog = false) {
-    if (!target.linked_user_id || !event) return;
+    if (!event) return;
     setBusy(true);
     setMessage("");
     try {
-      const memberships = await loadUserEventMemberships(session, event.id, target.linked_user_id);
-      const roles = memberships.map((membership) => membership.role)
-        .filter((role): role is Exclude<MembershipRole, "site_owner" | "organization_director" | "organization_admin"> =>
-          !["site_owner", "organization_director", "organization_admin"].includes(role));
-      const first = memberships[0];
+      const memberships = target.linked_user_id ? await loadUserEventMemberships(session, event.id, target.linked_user_id) : [];
+      const staged = target.linked_user_id ? null : await loadProvisionalEventAccess(session, event.id, target.id);
+      const roles = staged?.roles || memberships.map((membership) => membership.role)
+        .filter((role): role is Exclude<MembershipRole, "site_owner" | "organization_director" | "organization_admin"> => !["site_owner", "organization_director", "organization_admin"].includes(role));
+      const first = staged || memberships[0];
       setEventRoleSelections(roles.length ? roles : ["referee"]);
       setFullScheduleAccess(first?.full_schedule_access ?? true);
       setAssignedGameIds(first?.assigned_game_ids || []);
@@ -1326,7 +1344,7 @@ function OfficialsDirectory({
       pending_org_roles: target.pending_org_roles?.length ? target.pending_org_roles : [target.pending_org_role || "referee"],
     });
     setMessage("");
-    if (target.linked_user_id && event && !(target.linked_user_id === profile.id && profile.is_site_owner)) void loadEventAccess(target);
+    if (event && !(target.linked_user_id === profile.id && profile.is_site_owner)) void loadEventAccess(target);
   }
   useEffect(() => {
     if (!openOfficialId) return;
@@ -1356,6 +1374,14 @@ function OfficialsDirectory({
           ratingsHistoryScope: ratingScope,
           ratingsEventIds: ratingEventIds,
           preserveEventAdmin: protectedEventAdmin && !canRemoveProtectedEventAdmin,
+        });
+      } else if (!editing.linked_user_id && event) {
+        await saveProvisionalEventAccess(session, event.id, editing.id, eventRoleSelections, {
+          fullScheduleAccess,
+          assignedGameIds,
+          coachingToolsEnabled,
+          ratingsHistoryScope: ratingScope,
+          ratingsEventIds: ratingEventIds,
         });
       }
       setMessage(`${editing.full_name}'s official record was updated.`);
@@ -1477,7 +1503,7 @@ function OfficialsDirectory({
       {canManageOrganizationRoles && <label className="show-archived-ratings"><input type="checkbox" checked={showArchivedOfficials} onChange={(event) => setShowArchivedOfficials(event.target.checked)} /> Show Archived</label>}
       <SavedFilterControls filterKey="officials-directory" value={{ scope, query, sortBy, sortDirection, showArchivedOfficials }} onApply={(value) => { setScope(value.scope); setQuery(value.query); setSortBy(value.sortBy); setSortDirection(value.sortDirection); setShowArchivedOfficials(value.showArchivedOfficials); }} />
     </div>
-    {adding && <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) setAdding(false); }}><article className="panel manual-entry-form manual-entry-modal" role="dialog" aria-modal="true" aria-label="Add official"><header><h2>Add an Official</h2><button className="modal-close-button" aria-label="Close" onClick={() => setAdding(false)}>×</button></header><div className="manual-form-grid"><label>Full name<input value={official.full_name} onChange={(e) => setOfficial({ ...official, full_name: e.target.value })} /></label><label>Primary email<input type="email" value={official.email} onChange={(e) => setOfficial({ ...official, email: e.target.value })} /></label><label>Secondary email<input type="email" value={official.secondary_email} onChange={(e) => setOfficial({ ...official, secondary_email: e.target.value })} /></label><label>Date of birth<input type="date" value={official.date_of_birth} onChange={(e) => setOfficial({ ...official, date_of_birth: e.target.value })} /></label><label>Phone<input value={official.phone} onChange={(e) => setOfficial({ ...official, phone: e.target.value })} /></label><label>Badge or level<input value={official.badge_level} onChange={(e) => setOfficial({ ...official, badge_level: e.target.value })} /></label><fieldset className="role-checkboxes" disabled={!canManageOrganizationRoles}><legend>Organization roles</legend>{organizationRoleChoices.filter(canChangeOrganizationRole).map((role) => <label key={role}><input type="checkbox" checked={official.pending_org_roles.includes(role)} onChange={() => setOfficial({ ...official, pending_org_roles: toggleRole(official.pending_org_roles, role) })} />{roleNames[role]}</label>)}</fieldset></div><button className="primary" disabled={busy || !official.full_name.trim()} onClick={addOfficial}>{busy ? "Adding…" : "Add Official"}</button></article></div>}
+    {adding && <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) setAdding(false); }}><article className="panel manual-entry-form manual-entry-modal" role="dialog" aria-modal="true" aria-label="Add official"><header><h2>Add an Official</h2><button className="modal-close-button" aria-label="Close" onClick={() => setAdding(false)}>×</button></header><div className="manual-form-grid"><label>Full name<input value={official.full_name} onChange={(e) => setOfficial({ ...official, full_name: e.target.value })} /></label><label>Primary email<input type="email" value={official.email} onChange={(e) => setOfficial({ ...official, email: e.target.value })} /></label><label>Secondary email<input type="email" value={official.secondary_email} onChange={(e) => setOfficial({ ...official, secondary_email: e.target.value })} /></label><label>Date of birth<input type="date" value={official.date_of_birth} onChange={(e) => setOfficial({ ...official, date_of_birth: e.target.value })} /></label><label>Phone<input value={official.phone} onChange={(e) => setOfficial({ ...official, phone: e.target.value })} /></label><label>Badge or level<input value={official.badge_level} onChange={(e) => setOfficial({ ...official, badge_level: e.target.value })} /></label><fieldset className="role-checkboxes" disabled={!canManageOrganizationRoles}><legend>Organization roles</legend>{organizationRoleChoices.filter(canChangeOrganizationRole).map((role) => <label key={role}><input type="checkbox" checked={official.pending_org_roles.includes(role)} onChange={() => setOfficial({ ...official, pending_org_roles: toggleRole(official.pending_org_roles, role) })} />{roleNames[role]}</label>)}</fieldset>{event && <fieldset className="role-checkboxes provisional-event-role-picker"><legend>Event permissions for {event.name}</legend>{eventRoleChoices.map((role) => { const locked = !canChangeEventRole(role); return <label key={role}><input type="checkbox" checked={eventRoleSelections.includes(role)} disabled={locked} onChange={() => !locked && setEventRoleSelections((current) => current.includes(role) ? current.filter((item) => item !== role) : [...current, role])} />{roleNames[role]}{locked && <small className="role-lock">Locked</small>}</label>; })}</fieldset>}</div><button className="primary" disabled={busy || !official.full_name.trim()} onClick={addOfficial}>{busy ? "Adding…" : "Add Official"}</button></article></div>}
     {message && <p className="pilot-message">{message}</p>}
     {canManageOrganizationRoles && <div className="bulk-action-bar panel"><label><input type="checkbox" checked={filtered.length > 0 && filtered.filter((item) => item.source !== "site_owner_profile").every((item) => selectedOfficialIds.includes(item.id))} onChange={(event) => setSelectedOfficialIds(event.target.checked ? filtered.filter((item) => item.source !== "site_owner_profile").map((item) => item.id) : [])} /> Select All Visible</label><strong>{selectedOfficialIds.length} selected</strong><button className="secondary" disabled={busy || !selectedOfficialIds.length} onClick={() => bulkOfficials("archive")}>Archive</button>{showArchivedOfficials && <button className="secondary" disabled={busy || !selectedOfficialIds.length} onClick={() => bulkOfficials("restore")}>Restore</button>}<button className="danger-button" disabled={busy || !selectedOfficialIds.length} onClick={() => bulkOfficials("delete")}>Delete Eligible</button></div>}
     <article className="panel directory-list">
@@ -1520,13 +1546,13 @@ function OfficialsDirectory({
           return <label className={`${checked ? "selected" : ""} ${editingIsSiteOwner || protectedRole ? "locked" : ""}`} key={role}><input type="checkbox" checked={checked} disabled={protectedRole} onChange={() => !editingIsSiteOwner && !protectedRole && setEditValues({ ...editValues, pending_org_roles: toggleRole(editValues.pending_org_roles, role) })} /><span>{roleNames[role]}</span>{(editingIsSiteOwner || protectedRole) && <small className="role-lock">Locked</small>}</label>;
         })}</fieldset></section>
         {editingIsSiteOwner && <div className="official-edit-note owner-access-note"><strong>Site Owner — Full Access</strong><span>Your site-owner account automatically inherits every organization and event capability. These permissions are locked and cannot be removed here.</span></div>}
-        {!editingIsSiteOwner && event && <section className="official-edit-section official-event-permissions"><div className="official-event-permissions-heading"><div><p className="eyebrow">ACTIVE EVENT PERMISSIONS</p><h3>{event.name}</h3></div><span>These permissions apply only to the current active event.</span></div>{editing.linked_user_id ? <>
+        {!editingIsSiteOwner && event && <section className="official-edit-section official-event-permissions"><div className="official-event-permissions-heading"><div><p className="eyebrow">ACTIVE EVENT PERMISSIONS</p><h3>{event.name}</h3></div><span>{editing.linked_user_id ? "These permissions apply only to the current active event." : "These permissions will activate automatically when this provisional official creates their account."}</span></div>
           <fieldset className="official-role-grid"><legend>Event roles</legend>{eventRoleChoices.map((role) => { const locked = !canChangeEventRole(role) || (role === "event_admin" && protectedEventAdmin && !canRemoveProtectedEventAdmin); return <label className={`${eventRoleSelections.includes(role) ? "selected" : ""} ${locked ? "locked" : ""}`} key={role}><input type="checkbox" checked={eventRoleSelections.includes(role)} disabled={locked} onChange={() => !locked && setEventRoleSelections((current) => current.includes(role) ? current.filter((item) => item !== role) : [...current, role])} /><span>{roleNames[role]}</span>{locked && <small className="role-lock">Locked</small>}</label>; })}</fieldset>
           {protectedEventAdmin && !canRemoveProtectedEventAdmin && <p className="import-note">This Event Admin role can only be removed by an Organization Admin, Organization Director, site owner, or the Event Admin themselves.</p>}
           <div className="official-event-options"><label className="visibility-lock"><input type="checkbox" checked={fullScheduleAccess} onChange={(change) => setFullScheduleAccess(change.target.checked)} /><span><strong>Full schedule access</strong><small>When disabled, this person sees only the selected games below.</small></span></label><label className="visibility-lock"><input type="checkbox" checked={coachingToolsEnabled} onChange={(change) => setCoachingToolsEnabled(change.target.checked)} /><span><strong>Enable coaching tools</strong><small>Allows ratings tools when the selected event role supports them.</small></span></label></div>
           {!fullScheduleAccess && <fieldset className="event-game-scope"><legend>Games available in {event.name}</legend>{data.games.slice().sort((a, b) => a.starts_at.localeCompare(b.starts_at)).map((eventGame) => <label key={eventGame.id}><input type="checkbox" checked={assignedGameIds.includes(eventGame.id)} onChange={(change) => setAssignedGameIds((current) => change.target.checked ? [...current, eventGame.id] : current.filter((id) => id !== eventGame.id))} /><span><strong>{formatDate(eventGame.starts_at)} · {formatTime(eventGame.starts_at)} · {eventGame.field_name}</strong><small>{eventGame.home_team} vs. {eventGame.away_team}</small></span></label>)}</fieldset>}
           <label className="official-event-history-scope">Previous-event ratings<select value={ratingScope} onChange={(change) => setRatingScope(change.target.value as typeof ratingScope)}><option value="none">No previous events</option><option value="specific">Selected previous events</option><option value="all">All organization events</option></select></label>{ratingScope === "specific" && <fieldset className="event-game-scope"><legend>Allowed previous events</legend>{events.filter((item) => item.id !== event.id).map((item) => <label key={item.id}><input type="checkbox" checked={ratingEventIds.includes(item.id)} onChange={(change) => setRatingEventIds((current) => change.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))} /><span><strong>{item.name}</strong></span></label>)}</fieldset>}
-        </> : <p className="official-edit-note">Create or link this official’s account before assigning permissions for {event.name}.</p>}</section>}
+        </section>}
       </div>
       <div className="official-edit-actions">{canManageOrganizationRoles && canRemoveEditingMember && <button className="danger-button remove-member-button" disabled={busy} onClick={() => setRemoving(editing)}>Remove From Organization</button>}<button className="secondary" onClick={() => setEditing(null)}>Cancel</button><button className="primary" disabled={busy || !editValues.full_name.trim()} onClick={saveOfficial}>{busy ? "Saving…" : "Save official"}</button></div>
     </section></div>}
@@ -3141,7 +3167,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal official={official} event={event} data={data} canEdit={isAdministrativeStaff} onClose={() => setScheduleOfficialId(null)} onEdit={() => { setScheduleOfficialId(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.12.3</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.12.4</span></footer>
   </main>;
 }
 

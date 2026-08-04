@@ -14,6 +14,13 @@ export type Profile = {
   preferred_name?: string | null;
   is_site_owner?: boolean;
   phone?: string | null;
+  personal_schedule_colors?: Record<string, string>;
+  rating_average_preferences?: {
+    event_scope?: "current_event" | "organization";
+    match_position?: boolean;
+    from?: string;
+    through?: string;
+  };
   role: "admin" | "assignor" | "referee" | "coach";
 };
 
@@ -577,6 +584,17 @@ export async function updateOwnProfile(
     { method: "PATCH", body: JSON.stringify(changes) },
     "return=representation",
   );
+  return rows[0];
+}
+
+export async function updateDisplayPreferences(
+  session: Law18Session,
+  changes: Pick<Profile, "personal_schedule_colors" | "rating_average_preferences">,
+) {
+  const rows = await rest<Profile[]>(session, `profiles?id=eq.${enc(session.user.id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(changes),
+  }, "return=representation");
   return rows[0];
 }
 

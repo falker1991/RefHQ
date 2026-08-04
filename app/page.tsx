@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { AuthPanel } from "./auth-panel";
 import { auth, isSessionExpiredError, type Law18Session } from "./auth-client";
@@ -72,6 +72,7 @@ import {
   uploadOrganizationLogo,
   positionAliasKey,
   updateOwnProfile,
+  updateDisplayPreferences,
   undoCheckIn,
   zonedLocalDateTimeToIso,
   type AssignmentRecord,
@@ -103,6 +104,30 @@ type EventData = {
   assessments: AssessmentRecord[];
   coachAssignments: CoachAssignmentRecord[];
 };
+
+const activeFilterMemory = new Map<string, unknown>();
+
+function useActiveFilterState<T>(key: string, initialValue: T) {
+  const [value, setValue] = useState<T>(() => (activeFilterMemory.get(key) as T | undefined) ?? initialValue);
+  useEffect(() => { activeFilterMemory.set(key, value); }, [key, value]);
+  return [value, setValue] as const;
+}
+
+function SavedFilterControls<T>({ filterKey, value, onApply }: { filterKey: string; value: T; onApply: (value: T) => void }) {
+  const storageKey = `law18ref-filter-presets:${filterKey}`;
+  const [presets, setPresets] = useState<{ name: string; value: T }[]>(() => {
+    if (typeof window === "undefined") return [];
+    try { return JSON.parse(localStorage.getItem(storageKey) || "[]"); } catch { return []; }
+  });
+  const save = () => {
+    const name = window.prompt("Name this filter setup:")?.trim();
+    if (!name) return;
+    const next = [...presets.filter((preset) => preset.name !== name), { name, value }];
+    setPresets(next);
+    localStorage.setItem(storageKey, JSON.stringify(next));
+  };
+  return <div className="saved-filter-controls"><button className="secondary" type="button" onClick={save}>Save Filter</button><select aria-label="Saved filters" defaultValue="" onChange={(event) => { const preset = presets.find((item) => item.name === event.target.value); if (preset) onApply(preset.value); event.target.value = ""; }}><option value="">Load Saved Filter</option>{presets.map((preset) => <option value={preset.name} key={preset.name}>{preset.name}</option>)}</select></div>;
+}
 
 function Mark() {
   return <span className="logo-lockup"><img src="/logo-draft-law18referee-management-v4.png" alt="Law18Referee Management" /></span>;
@@ -185,7 +210,23 @@ function EmptyState({ children }: { children: React.ReactNode }) {
   return <div className="panel empty-state"><span>◎</span><p>{children}</p></div>;
 }
 
-function BoardGameTile({ game, data, officials }: { game: GameRecord; data: EventData; officials: Map<string, OfficialRecord> }) {
+function administrativeRatingAverage(officialId: string, position: AssignmentRecord["position"], eventId: string, currentData: EventData, history: { assessments: AssessmentRecord[]; games: GameRecord[]; assignments: AssignmentRecord[] }, preferences?: Profile["rating_average_preferences"]) {
+  const source = preferences?.event_scope === "organization" ? history : currentData;
+  const gameMap = new Map(source.games.map((game) => [game.id, game]));
+  const scores = source.assessments.filter((assessment) => {
+    if (assessment.official_id !== officialId || assessment.status === "draft") return false;
+    const game = gameMap.get(assessment.game_id);
+    if (!game || (preferences?.event_scope !== "organization" && game.event_id !== eventId)) return false;
+    const date = game.starts_at.slice(0, 10);
+    if (preferences?.from && date < preferences.from) return false;
+    if (preferences?.through && date > preferences.through) return false;
+    if (preferences?.match_position) return source.assignments.some((assignment) => assignment.game_id === assessment.game_id && assignment.official_id === officialId && assignment.position === position);
+    return true;
+  }).map(assessmentScore).filter((score): score is number => score !== null);
+  return scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : null;
+}
+
+function BoardGameTile({ game, data, officials, ratingLabel }: { game: GameRecord; data: EventData; officials: Map<string, OfficialRecord>; ratingLabel?: (officialId: string, position: AssignmentRecord["position"]) => string }) {
   const crew = data.assignments.filter((assignment) => assignment.game_id === game.id);
   return <article className="board-game">
     <strong>{game.home_team} <span>vs.</span> {game.away_team}</strong>
@@ -196,17 +237,18 @@ function BoardGameTile({ game, data, officials }: { game: GameRecord; data: Even
       const isChecked = data.checkIns.some((item) => item.official_id === assignment.official_id && item.event_date === gameDate && item.status === "checked_in");
       return <span className={isChecked ? "crew-chip arrived" : "crew-chip"} key={assignment.id} title={positionLabel(assignment.position, assignment.position_title)}>
         <b>{official ? initials(official.full_name) : "?"}</b>
-        <span>{official?.full_name || "Unassigned"}</span>
+        <span>{official?.full_name || "Unassigned"}{official && ratingLabel?.(official.id, assignment.position)}</span>
         <small>{positionLabel(assignment.position, assignment.position_title)}</small>
       </span>;
     })}</div>
   </article>;
 }
 
-function AssignmentBoard({ data }: { data: EventData }) {
+function AssignmentBoard({ data, event, profile, ratingHistory, showRatingAverages }: { data: EventData; event: EventRecord; profile: Profile; ratingHistory: { assessments: AssessmentRecord[]; games: GameRecord[]; assignments: AssignmentRecord[] }; showRatingAverages: boolean }) {
   const officials = useMemo(() => new Map(data.officials.map((official) => [official.id, official])), [data.officials]);
   const [boardView, setBoardView] = useState<"grid" | "field" | "first_assignment">("grid");
   const [collapsedFields, setCollapsedFields] = useState<Set<string>>(new Set());
+  const ratingLabel = showRatingAverages ? (officialId: string, position: AssignmentRecord["position"]) => { const average = administrativeRatingAverage(officialId, position, event.id, data, ratingHistory, profile.rating_average_preferences); return average === null ? "" : ` (${average.toFixed(2)})`; } : undefined;
   const fields = [...new Set(data.games.map((game) => game.field_name))];
   const times = [...new Map(data.games.map((game) => [formatTime(game.starts_at), timeSortValue(game.starts_at)])).entries()]
     .sort((a, b) => a[1] - b[1])
@@ -245,7 +287,7 @@ function AssignmentBoard({ data }: { data: EventData }) {
               const game = data.games.find((item) => item.field_name === field && formatTime(item.starts_at) === time);
               if (!game) return <td key={field} className="board-empty">—</td>;
               return <td key={field}>
-                <BoardGameTile game={game} data={data} officials={officials} />
+                <BoardGameTile game={game} data={data} officials={officials} ratingLabel={ratingLabel} />
               </td>;
             })}</tr>
           ))}</tbody>
@@ -258,11 +300,11 @@ function AssignmentBoard({ data }: { data: EventData }) {
           const next = new Set(current);
           if (next.has(field)) next.delete(field); else next.add(field);
           return next;
-        })}><span><strong>{field}</strong><small>{games.length} game{games.length === 1 ? "" : "s"}</small></span><b>{collapsed ? "+" : "−"}</b></button>{!collapsed && <div className="field-board-games">{games.map((game) => <div className="field-board-game" key={game.id}><time><strong>{formatTime(game.starts_at)}</strong><small>{formatDate(game.starts_at)}</small></time><BoardGameTile game={game} data={data} officials={officials} /></div>)}</div>}</article>;
+        })}><span><strong>{field}</strong><small>{games.length} game{games.length === 1 ? "" : "s"}</small></span><b>{collapsed ? "+" : "−"}</b></button>{!collapsed && <div className="field-board-games">{games.map((game) => <div className="field-board-game" key={game.id}><time><strong>{formatTime(game.starts_at)}</strong><small>{formatDate(game.starts_at)}</small></time><BoardGameTile game={game} data={data} officials={officials} ratingLabel={ratingLabel} /></div>)}</div>}</article>;
       })}</div>}
       {boardView === "first_assignment" && <div className="panel first-assignment-board"><div className="first-assignment-row first-assignment-head"><span>Official</span><span>First Assignment</span><span>Field</span><span>Position</span><span>Status</span></div>{firstAssignments.map(({ official, assignment, game }) => {
         const checked = data.checkIns.some((item) => item.official_id === official.id && item.event_date === game.starts_at.slice(0, 10) && item.status === "checked_in");
-        return <div className={`first-assignment-row ${checked ? "arrived" : ""}`} key={official.id}><span className="official-name-cell"><span className="avatar">{initials(official.full_name)}</span><strong>{official.full_name}</strong></span><span><strong>{formatTime(game.starts_at)}</strong><small>{formatDate(game.starts_at)}</small></span><span>{game.field_name}</span><span>{positionLabel(assignment.position, assignment.position_title)}</span><Status checked={checked} /></div>;
+        return <div className={`first-assignment-row ${checked ? "arrived" : ""}`} key={official.id}><span className="official-name-cell"><span className="avatar">{initials(official.full_name)}</span><strong>{official.full_name}{ratingLabel?.(official.id, assignment.position)}</strong></span><span><strong>{formatTime(game.starts_at)}</strong><small>{formatDate(game.starts_at)}</small></span><span>{game.field_name}</span><span>{positionLabel(assignment.position, assignment.position_title)}</span><Status checked={checked} /></div>;
       })}</div>}
     </section>
   );
@@ -317,14 +359,16 @@ function AssignmentFilterMenu({ label, options, selected, onChange }: { label: s
   return <details className="assignment-filter-menu"><summary>{label}<small>{selected.length ? `${selected.length} selected` : "All"}</small></summary><div><button type="button" className="text-button" onClick={() => onChange([])}>Select All</button>{options.map((option) => <label key={option.id}><input type="checkbox" checked={selected.includes(option.id)} onChange={() => toggle(option.id)} /><span>{option.name}</span></label>)}</div></details>;
 }
 
-function UnifiedAssignmentsView({ session }: { session: Law18Session }) {
+function UnifiedAssignmentsView({ session, profile }: { session: Law18Session; profile: Profile }) {
   const [assignments, setAssignments] = useState<UnifiedAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
-  const [scheduleType, setScheduleType] = useState("all");
-  const [calendarIds, setCalendarIds] = useState<string[]>([]);
-  const [eventIds, setEventIds] = useState<string[]>([]);
-  const [organizationIds, setOrganizationIds] = useState<string[]>([]);
+  const today = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const [scheduleType, setScheduleType] = useActiveFilterState("my-assignments:type", "all");
+  const [calendarIds, setCalendarIds] = useActiveFilterState<string[]>("my-assignments:calendars", []);
+  const [eventIds, setEventIds] = useActiveFilterState<string[]>("my-assignments:events", []);
+  const [organizationIds, setOrganizationIds] = useActiveFilterState<string[]>("my-assignments:organizations", []);
+  const [dateRange, setDateRange] = useActiveFilterState("my-assignments:dates", { from: today, through: "" });
   const refresh = useCallback(async () => {
     setLoading(true);
     setMessage("");
@@ -349,9 +393,15 @@ function UnifiedAssignmentsView({ session }: { session: Law18Session }) {
     if (calendarIds.length && (item.source_type === "law18ref" || !calendarIds.includes(item.source_id))) return false;
     if (eventIds.length && (!item.event_id || !eventIds.includes(item.event_id))) return false;
     if (organizationIds.length && (!item.organization_id || !organizationIds.includes(item.organization_id))) return false;
+    const itemDate = item.starts_at.slice(0, 10);
+    if (dateRange.from && itemDate < dateRange.from) return false;
+    if (dateRange.through && itemDate > dateRange.through) return false;
     return true;
   });
-  const filtersActive = scheduleType !== "all" || calendarIds.length > 0 || eventIds.length > 0 || organizationIds.length > 0;
+  const filtersActive = scheduleType !== "all" || calendarIds.length > 0 || eventIds.length > 0 || organizationIds.length > 0 || dateRange.from !== today || Boolean(dateRange.through);
+  const filterValue = { scheduleType, calendarIds, eventIds, organizationIds, dateRange };
+  const applyFilters = (value: typeof filterValue) => { setScheduleType(value.scheduleType); setCalendarIds(value.calendarIds); setEventIds(value.eventIds); setOrganizationIds(value.organizationIds); setDateRange(value.dateRange); };
+  const assignmentColor = (item: UnifiedAssignment) => profile.personal_schedule_colors?.[item.source_type === "law18ref" ? `org:${item.organization_id}` : `feed:${item.source_id}`] || (item.source_type === "law18ref" ? "#285783" : "#c62f68");
   const conflicts = new Set<string>();
   for (let left = 0; left < visible.length; left += 1) {
     const leftStart = new Date(visible[left].starts_at).getTime();
@@ -375,8 +425,8 @@ function UnifiedAssignmentsView({ session }: { session: Law18Session }) {
   return <section className="page-section unified-assignments-page">
     <div className="section-title"><div><p className="eyebrow">PERSONAL SCHEDULE</p><h1>My Assignments</h1><p>Your Law18Ref games and connected external calendar feeds in one view.</p></div><button className="secondary" disabled={loading} onClick={() => void refresh()}>{loading ? "Refreshing…" : "Refresh"}</button></div>
     {message && <p className="pilot-message">{message}</p>}
-    <div className="assignment-filter-bar"><label>Schedule Type<select value={scheduleType} onChange={(event) => setScheduleType(event.target.value)}><option value="all">All Assignments</option><option value="law18ref">Law18Ref Only</option><option value="external">External Calendars Only</option></select></label><AssignmentFilterMenu label="Calendar Imports" options={calendarOptions} selected={calendarIds} onChange={setCalendarIds} /><AssignmentFilterMenu label="Law18Ref Events" options={eventOptions} selected={eventIds} onChange={setEventIds} /><AssignmentFilterMenu label="Law18Ref Organizations" options={organizationOptions} selected={organizationIds} onChange={setOrganizationIds} /><button className="text-button" disabled={!filtersActive} onClick={() => { setScheduleType("all"); setCalendarIds([]); setEventIds([]); setOrganizationIds([]); }}>Clear Filters</button></div>
-    {!!grouped.size && <div className="panel unified-assignment-list">{[...grouped.entries()].map(([date, items]) => <section className="unified-assignment-day" key={date}><header><h2>{new Intl.DateTimeFormat([], { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date(`${date}T12:00:00`))}</h2><small>{items.length} assignment{items.length === 1 ? "" : "s"}</small></header>{items.map((item) => <div className={`unified-assignment-row ${conflicts.has(item.id) ? "has-conflict" : ""}`} key={`${item.source_type}-${item.id}`}><time>{formatTime(item.starts_at)}</time><div className="unified-assignment-details"><strong>{item.title || "Assignment"}</strong><span>{[item.venue, item.position_title].filter(Boolean).join(" · ") || "Details available from the source platform"}</span></div><div className="unified-assignment-meta"><span className={`source-badge source-${item.source_type}`}>{item.source_name}</span><small>{item.status === "cancelled" ? "Cancelled" : item.source_type === "law18ref" ? "Law18Ref assignment" : "External calendar"}{conflicts.has(item.id) && <b>Schedule conflict</b>}</small></div>{item.source_url ? <a className="unified-source-link" href={item.source_url} target="_blank" rel="noreferrer">Open Source</a> : <span />}</div>)}</section>)}</div>}
+    <div className="assignment-filter-bar"><label>Schedule Type<select value={scheduleType} onChange={(event) => setScheduleType(event.target.value)}><option value="all">All Assignments</option><option value="law18ref">Law18Ref Only</option><option value="external">External Calendars Only</option></select></label><AssignmentFilterMenu label="Calendar Imports" options={calendarOptions} selected={calendarIds} onChange={setCalendarIds} /><AssignmentFilterMenu label="Law18Ref Events" options={eventOptions} selected={eventIds} onChange={setEventIds} /><AssignmentFilterMenu label="Law18Ref Organizations" options={organizationOptions} selected={organizationIds} onChange={setOrganizationIds} /><fieldset className="assignment-date-filter"><legend>Dates</legend><input aria-label="Assignments from" type="date" value={dateRange.from} onChange={(event) => setDateRange({ ...dateRange, from: event.target.value })} /><input aria-label="Assignments through" type="date" min={dateRange.from || undefined} value={dateRange.through} onChange={(event) => setDateRange({ ...dateRange, through: event.target.value })} /></fieldset><SavedFilterControls filterKey="my-assignments" value={filterValue} onApply={applyFilters} /><button className="text-button" disabled={!filtersActive} onClick={() => { setScheduleType("all"); setCalendarIds([]); setEventIds([]); setOrganizationIds([]); setDateRange({ from: today, through: "" }); }}>Clear Filters</button></div>
+    {!!grouped.size && <div className="panel unified-assignment-list">{[...grouped.entries()].map(([date, items]) => <section className="unified-assignment-day" key={date}><header><h2>{new Intl.DateTimeFormat([], { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date(`${date}T12:00:00`))}</h2><small>{items.length} assignment{items.length === 1 ? "" : "s"}</small></header>{items.map((item) => <div className={`unified-assignment-row ${conflicts.has(item.id) ? "has-conflict" : ""}`} style={{ "--assignment-color": assignmentColor(item) } as CSSProperties} key={`${item.source_type}-${item.id}`}><time>{formatTime(item.starts_at)}</time><div className="unified-assignment-details"><strong>{item.title || "Assignment"}</strong><span>{[item.venue, item.position_title].filter(Boolean).join(" · ") || "Details available from the source platform"}</span></div><div className="unified-assignment-meta"><span className={`source-badge source-${item.source_type}`}>{item.source_name}</span><small>{item.status === "cancelled" ? "Cancelled" : item.source_type === "law18ref" ? "Law18Ref assignment" : "External calendar"}{conflicts.has(item.id) && <b>Schedule conflict</b>}</small></div>{item.source_url ? <a className="unified-source-link" href={item.source_url} target="_blank" rel="noreferrer">Open Source</a> : <span />}</div>)}</section>)}</div>}
     {!loading && !visible.length && <EmptyState>{filtersActive ? "No assignments match the selected filters." : "No assignments are available. Add a personal calendar feed in Account Settings or ask your Law18Ref assignor to link your account."}</EmptyState>}
   </section>;
 }
@@ -467,8 +517,8 @@ function RefereeCheckIn({ event, data, session, onCheckedIn }: { event: EventRec
 function CheckInView({ event, data, session, canManageCheckIns, onRefresh }: { event: EventRecord; data: EventData; session: Law18Session; canManageCheckIns: boolean; onRefresh: () => Promise<void> }) {
   const eventDates = [...new Set(data.games.map((game) => game.starts_at.slice(0, 10)))].sort();
   const [eventDate, setEventDate] = useState(eventDates[0] || event.starts_on);
-  const [statusFilter, setStatusFilter] = useState<"all" | "checked_in" | "expected">("all");
-  const [siteFilter, setSiteFilter] = useState("all");
+  const [statusFilters, setStatusFilters] = useActiveFilterState<string[]>(`checkin-status:${event.id}`, []);
+  const [siteFilters, setSiteFilters] = useActiveFilterState<string[]>(`checkin-sites:${event.id}`, []);
   const [rosterSort, setRosterSort] = useState<"first_assignment" | "last_name" | "field">("first_assignment");
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(new Date());
@@ -508,10 +558,12 @@ function CheckInView({ event, data, session, canManageCheckIns, onRefresh }: { e
     const games = [...new Map([...refereeGames, ...coachingGames].map((game) => [game.id, game])).values()]
       .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
     const firstGame = games[0];
+    const firstAssignment = firstGame ? data.assignments.find((assignment) => assignment.game_id === firstGame.id && assignment.official_id === official.id) : undefined;
     return {
       official,
       games,
       firstGame,
+      firstAssignment,
       firstSite: firstGame?.venue_name || firstGame?.field_name || "Unspecified site",
       firstField: firstGame?.field_name || "Unspecified field",
       lastName: official.full_name.trim().split(/\s+/).at(-1) || official.full_name,
@@ -521,8 +573,8 @@ function CheckInView({ event, data, session, canManageCheckIns, onRefresh }: { e
   });
   const sites = [...new Set(rosterDetails.flatMap((item) => item.games.map((game) => game.venue_name || game.field_name || "Unspecified site")))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const visibleRoster = rosterDetails
-    .filter((item) => statusFilter === "all" || (statusFilter === "checked_in" ? item.isChecked : !item.isChecked))
-    .filter((item) => siteFilter === "all" || item.games.some((game) => (game.venue_name || game.field_name || "Unspecified site") === siteFilter))
+    .filter((item) => !statusFilters.length || statusFilters.includes(item.isChecked ? "checked_in" : "expected"))
+    .filter((item) => !siteFilters.length || item.games.some((game) => siteFilters.includes(game.venue_name || game.field_name || "Unspecified site")))
     .sort((a, b) => {
       if (rosterSort === "last_name") return a.lastName.localeCompare(b.lastName) || a.official.full_name.localeCompare(b.official.full_name);
       if (rosterSort === "field") return a.firstField.localeCompare(b.firstField, undefined, { numeric: true }) || (a.firstGame?.starts_at || "").localeCompare(b.firstGame?.starts_at || "");
@@ -593,12 +645,12 @@ function CheckInView({ event, data, session, canManageCheckIns, onRefresh }: { e
     previousCheckedRef.current = { date: eventDate, ids: checked };
   }, [data.checkIns, eventDate]);
   return <section className="page-section">
-    <div className="section-title"><div><p className="eyebrow">TOURNAMENT CHECK-IN</p><h1>Arrival station</h1><p>Attendance refreshes every 15 seconds while this page is visible. Last updated {lastUpdated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}.</p></div><div className="checkin-refresh-tools"><label className="day-picker">Event day<select value={eventDate} onChange={(event) => { setEventDate(event.target.value); setSiteFilter("all"); }}>{eventDates.map((date) => <option value={date} key={date}>{formatDate(date)}</option>)}</select></label><button className="secondary" disabled={refreshing} onClick={() => refreshAttendance()}>{refreshing ? "Refreshing…" : "Refresh Now"}</button></div></div>
+    <div className="section-title"><div><p className="eyebrow">TOURNAMENT CHECK-IN</p><h1>Arrival station</h1><p>Attendance refreshes every 15 seconds while this page is visible. Last updated {lastUpdated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}.</p></div><div className="checkin-refresh-tools"><label className="day-picker">Event day<select value={eventDate} onChange={(event) => { setEventDate(event.target.value); setSiteFilters([]); }}>{eventDates.map((date) => <option value={date} key={date}>{formatDate(date)}</option>)}</select></label><button className="secondary" disabled={refreshing} onClick={() => refreshAttendance()}>{refreshing ? "Refreshing…" : "Refresh Now"}</button></div></div>
     <div className="checkin-grid">
       <article className="panel qr-panel print-qr"><div className="qr"><QRCodeSVG value={url} size={210} /></div><h2>{event.name}</h2><strong>{formatDate(eventDate)}</strong><p>{url}</p><button className="secondary print-button" onClick={() => window.print()}>Print daily QR</button></article>
       <article className="panel roster-panel"><div className="panel-head"><div><p className="eyebrow">LIVE ROSTER</p><h2>{checked.size} checked in</h2><p>{visibleRoster.length} of {roster.length} officials shown</p></div></div>
-        <div className="roster-controls"><label>Status<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option value="all">All officials</option><option value="checked_in">Checked in</option><option value="expected">Not yet checked in</option></select></label><label>Sort by<select value={rosterSort} onChange={(event) => setRosterSort(event.target.value as typeof rosterSort)}><option value="first_assignment">First assignment time</option><option value="last_name">Last name</option><option value="field">Field</option></select></label><label>Site<select value={siteFilter} onChange={(event) => setSiteFilter(event.target.value)}><option value="all">All sites</option>{sites.map((site) => <option value={site} key={site}>{site}</option>)}</select></label></div>
-        {visibleRoster.map(({ official, firstGame, firstSite, isChecked, isCoachExpected }) => <div className={`official-row ${newArrivals.has(official.id) ? "new-arrival" : ""}`} key={official.id}><span className="avatar">{initials(official.full_name)}</span><div className="official-name"><button className="checkin-official-button" onClick={() => setScheduleOfficialId(official.id)}>{official.full_name}</button><span>{isCoachExpected ? `Referee Coach${firstGame ? ` · ${formatTime(firstGame.starts_at)} · ${firstSite}` : ""}` : firstGame ? `${formatTime(firstGame.starts_at)} · ${firstSite} · ${firstGame.field_name}` : "No assignment details"}</span></div><div className="checkin-status-actions"><Status checked={isChecked} />{canManageCheckIns && <button className={isChecked ? "text-button undo-checkin-button" : "secondary manual-checkin-button"} disabled={manualCheckInOfficialId === official.id} onClick={() => toggleManualCheckIn(official, isChecked)}>{manualCheckInOfficialId === official.id ? "Updating…" : isChecked ? "Undo Check-In" : "Check In"}</button>}</div></div>)}
+        <div className="roster-controls"><AssignmentFilterMenu label="Status" options={[{ id: "checked_in", name: "Checked in" }, { id: "expected", name: "Not yet checked in" }]} selected={statusFilters} onChange={setStatusFilters} /><label>Sort by<select value={rosterSort} onChange={(event) => setRosterSort(event.target.value as typeof rosterSort)}><option value="first_assignment">First assignment time</option><option value="last_name">Last name</option><option value="field">Field</option></select></label><AssignmentFilterMenu label="Site" options={sites.map((site) => ({ id: site, name: site }))} selected={siteFilters} onChange={setSiteFilters} /><SavedFilterControls filterKey={`checkin:${event.id}`} value={{ statusFilters, siteFilters, rosterSort }} onApply={(saved) => { setStatusFilters(saved.statusFilters); setSiteFilters(saved.siteFilters); setRosterSort(saved.rosterSort); }} /></div>
+        {visibleRoster.map(({ official, firstGame, firstAssignment, firstSite, isChecked, isCoachExpected }) => <div className={`official-row ${newArrivals.has(official.id) ? "new-arrival" : ""}`} key={official.id}><span className="avatar">{initials(official.full_name)}</span><div className="official-name"><button className="checkin-official-button" onClick={() => setScheduleOfficialId(official.id)}>{official.full_name}</button><span>{isCoachExpected && !firstAssignment ? `Referee Coach${firstGame ? ` · ${formatTime(firstGame.starts_at)} · ${firstSite}` : ""}` : firstGame ? [formatTime(firstGame.starts_at), firstSite, firstGame.field_name, firstGame.age_group, firstGame.gender, firstAssignment ? positionLabel(firstAssignment.position, firstAssignment.position_title) : null].filter(Boolean).join(" · ") : "No assignment details"}</span></div><div className="checkin-status-actions"><Status checked={isChecked} />{canManageCheckIns && <button className={isChecked ? "text-button undo-checkin-button" : "secondary manual-checkin-button"} disabled={manualCheckInOfficialId === official.id} onClick={() => toggleManualCheckIn(official, isChecked)}>{manualCheckInOfficialId === official.id ? "Updating…" : isChecked ? "Undo Check-In" : "Check In"}</button>}</div></div>)}
         {!roster.length && <EmptyState>No officials are assigned on this date.</EmptyState>}
         {roster.length > 0 && !visibleRoster.length && <EmptyState>No officials match these filters.</EmptyState>}
       </article>
@@ -624,13 +676,14 @@ function CheckInView({ event, data, session, canManageCheckIns, onRefresh }: { e
   </section>;
 }
 
-function ScheduleView({ session, event, data, canEdit, canRateCrew, coachView, onRateCrew, onCreated }: { session: Law18Session; event: EventRecord; data: EventData; canEdit: boolean; canRateCrew: boolean; coachView: boolean; onRateCrew: (gameId: string) => void; onCreated: () => void }) {
+function ScheduleView({ session, event, data, canEdit, canRateCrew, coachView, onRateCrew, onCreated, profile, ratingHistory, showRatingAverages }: { session: Law18Session; event: EventRecord; data: EventData; canEdit: boolean; canRateCrew: boolean; coachView: boolean; onRateCrew: (gameId: string) => void; onCreated: () => void; profile: Profile; ratingHistory: { assessments: AssessmentRecord[]; games: GameRecord[]; assignments: AssignmentRecord[] }; showRatingAverages: boolean }) {
   const officials = new Map(data.officials.map((official) => [official.id, official]));
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [sortBy, setSortBy] = useState<"date" | "time" | "site" | "field" | "age_group" | "gender" | "competition">("time");
+  const [sortBy, setSortBy] = useActiveFilterState<"date" | "time" | "site" | "field" | "age_group" | "gender" | "competition">(`schedule-sort:${event.id}`, "time");
   const [game, setGame] = useState({ starts_at: "", field_name: "", home_team: "", away_team: "", division: "" });
+  const ratingLabel = showRatingAverages ? (officialId: string, position: AssignmentRecord["position"]) => { const average = administrativeRatingAverage(officialId, position, event.id, data, ratingHistory, profile.rating_average_preferences); return average === null ? "" : ` (${average.toFixed(2)})`; } : undefined;
   async function addGame() {
     setBusy(true);
     setMessage("");
@@ -666,11 +719,11 @@ function ScheduleView({ session, event, data, canEdit, canRateCrew, coachView, o
     .reduce<Record<string, GameRecord[]>>((groups, item) => ({ ...groups, [groupLabel(item)]: [...(groups[groupLabel(item)] || []), item] }), {});
   return <section className="page-section"><div className="section-title"><div><p className="eyebrow">EVENT SCHEDULE</p><h1>Games and crews</h1><p>{visibleGames.length} imported games</p></div></div>
     <div className="schedule-tools"><label>Sort and group by<select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}><option value="date">Date</option><option value="time">Time</option><option value="site">Site</option><option value="field">Field</option><option value="age_group">Age group</option><option value="gender">Gender</option><option value="competition">Competition</option></select></label>{canEdit && <button className="secondary" onClick={() => setAdding((value) => !value)}>{adding ? "Cancel" : "Add game manually"}</button>}</div>
-    {adding && <article className="panel manual-entry-form"><h2>Add a game to {event.name}</h2><div className="manual-form-grid"><label>Date and time<input type="datetime-local" value={game.starts_at} onChange={(e) => setGame({ ...game, starts_at: e.target.value })} /></label><label>Field<input value={game.field_name} onChange={(e) => setGame({ ...game, field_name: e.target.value })} /></label><label>Home team<input value={game.home_team} onChange={(e) => setGame({ ...game, home_team: e.target.value })} /></label><label>Away team<input value={game.away_team} onChange={(e) => setGame({ ...game, away_team: e.target.value })} /></label><label>Division or competition<input value={game.division} onChange={(e) => setGame({ ...game, division: e.target.value })} /></label></div><button className="primary" disabled={busy || !game.starts_at || !game.field_name.trim() || !game.home_team.trim() || !game.away_team.trim()} onClick={addGame}>{busy ? "Adding…" : "Add game"}</button></article>}
+    {adding && <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) setAdding(false); }}><article className="panel manual-entry-form manual-entry-modal" role="dialog" aria-modal="true" aria-label="Add game manually"><header><h2>Add a game to {event.name}</h2><button className="modal-close-button" aria-label="Close" onClick={() => setAdding(false)}>×</button></header><div className="manual-form-grid"><label>Date and time<input type="datetime-local" value={game.starts_at} onChange={(e) => setGame({ ...game, starts_at: e.target.value })} /></label><label>Field<input value={game.field_name} onChange={(e) => setGame({ ...game, field_name: e.target.value })} /></label><label>Home team<input value={game.home_team} onChange={(e) => setGame({ ...game, home_team: e.target.value })} /></label><label>Away team<input value={game.away_team} onChange={(e) => setGame({ ...game, away_team: e.target.value })} /></label><label>Division or competition<input value={game.division} onChange={(e) => setGame({ ...game, division: e.target.value })} /></label></div><button className="primary" disabled={busy || !game.starts_at || !game.field_name.trim() || !game.home_team.trim() || !game.away_team.trim()} onClick={addGame}>{busy ? "Adding…" : "Add game"}</button></article></div>}
     {message && <p className="pilot-message">{message}</p>}
     <div className="schedule-groups">{Object.entries(groupedGames).map(([label, games]) => <details className="panel schedule-group" open key={label}><summary><span>{label}</span><small>{games.length} game{games.length === 1 ? "" : "s"}</small></summary><div className="schedule-list">{games.map((game) => {
       const crew = data.assignments.filter((assignment) => assignment.game_id === game.id);
-      return <article className="schedule-card coach-schedule-card" key={game.id}><div className="timebox"><time>{formatDate(game.starts_at)}</time><strong>{formatTime(game.starts_at)}</strong><span>{game.field_name}</span></div><div className="schedule-game-details"><h2>{game.home_team} vs. {game.away_team}</h2><p>{[game.age_group, game.gender, game.division].filter(Boolean).join(" · ")}</p><div className="schedule-crew-list">{crew.map((assignment) => <span key={assignment.id}><b>{positionLabel(assignment.position, assignment.position_title)}</b><strong>{officials.get(assignment.official_id)?.full_name || "Open"}</strong></span>)}{!crew.length && <small>No crew assignments are visible for this game.</small>}</div></div>{canRateCrew && isRateableGame(game) && <button className="primary rate-crew-button" onClick={() => onRateCrew(game.id)}>Rate Crew</button>}</article>;
+      return <article className="schedule-card coach-schedule-card" key={game.id}><div className="timebox"><time>{formatDate(game.starts_at)}</time><strong>{formatTime(game.starts_at)}</strong><span>{game.field_name}</span></div><div className="schedule-game-details"><h2>{game.home_team} vs. {game.away_team}</h2><p>{[game.age_group, game.gender, game.division].filter(Boolean).join(" · ")}</p><div className="schedule-crew-list">{crew.map((assignment) => { const checked = data.checkIns.some((item) => item.official_id === assignment.official_id && item.event_date === game.starts_at.slice(0, 10) && item.status === "checked_in"); const official = officials.get(assignment.official_id); return <span className={checked ? "schedule-crew-checked" : ""} key={assignment.id}><b>{positionLabel(assignment.position, assignment.position_title)}</b><strong>{official?.full_name || "Open"}{official && ratingLabel?.(official.id, assignment.position)}</strong></span>; })}{!crew.length && <small>No crew assignments are visible for this game.</small>}</div></div>{canRateCrew && isRateableGame(game) && <button className="primary rate-crew-button" onClick={() => onRateCrew(game.id)}>Rate Crew</button>}</article>;
     })}</div></details>)}</div>
   </section>;
 }
@@ -1039,15 +1092,15 @@ function OfficialsDirectory({
   events: EventRecord[];
   onCreated: () => void;
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useActiveFilterState(`officials-query:${organizationId}`, "");
   const [directoryAssessments, setDirectoryAssessments] = useState<AssessmentRecord[]>([]);
   const eventOfficialIds = new Set(data.officials.map((official) => official.id));
-  const [scope, setScope] = useState<"organization" | "event">("organization");
+  const [scope, setScope] = useActiveFilterState<"organization" | "event">(`officials-scope:${organizationId}`, "organization");
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "email" | "phone" | "badge" | "identity" | "role" | "event" | "rating" | "last_login">("name");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [sortBy, setSortBy] = useActiveFilterState<"name" | "email" | "phone" | "badge" | "identity" | "role" | "event" | "rating" | "last_login">(`officials-sort:${organizationId}`, "name");
+  const [sortDirection, setSortDirection] = useActiveFilterState<"asc" | "desc">(`officials-order:${organizationId}`, "asc");
   const [managing, setManaging] = useState<OfficialRecord | null>(null);
   const [editing, setEditing] = useState<OfficialRecord | null>(null);
   const [removing, setRemoving] = useState<OfficialRecord | null>(null);
@@ -1344,17 +1397,17 @@ function OfficialsDirectory({
     ? ["site_owner", ...organizationRoleChoices]
     : organizationRoleChoices;
   return <section className="page-section">
-    <div className="section-title"><div><p className="eyebrow">OFFICIALS</p><h1>Referee directory</h1><p>Organization officials and the active event roster.</p></div>{canManageOrganizationRoles && <button className="primary" disabled={busy} onClick={copyJoinLink}>{busy ? "Preparing…" : "Copy Join Link"}</button>}</div>
+    <div className="section-title"><div><p className="eyebrow">OFFICIALS</p><h1>Referee directory</h1><p>Organization officials and the active event roster.</p></div></div>
+    <div className="official-directory-actions">{canManageOrganizationRoles && <button className="primary" disabled={busy} onClick={copyJoinLink}>{busy ? "Preparing…" : "Copy Join Link"}</button>}<button className="secondary" onClick={() => setAdding(true)}>Add Official</button>{canManageOrganizationRoles && <button className="secondary" disabled={linkedAccounts.length < 2} onClick={() => setMerging(true)}>Merge Accounts</button>}</div>
     <div className="directory-tools">
       <div className="segmented"><button className={scope === "organization" ? "active" : ""} onClick={() => setScope("organization")}>Organization</button><button className={scope === "event" ? "active" : ""} onClick={() => setScope("event")}>Active event</button></div>
       <input className="search" type="search" placeholder="Search name, email, or badge…" value={query} onChange={(event) => setQuery(event.target.value)} />
       <label className="compact-sort">Sort by<select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}><option value="name">Name</option><option value="email">Email</option><option value="phone">Phone</option><option value="badge">Badge</option><option value="identity">Account status</option><option value="role">Organization role</option><option value="event">Event assignment</option><option value="rating">Average rating</option><option value="last_login">Last login</option></select></label>
       <label className="compact-sort">Order<select value={sortDirection} onChange={(event) => setSortDirection(event.target.value as typeof sortDirection)}><option value="asc">{sortDirectionLabels.asc}</option><option value="desc">{sortDirectionLabels.desc}</option></select></label>
       {canManageOrganizationRoles && <label className="show-archived-ratings"><input type="checkbox" checked={showArchivedOfficials} onChange={(event) => setShowArchivedOfficials(event.target.checked)} /> Show Archived</label>}
-      {canManageOrganizationRoles && <button className="secondary" disabled={linkedAccounts.length < 2} onClick={() => setMerging(true)}>Merge accounts</button>}
-      <button className="secondary" onClick={() => setAdding((value) => !value)}>{adding ? "Cancel" : "Add official"}</button>
+      <SavedFilterControls filterKey="officials-directory" value={{ scope, query, sortBy, sortDirection, showArchivedOfficials }} onApply={(value) => { setScope(value.scope); setQuery(value.query); setSortBy(value.sortBy); setSortDirection(value.sortDirection); setShowArchivedOfficials(value.showArchivedOfficials); }} />
     </div>
-    {adding && <article className="panel manual-entry-form"><h2>Add an official</h2><div className="manual-form-grid"><label>Full name<input value={official.full_name} onChange={(e) => setOfficial({ ...official, full_name: e.target.value })} /></label><label>Primary email<input type="email" value={official.email} onChange={(e) => setOfficial({ ...official, email: e.target.value })} /></label><label>Secondary email<input type="email" value={official.secondary_email} onChange={(e) => setOfficial({ ...official, secondary_email: e.target.value })} /></label><label>Date of birth<input type="date" value={official.date_of_birth} onChange={(e) => setOfficial({ ...official, date_of_birth: e.target.value })} /></label><label>Phone<input value={official.phone} onChange={(e) => setOfficial({ ...official, phone: e.target.value })} /></label><label>Badge or level<input value={official.badge_level} onChange={(e) => setOfficial({ ...official, badge_level: e.target.value })} /></label><fieldset className="role-checkboxes" disabled={!canManageOrganizationRoles}><legend>Organization roles</legend>{organizationRoleChoices.map((role) => <label key={role}><input type="checkbox" checked={official.pending_org_roles.includes(role)} onChange={() => setOfficial({ ...official, pending_org_roles: toggleRole(official.pending_org_roles, role) })} />{roleNames[role]}</label>)}</fieldset></div><button className="primary" disabled={busy || !official.full_name.trim()} onClick={addOfficial}>{busy ? "Adding…" : "Add official"}</button></article>}
+    {adding && <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) setAdding(false); }}><article className="panel manual-entry-form manual-entry-modal" role="dialog" aria-modal="true" aria-label="Add official"><header><h2>Add an Official</h2><button className="modal-close-button" aria-label="Close" onClick={() => setAdding(false)}>×</button></header><div className="manual-form-grid"><label>Full name<input value={official.full_name} onChange={(e) => setOfficial({ ...official, full_name: e.target.value })} /></label><label>Primary email<input type="email" value={official.email} onChange={(e) => setOfficial({ ...official, email: e.target.value })} /></label><label>Secondary email<input type="email" value={official.secondary_email} onChange={(e) => setOfficial({ ...official, secondary_email: e.target.value })} /></label><label>Date of birth<input type="date" value={official.date_of_birth} onChange={(e) => setOfficial({ ...official, date_of_birth: e.target.value })} /></label><label>Phone<input value={official.phone} onChange={(e) => setOfficial({ ...official, phone: e.target.value })} /></label><label>Badge or level<input value={official.badge_level} onChange={(e) => setOfficial({ ...official, badge_level: e.target.value })} /></label><fieldset className="role-checkboxes" disabled={!canManageOrganizationRoles}><legend>Organization roles</legend>{organizationRoleChoices.map((role) => <label key={role}><input type="checkbox" checked={official.pending_org_roles.includes(role)} onChange={() => setOfficial({ ...official, pending_org_roles: toggleRole(official.pending_org_roles, role) })} />{roleNames[role]}</label>)}</fieldset></div><button className="primary" disabled={busy || !official.full_name.trim()} onClick={addOfficial}>{busy ? "Adding…" : "Add Official"}</button></article></div>}
     {message && <p className="pilot-message">{message}</p>}
     {canManageOrganizationRoles && <div className="bulk-action-bar panel"><label><input type="checkbox" checked={filtered.length > 0 && filtered.filter((item) => item.source !== "site_owner_profile").every((item) => selectedOfficialIds.includes(item.id))} onChange={(event) => setSelectedOfficialIds(event.target.checked ? filtered.filter((item) => item.source !== "site_owner_profile").map((item) => item.id) : [])} /> Select All Visible</label><strong>{selectedOfficialIds.length} selected</strong><button className="secondary" disabled={busy || !selectedOfficialIds.length} onClick={() => bulkOfficials("archive")}>Archive</button>{showArchivedOfficials && <button className="secondary" disabled={busy || !selectedOfficialIds.length} onClick={() => bulkOfficials("restore")}>Restore</button>}<button className="danger-button" disabled={busy || !selectedOfficialIds.length} onClick={() => bulkOfficials("delete")}>Delete Eligible</button></div>}
     <article className="panel directory-list">
@@ -1481,13 +1534,13 @@ function AssessmentCenter({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [configuration, setConfiguration] = useState<{ ratingType: EventRecord["rating_type"]; adminOnly: boolean; approvalRole: NonNullable<EventRecord["public_rating_approval_role"]> }>({ ratingType: event.rating_type, adminOnly: event.ratings_admin_only, approvalRole: event.public_rating_approval_role || "inherit" });
-  const [ratingSort, setRatingSort] = useState<"date" | "gender" | "age_group" | "referee" | "position" | "score">("date");
-  const [historyEventId, setHistoryEventId] = useState("all");
-  const [historyFilters, setHistoryFilters] = useState({ referees: [] as string[], ageGroups: [] as string[], genders: [] as string[], positions: [] as string[], scores: [] as string[] });
+  const [ratingSort, setRatingSort] = useActiveFilterState<"date" | "gender" | "age_group" | "referee" | "position" | "score">("ratings-sort", "date");
+  const [historyEventIds, setHistoryEventIds] = useActiveFilterState<string[]>("ratings-events", []);
+  const [historyFilters, setHistoryFilters] = useActiveFilterState("ratings-filters", { referees: [] as string[], ageGroups: [] as string[], genders: [] as string[], positions: [] as string[], scores: [] as string[] });
   const [refereeFilterSearch, setRefereeFilterSearch] = useState("");
-  const [historyDateRange, setHistoryDateRange] = useState({ from: "", through: "" });
+  const [historyDateRange, setHistoryDateRange] = useActiveFilterState("ratings-date-range", { from: "", through: "" });
   const [historyView, setHistoryView] = useState<"individual" | "game">("individual");
-  const [showArchivedRatings, setShowArchivedRatings] = useState(false);
+  const [showArchivedRatings, setShowArchivedRatings] = useActiveFilterState("ratings-show-archived", false);
   const [selectedRatingIds, setSelectedRatingIds] = useState<string[]>([]);
   const [collapsedRatingGameIds, setCollapsedRatingGameIds] = useState<string[]>([]);
   const filterDropdownsRef = useRef<HTMLDivElement>(null);
@@ -1556,13 +1609,13 @@ function AssessmentCenter({
     [key]: current[key].includes(value) ? current[key].filter((item) => item !== value) : [...current[key], value],
   }));
   const activeHistoryFilterCount = Object.values(historyFilters).reduce((sum, values) => sum + values.length, 0)
-    + Number(Boolean(historyDateRange.from)) + Number(Boolean(historyDateRange.through));
+    + historyEventIds.length + Number(Boolean(historyDateRange.from)) + Number(Boolean(historyDateRange.through));
   const sortedAssessments = history.assessments.filter((item) => {
     const game = historyGameMap.get(item.game_id);
     const referee = historyOfficialMap.get(item.official_id)?.full_name || "Unknown official";
     const gameDate = game?.starts_at.slice(0, 10) || "";
     return (!canSubmit || showArchivedRatings || !item.archived_at)
-      && (historyEventId === "all" || game?.event_id === historyEventId)
+      && (!historyEventIds.length || Boolean(game?.event_id && historyEventIds.includes(game.event_id)))
       && (!historyFilters.referees.length || historyFilters.referees.includes(referee))
       && (!historyFilters.ageGroups.length || historyFilters.ageGroups.includes(game?.age_group || "Unspecified age group"))
       && (!historyFilters.genders.length || historyFilters.genders.includes(game?.gender || "Unspecified gender"))
@@ -1814,7 +1867,7 @@ function AssessmentCenter({
       {message && <p className="pilot-message assessment-message">{message}</p>}
       <div className="assessment-actions"><button className="secondary" disabled={busy || !gameAssignments.length} onClick={() => submitCrew("draft")}>Save crew draft</button><button className="primary" disabled={busy || !gameAssignments.length} onClick={() => submitCrew("submitted")}>Submit all ratings</button></div>
     </article>}
-    <article className="panel history ratings-history"><div className="panel-head"><div><p className="eyebrow">HISTORY</p><h2>{sortedAssessments.length} matching rating{sortedAssessments.length === 1 ? "" : "s"}</h2><p className="filtered-rating-average">Average Score <strong>{filteredAverage?.toFixed(2) || "—"}</strong></p></div><div className="rating-history-toolbar"><div className="segmented-control" aria-label="Rating history view"><button className={historyView === "individual" ? "active" : ""} onClick={() => setHistoryView("individual")}>Individual Ratings</button><button className={historyView === "game" ? "active" : ""} onClick={() => setHistoryView("game")}>Full Game Ratings</button></div><button className="secondary" disabled={!sortedAssessments.length} onClick={exportRatings}>Export Spreadsheet</button></div><div className="history-filters"><label className="compact-sort">Event<select value={historyEventId} onChange={(e) => setHistoryEventId(e.target.value)}><option value="all">All permitted events</option>{[...new Set(history.games.map((game) => game.event_id))].map((id) => <option value={id} key={id}>{history.events.find((item) => item.id === id)?.name || events.find((item) => item.id === id)?.name || `Previous event · ${id.slice(0, 8)}`}</option>)}</select></label><label className="compact-sort">Sort by<select value={ratingSort} onChange={(e) => setRatingSort(e.target.value as typeof ratingSort)}><option value="date">Date</option><option value="gender">Gender</option><option value="age_group">Age group</option><option value="referee">Referee</option><option value="position">Position</option><option value="score">Rating Score</option></select></label><label className="show-archived-ratings"><input type="checkbox" checked={showArchivedRatings} onChange={(event) => setShowArchivedRatings(event.target.checked)} /> Show Archived Ratings</label></div></div>
+    <article className="panel history ratings-history"><div className="panel-head"><div><p className="eyebrow">HISTORY</p><h2>{sortedAssessments.length} matching rating{sortedAssessments.length === 1 ? "" : "s"}</h2><p className="filtered-rating-average">Average Score <strong>{filteredAverage?.toFixed(2) || "—"}</strong></p></div><div className="rating-history-toolbar"><div className="segmented-control" aria-label="Rating history view"><button className={historyView === "individual" ? "active" : ""} onClick={() => setHistoryView("individual")}>Individual Ratings</button><button className={historyView === "game" ? "active" : ""} onClick={() => setHistoryView("game")}>Full Game Ratings</button></div><button className="secondary" disabled={!sortedAssessments.length} onClick={exportRatings}>Export Spreadsheet</button></div><div className="history-filters"><AssignmentFilterMenu label="Events" options={[...new Set(history.games.map((game) => game.event_id))].map((id) => ({ id, name: history.events.find((item) => item.id === id)?.name || events.find((item) => item.id === id)?.name || `Previous event · ${id.slice(0, 8)}` }))} selected={historyEventIds} onChange={setHistoryEventIds} /><label className="compact-sort">Sort by<select value={ratingSort} onChange={(e) => setRatingSort(e.target.value as typeof ratingSort)}><option value="date">Date</option><option value="gender">Gender</option><option value="age_group">Age group</option><option value="referee">Referee</option><option value="position">Position</option><option value="score">Rating Score</option></select></label><label className="show-archived-ratings"><input type="checkbox" checked={showArchivedRatings} onChange={(event) => setShowArchivedRatings(event.target.checked)} /> Show Archived Ratings</label></div></div>
       {canConfigure && <div className="bulk-action-bar"><label><input type="checkbox" checked={sortedAssessments.length > 0 && sortedAssessments.every((item) => selectedRatingIds.includes(item.id))} onChange={(event) => setSelectedRatingIds(event.target.checked ? sortedAssessments.map((item) => item.id) : [])} /> Select All Visible</label><strong>{selectedRatingIds.length} selected</strong><button className="secondary" disabled={busy || !selectedRatingIds.length} onClick={() => bulkRatings("archive")}>Archive</button>{showArchivedRatings && <button className="secondary" disabled={busy || !selectedRatingIds.length} onClick={() => bulkRatings("restore")}>Restore</button>}<button className="danger-button" disabled={busy || !selectedRatingIds.length} onClick={() => bulkRatings("delete")}>Delete</button></div>}
       <details className="ratings-filter-panel"><summary>Filter Ratings{activeHistoryFilterCount ? ` · ${activeHistoryFilterCount} selected` : ""}</summary><div className="ratings-filter-grid" ref={filterDropdownsRef}>{([
         ["referees", "Referees", filterOptions.referees],
@@ -1828,7 +1881,7 @@ function AssessmentCenter({
           : options;
         const allSelected = options.length > 0 && options.every((option) => historyFilters[key].includes(option));
         return <details className="rating-filter-dropdown" key={key}><summary><span>{label}</span><small>{historyFilters[key].length ? `${historyFilters[key].length} selected` : "All"}</small></summary><div className="rating-filter-options">{key === "referees" && <input className="rating-referee-search" type="search" value={refereeFilterSearch} placeholder="Search referees…" aria-label="Search referees" onChange={(event) => setRefereeFilterSearch(event.target.value)} />}<label className="rating-select-all"><input type="checkbox" checked={allSelected} onChange={() => setHistoryFilters((current) => ({ ...current, [key]: allSelected ? [] : [...options] }))} /><strong>Select All</strong></label>{visibleOptions.map((option) => <label key={option}><input type="checkbox" checked={historyFilters[key].includes(option)} onChange={() => toggleHistoryFilter(key, option)} /><span>{option}</span></label>)}{!visibleOptions.length && <small>No matching referees</small>}</div></details>;
-      })}<fieldset className="rating-date-range"><legend>Date Range</legend><label>From<input type="date" value={historyDateRange.from} max={historyDateRange.through || undefined} onChange={(event) => setHistoryDateRange((current) => ({ ...current, from: event.target.value }))} /></label><label>Through<input type="date" value={historyDateRange.through} min={historyDateRange.from || undefined} onChange={(event) => setHistoryDateRange((current) => ({ ...current, through: event.target.value }))} /></label></fieldset></div><button className="text-button clear-rating-filters" disabled={!activeHistoryFilterCount} onClick={() => { setHistoryFilters({ referees: [], ageGroups: [], genders: [], positions: [], scores: [] }); setHistoryDateRange({ from: "", through: "" }); setRefereeFilterSearch(""); }}>Clear All Filters</button></details>
+      })}<fieldset className="rating-date-range"><legend>Date Range</legend><label>From<input type="date" value={historyDateRange.from} max={historyDateRange.through || undefined} onChange={(event) => setHistoryDateRange((current) => ({ ...current, from: event.target.value }))} /></label><label>Through<input type="date" value={historyDateRange.through} min={historyDateRange.from || undefined} onChange={(event) => setHistoryDateRange((current) => ({ ...current, through: event.target.value }))} /></label></fieldset></div><div className="rating-filter-actions"><SavedFilterControls filterKey="ratings-history" value={{ historyFilters, historyDateRange, historyEventIds, ratingSort, showArchivedRatings }} onApply={(saved) => { setHistoryFilters(saved.historyFilters); setHistoryDateRange(saved.historyDateRange); setHistoryEventIds(saved.historyEventIds); setRatingSort(saved.ratingSort); setShowArchivedRatings(saved.showArchivedRatings); }} /><button className="text-button clear-rating-filters" disabled={!activeHistoryFilterCount} onClick={() => { setHistoryFilters({ referees: [], ageGroups: [], genders: [], positions: [], scores: [] }); setHistoryEventIds([]); setHistoryDateRange({ from: "", through: "" }); setRefereeFilterSearch(""); }}>Clear All Filters</button></div></details>
       {message && <p className="pilot-message assessment-message">{message}</p>}
       {historyView === "individual" && sortedAssessments.map((assessment) => {
       const score = assessmentScore(assessment);
@@ -2012,10 +2065,10 @@ function CoachWorkspace({
   const [selectedGameIds, setSelectedGameIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [scheduleDate, setScheduleDate] = useState("all");
-  const [scheduleField, setScheduleField] = useState("all");
-  const [scheduleTime, setScheduleTime] = useState("all");
-  const [scheduleQuery, setScheduleQuery] = useState("");
+  const [scheduleDatesFilter, setScheduleDatesFilter] = useActiveFilterState<string[]>(`coaching-dates:${event.id}`, []);
+  const [scheduleFieldsFilter, setScheduleFieldsFilter] = useActiveFilterState<string[]>(`coaching-fields:${event.id}`, []);
+  const [scheduleTimesFilter, setScheduleTimesFilter] = useActiveFilterState<string[]>(`coaching-times:${event.id}`, []);
+  const [scheduleQuery, setScheduleQuery] = useActiveFilterState(`coaching-query:${event.id}`, "");
   const [gameCoachSelections, setGameCoachSelections] = useState<Record<string, string>>({});
   const linkedOfficials = organizationOfficials.filter((official) => official.linked_user_id);
   const visibleAssignments = canManage
@@ -2028,9 +2081,9 @@ function CoachWorkspace({
   const scheduleFields = [...new Set(scheduleGames.map((game) => game.field_name))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const scheduleTimes = [...new Set(scheduleGames.map((game) => formatTime(game.starts_at)))];
   const filteredScheduleGames = scheduleGames.filter((game) =>
-    (scheduleDate === "all" || game.starts_at.startsWith(scheduleDate))
-    && (scheduleField === "all" || game.field_name === scheduleField)
-    && (scheduleTime === "all" || formatTime(game.starts_at) === scheduleTime)
+    (!scheduleDatesFilter.length || scheduleDatesFilter.includes(game.starts_at.slice(0, 10)))
+    && (!scheduleFieldsFilter.length || scheduleFieldsFilter.includes(game.field_name))
+    && (!scheduleTimesFilter.length || scheduleTimesFilter.includes(formatTime(game.starts_at)))
     && `${game.home_team} ${game.away_team} ${game.division || ""} ${game.field_name}`.toLowerCase().includes(scheduleQuery.toLowerCase()));
   function assignmentExists(targetCoachId: string, targetGameId: string | null) {
     return data.coachAssignments.some((assignment) => assignment.coach_id === targetCoachId
@@ -2088,7 +2141,7 @@ function CoachWorkspace({
     {message && <p className="pilot-message">{message}</p>}
     {canManage && <article className="panel coach-schedule-manager">
       <div className="panel-head"><div><p className="eyebrow">FULL SCHEDULE</p><h2>Assign Coaches by Game</h2><p>Filter the event schedule, then choose a coach for any game.</p></div></div>
-      <div className="coach-schedule-filters"><label>Day<select value={scheduleDate} onChange={(event) => setScheduleDate(event.target.value)}><option value="all">All days</option>{scheduleDates.map((date) => <option value={date} key={date}>{formatDate(date)}</option>)}</select></label><label>Field<select value={scheduleField} onChange={(event) => setScheduleField(event.target.value)}><option value="all">All fields</option>{scheduleFields.map((field) => <option value={field} key={field}>{field}</option>)}</select></label><label>Time<select value={scheduleTime} onChange={(event) => setScheduleTime(event.target.value)}><option value="all">All times</option>{scheduleTimes.map((time) => <option value={time} key={time}>{time}</option>)}</select></label><label>Teams, age group, or division<input type="search" value={scheduleQuery} onChange={(event) => setScheduleQuery(event.target.value)} placeholder="Search schedule…" /></label></div>
+      <div className="coach-schedule-filters"><AssignmentFilterMenu label="Day" options={scheduleDates.map((date) => ({ id: date, name: formatDate(date) }))} selected={scheduleDatesFilter} onChange={setScheduleDatesFilter} /><AssignmentFilterMenu label="Field" options={scheduleFields.map((field) => ({ id: field, name: field }))} selected={scheduleFieldsFilter} onChange={setScheduleFieldsFilter} /><AssignmentFilterMenu label="Time" options={scheduleTimes.map((time) => ({ id: time, name: time }))} selected={scheduleTimesFilter} onChange={setScheduleTimesFilter} /><label>Teams, age group, or division<input type="search" value={scheduleQuery} onChange={(event) => setScheduleQuery(event.target.value)} placeholder="Search schedule…" /></label><SavedFilterControls filterKey={`coaching:${event.id}`} value={{ scheduleDatesFilter, scheduleFieldsFilter, scheduleTimesFilter, scheduleQuery }} onApply={(saved) => { setScheduleDatesFilter(saved.scheduleDatesFilter); setScheduleFieldsFilter(saved.scheduleFieldsFilter); setScheduleTimesFilter(saved.scheduleTimesFilter); setScheduleQuery(saved.scheduleQuery); }} /></div>
       <div className="coach-schedule-list">{filteredScheduleGames.map((game) => {
         const assigned = data.coachAssignments.filter((assignment) => assignment.game_id === game.id).map((assignment) => officialByUser.get(assignment.coach_id)?.full_name).filter(Boolean);
         return <div className="coach-schedule-row" key={game.id}><time><strong>{formatTime(game.starts_at)}</strong><small>{formatDate(game.starts_at)}</small></time><div><strong>{game.home_team} vs. {game.away_team}</strong><small>{game.field_name}{game.division ? ` · ${game.division}` : ""}</small><span>{assigned.length ? `Assigned: ${assigned.join(", ")}` : "No coach assigned"}</span></div><select aria-label={`Coach for ${game.home_team} versus ${game.away_team}`} value={gameCoachSelections[game.id] || ""} onChange={(event) => setGameCoachSelections((current) => ({ ...current, [game.id]: event.target.value }))}><option value="">Choose coach</option>{linkedOfficials.map((official) => <option value={official.linked_user_id!} key={official.id}>{official.full_name}</option>)}</select><button className="secondary" disabled={busy || !gameCoachSelections[game.id]} onClick={() => assignScheduleGame(game.id)}>Assign</button></div>;
@@ -2241,14 +2294,15 @@ function OrganizationActivity({
   </section>;
 }
 
-function ConnectedSchedules({ session }: { session: Law18Session }) {
+function ConnectedSchedules({ session, profile, onUpdated }: { session: Law18Session; profile: Profile; onUpdated: (profile: Profile) => void }) {
   const [feeds, setFeeds] = useState<CalendarFeedConnection[]>([]);
+  const [scheduleSources, setScheduleSources] = useState<UnifiedAssignment[]>([]);
   const [provider, setProvider] = useState<CalendarFeedConnection["provider"]>("assignr");
   const [displayName, setDisplayName] = useState("Assignr");
   const [feedUrl, setFeedUrl] = useState("");
   const [busyId, setBusyId] = useState("");
   const [message, setMessage] = useState("");
-  const refresh = useCallback(() => loadCalendarFeedConnections(session).then(setFeeds), [session]);
+  const refresh = useCallback(() => Promise.all([loadCalendarFeedConnections(session), loadUnifiedAssignments(session)]).then(([connections, assignments]) => { setFeeds(connections); setScheduleSources(assignments); }), [session]);
   useEffect(() => { refresh().catch((reason) => setMessage(reason instanceof Error ? reason.message : "Unable to load connected schedules.")); }, [refresh]);
   async function connect() {
     setBusyId("new"); setMessage("");
@@ -2283,12 +2337,21 @@ function ConnectedSchedules({ session }: { session: Law18Session }) {
     catch (reason) { setMessage(reason instanceof Error ? reason.message : "Unable to remove this calendar feed."); }
     finally { setBusyId(""); }
   }
+  async function saveColor(key: string, color: string) {
+    try {
+      const updated = await updateDisplayPreferences(session, { personal_schedule_colors: { ...(profile.personal_schedule_colors || {}), [key]: color }, rating_average_preferences: profile.rating_average_preferences || {} });
+      if (updated) onUpdated(updated);
+      setMessage("Schedule color saved.");
+    } catch (reason) { setMessage(reason instanceof Error ? reason.message : "Unable to save this schedule color."); }
+  }
   const providerNames: Record<CalendarFeedConnection["provider"], string> = { assignr: "Assignr", arbiter: "ArbiterSports", usofficials: "USOfficials", refquest: "RefQuest / RQ+", other: "Other ICS feed" };
+  const organizationSources = [...new Map(scheduleSources.filter((item) => item.organization_id).map((item) => [item.organization_id!, { id: item.organization_id!, name: item.organization_name || "Law18Ref organization" }])).values()];
   return <article className="panel connected-schedules-card">
     <div className="panel-head"><div><p className="eyebrow">CONNECTED SCHEDULES</p><h2>Personal Calendar Feeds</h2><p>Add private iCalendar/ICS feeds to combine external games with your Law18Ref assignments.</p></div></div>
     <div className="calendar-feed-form"><label>Platform<select value={provider} onChange={(event) => { const next = event.target.value as CalendarFeedConnection["provider"]; setProvider(next); setDisplayName(providerNames[next]); }}><option value="assignr">Assignr</option><option value="arbiter">ArbiterSports</option><option value="usofficials">USOfficials</option><option value="refquest">RefQuest / RQ+</option><option value="other">Other ICS feed</option></select></label><label>Schedule name<input maxLength={80} value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label><label className="calendar-feed-url">Private calendar-feed URL<input type="url" inputMode="url" autoComplete="off" placeholder="https://…/calendar.ics" value={feedUrl} onChange={(event) => setFeedUrl(event.target.value)} /><small>The URL is encrypted and will not be displayed again after it is saved.</small></label><button className="primary" disabled={busyId === "new" || !displayName.trim() || !feedUrl.trim()} onClick={() => void connect()}>{busyId === "new" ? "Connecting…" : "Connect Feed"}</button></div>
     {message && <p className="pilot-message">{message}</p>}
-    <div className="calendar-feed-list">{feeds.map((feed) => <section key={feed.id}><div><strong>{feed.display_name}</strong><small>{providerNames[feed.provider]} · <span className={`feed-status status-${feed.sync_status}`}>{feed.sync_status}</span></small><small>{feed.last_synced_at ? `Last synchronized ${new Intl.DateTimeFormat([], { dateStyle: "medium", timeStyle: "short" }).format(new Date(feed.last_synced_at))}` : "Waiting for first synchronization"}</small>{feed.last_error && <small className="feed-error">{feed.last_error}</small>}</div><div><button className="secondary" disabled={busyId === feed.id || !feed.active} onClick={() => void synchronize(feed)}>Sync Now</button><button className="secondary" disabled={busyId === feed.id} onClick={() => void toggle(feed)}>{feed.active ? "Pause" : "Resume"}</button><button className="danger-button" disabled={busyId === feed.id} onClick={() => void remove(feed)}>Remove</button></div></section>)}{!feeds.length && <EmptyState>No external calendar feeds are connected.</EmptyState>}</div>
+    <div className="calendar-feed-list">{feeds.map((feed) => <section key={feed.id}><div><strong>{feed.display_name}</strong><small>{providerNames[feed.provider]} · <span className={`feed-status status-${feed.sync_status}`}>{feed.sync_status}</span></small><small>{feed.last_synced_at ? `Last synchronized ${new Intl.DateTimeFormat([], { dateStyle: "medium", timeStyle: "short" }).format(new Date(feed.last_synced_at))}` : "Waiting for first synchronization"}</small>{feed.last_error && <small className="feed-error">{feed.last_error}</small>}</div><label className="calendar-color-picker">Calendar color<input type="color" value={profile.personal_schedule_colors?.[`feed:${feed.id}`] || "#c62f68"} onChange={(event) => void saveColor(`feed:${feed.id}`, event.target.value)} /></label><div><button className="secondary" disabled={busyId === feed.id || !feed.active} onClick={() => void synchronize(feed)}>Sync Now</button><button className="secondary" disabled={busyId === feed.id} onClick={() => void toggle(feed)}>{feed.active ? "Pause" : "Resume"}</button><button className="danger-button" disabled={busyId === feed.id} onClick={() => void remove(feed)}>Remove</button></div></section>)}{!feeds.length && <EmptyState>No external calendar feeds are connected.</EmptyState>}</div>
+    {!!organizationSources.length && <div className="organization-calendar-colors"><h3>Law18Ref Organization Colors</h3>{organizationSources.map((organization) => <label key={organization.id}><span>{organization.name}</span><input type="color" value={profile.personal_schedule_colors?.[`org:${organization.id}`] || "#285783"} onChange={(event) => void saveColor(`org:${organization.id}`, event.target.value)} /></label>)}</div>}
   </article>;
 }
 
@@ -2308,6 +2371,7 @@ function AccountSettings({
   const [secondaryEmail, setSecondaryEmail] = useState(profile.secondary_email || "");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [ratingAveragePreferences, setRatingAveragePreferences] = useState({ event_scope: profile.rating_average_preferences?.event_scope || "current_event", match_position: profile.rating_average_preferences?.match_position || false, from: profile.rating_average_preferences?.from || "", through: profile.rating_average_preferences?.through || "" });
   const minor = Boolean(dateOfBirth && new Date(dateOfBirth) > new Date(new Date().setFullYear(new Date().getFullYear() - 18)));
   async function save() {
     if (minor && !secondaryEmail.trim()) {
@@ -2336,6 +2400,15 @@ function AccountSettings({
       setBusy(false);
     }
   }
+  async function saveRatingAveragePreferences() {
+    setBusy(true); setMessage("");
+    try {
+      const updated = await updateDisplayPreferences(session, { personal_schedule_colors: profile.personal_schedule_colors || {}, rating_average_preferences: ratingAveragePreferences as Profile["rating_average_preferences"] });
+      if (updated) onUpdated(updated);
+      setMessage("Assignment rating display settings saved.");
+    } catch (reason) { setMessage(reason instanceof Error ? reason.message : "Unable to save rating display settings."); }
+    finally { setBusy(false); }
+  }
   return <section className="page-section settings-page">
     <div className="section-title"><div><p className="eyebrow">ACCOUNT SETTINGS</p><h1>Personal information</h1><p>Keep the details your organizations may need current.</p></div></div>
     <article className="panel settings-card">
@@ -2349,7 +2422,8 @@ function AccountSettings({
       {message && <p className="pilot-message">{message}</p>}
       <button className="primary" disabled={busy || !fullName.trim()} onClick={save}>{busy ? "Saving…" : "Save account details"}</button>
     </article>
-    <ConnectedSchedules session={session} />
+    <article className="panel settings-card rating-average-settings"><div><p className="eyebrow">ASSIGNMENT DISPLAYS</p><h2>Referee Rating Averages</h2><p>Choose which submitted ratings contribute to the averages shown beside referee names in administrative schedule and assigning views.</p></div><label>Rating history<select value={ratingAveragePreferences.event_scope} onChange={(event) => setRatingAveragePreferences({ ...ratingAveragePreferences, event_scope: event.target.value as "current_event" | "organization" })}><option value="current_event">Current event only</option><option value="organization">All permitted ratings in the organization</option></select></label><label className="preference-check"><input type="checkbox" checked={ratingAveragePreferences.match_position} onChange={(event) => setRatingAveragePreferences({ ...ratingAveragePreferences, match_position: event.target.checked })} /> Match the assignment position</label><label>From date<input type="date" value={ratingAveragePreferences.from} onChange={(event) => setRatingAveragePreferences({ ...ratingAveragePreferences, from: event.target.value })} /></label><label>Through date<input type="date" min={ratingAveragePreferences.from || undefined} value={ratingAveragePreferences.through} onChange={(event) => setRatingAveragePreferences({ ...ratingAveragePreferences, through: event.target.value })} /></label><button className="primary" disabled={busy} onClick={() => void saveRatingAveragePreferences()}>Save Rating Display</button></article>
+    <ConnectedSchedules session={session} profile={profile} onUpdated={onUpdated} />
   </section>;
 }
 
@@ -2625,6 +2699,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
   const [ratingModalGameId, setRatingModalGameId] = useState<string | null>(null);
   const [organizationActionMessage, setOrganizationActionMessage] = useState("");
   const [qrCheckInMessage, setQrCheckInMessage] = useState("");
+  const [administrativeRatingHistory, setAdministrativeRatingHistory] = useState<{ assessments: AssessmentRecord[]; games: GameRecord[]; assignments: AssignmentRecord[] }>({ assessments: [], games: [], assignments: [] });
   const allRoles = new Set<MembershipRole>([
     ...(profile?.is_site_owner ? ["site_owner" as MembershipRole] : []),
     ...organizationRoles,
@@ -2661,6 +2736,16 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     || (effectiveRatingApprovalRole === "organization_admin" && organizationRoles.includes("organization_admin"))
     || (effectiveRatingApprovalRole === "event_admin" && eventRoles.includes("event_admin")),
   );
+
+  useEffect(() => {
+    if (!isAdministrativeStaff) {
+      setAdministrativeRatingHistory({ assessments: [], games: [], assignments: [] });
+      return;
+    }
+    loadAuthorizedRatingHistory(session)
+      .then((history) => setAdministrativeRatingHistory({ assessments: history.assessments, games: history.games, assignments: history.assignments }))
+      .catch(() => setAdministrativeRatingHistory({ assessments: [], games: [], assignments: [] }));
+  }, [isAdministrativeStaff, session]);
 
   const refresh = useCallback(async (selectedId = eventId) => {
     if (!selectedId) return;
@@ -2940,10 +3025,10 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       {organizationActionMessage && <p className="pilot-message organization-message">{organizationActionMessage}</p>}
       {qrCheckInMessage && <p className="pilot-message qr-checkin-message">{qrCheckInMessage}</p>}
       {profile && view === "dashboard" && <DashboardHome profile={profile} event={event} data={data} events={events} adminView={isAdministrativeStaff} onNavigate={setView} />}
-      {view === "board" && (isStaff ? event && <AssignmentBoard data={data} /> : <UnifiedAssignmentsView session={session} />)}
-      {view === "my_assignments" && <UnifiedAssignmentsView session={session} />}
+      {view === "board" && (isStaff ? event && profile && <AssignmentBoard data={data} event={event} profile={profile} ratingHistory={administrativeRatingHistory} showRatingAverages={isAdministrativeStaff} /> : profile && <UnifiedAssignmentsView session={session} profile={profile} />)}
+      {view === "my_assignments" && profile && <UnifiedAssignmentsView session={session} profile={profile} />}
       {event && view === "checkin" && (isStaff ? <CheckInView event={event} data={data} session={session} canManageCheckIns={isAdministrativeStaff} onRefresh={refreshCheckIns} /> : refereeHasCurrentOrFutureAssignment || coachHasCurrentOrFutureAssignment ? <RefereeCheckIn event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} /> : null)}
-      {event && view === "schedule" && (isStaff || isCoach) && <ScheduleView session={session} event={event} data={data} canEdit={isAdministrativeStaff} canRateCrew={isCoach && canAssess} coachView={isCoach && !isAdministrativeStaff} onRateCrew={setRatingModalGameId} onCreated={() => refresh(event.id)} />}
+      {event && profile && view === "schedule" && (isStaff || isCoach) && <ScheduleView session={session} event={event} data={data} canEdit={isAdministrativeStaff} canRateCrew={isCoach && canAssess} coachView={isCoach && !isAdministrativeStaff} onRateCrew={setRatingModalGameId} onCreated={() => refresh(event.id)} profile={profile} ratingHistory={administrativeRatingHistory} showRatingAverages={isAdministrativeStaff} />}
       {isAdministrativeStaff && profile && organization && view === "officials" && <OfficialsDirectory session={session} profile={profile} organizationRoles={organizationRoles} eventRoles={eventRoles} canManageOrganizationRoles={Boolean(profile.is_site_owner || organizationRoles.includes("organization_admin"))} organizationId={organization.id} officials={organizationOfficials} data={data} event={event} events={events} onCreated={() => loadOrganizationOfficials(session, organization.id).then(setOrganizationOfficials)} />}
       {event && view === "coaching" && isAdministrativeStaff && <CoachWorkspace session={session} event={event} data={data} organizationOfficials={organizationOfficials} canManage onSaved={() => refresh(event.id)} />}
       {event && organization && view === "assessments" && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={canConfigureRatings} canApprovePublic={canApprovePublicRatings} hideWorkspace={canAssess} onOpenRating={() => setRatingModalGameId("")} onEditRating={async (gameId, targetEventId) => { if (targetEventId !== event.id) await switchEvent(targetEventId); setRatingModalGameId(gameId); }} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
@@ -2956,7 +3041,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.10.4</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.11.0</span></footer>
   </main>;
 }
 

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.10.4 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.11.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,10 +14,10 @@ test("Version 0.10.4 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.10\.4/);
+  assert.match(page, /Version 0\.11\.0/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.10.4");
+  assert.equal(JSON.parse(packageJson).version, "0.11.0");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -53,6 +53,39 @@ test("personal calendar feeds are encrypted and appear in a unified private sche
   assert.match(migration, /create or replace function public\.my_external_assignments/);
   assert.match(serviceGrants, /personal_calendar_feeds to service_role/);
   assert.match(serviceGrants, /external_calendar_assignments to service_role/);
+});
+
+test("Version 0.11.0 adds color-coded date-filtered assignments and reusable session filters", async () => {
+  const [page, client, css, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("app/globals.css"),
+    read("supabase/migrations/202608030034_personal_schedule_display_preferences.sql"),
+  ]);
+  assert.match(page, /my-assignments:dates/);
+  assert.match(page, /from: today/);
+  assert.match(page, /personal_schedule_colors/);
+  assert.match(page, /SavedFilterControls/);
+  assert.match(page, /activeFilterMemory/);
+  assert.match(page, /coaching-dates:/);
+  assert.match(page, /checkin-status:/);
+  assert.match(page, /historyEventIds/);
+  assert.match(client, /updateDisplayPreferences/);
+  assert.match(css, /--assignment-color/);
+  assert.match(migration, /rating_average_preferences/);
+});
+
+test("administrative operations show rating averages and richer attendance context", async () => {
+  const [page, css] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
+  assert.match(page, /administrativeRatingAverage/);
+  assert.match(page, /rating_average_preferences/);
+  assert.match(page, /firstAssignment/);
+  assert.match(page, /firstGame\.age_group/);
+  assert.match(page, /firstGame\.gender/);
+  assert.match(page, /schedule-crew-checked/);
+  assert.match(page, /official-directory-actions/);
+  assert.match(page, /manual-entry-modal/);
+  assert.match(css, /\.official-directory-actions/);
 });
 
 test("sessions refresh automatically and non-auth failures preserve login", async () => {

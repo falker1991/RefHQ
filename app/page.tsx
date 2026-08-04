@@ -1171,6 +1171,7 @@ function OfficialsDirectory({
     secondary_email: profile.secondary_email,
     date_of_birth: profile.date_of_birth,
     phone: profile.phone,
+    personal_contact_locked: profile.personal_contact_locked,
     linked_user_id: profile.id,
     identity_status: "linked",
     source: "site_owner_profile",
@@ -1504,13 +1505,13 @@ function OfficialsDirectory({
     {editing && <div className="confirmation-backdrop" role="presentation"><section className="confirmation-dialog role-dialog official-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="edit-official-title">
       <header className="official-edit-header"><p className="eyebrow">OFFICIAL RECORD</p><h2 id="edit-official-title">Edit {editing.full_name}</h2></header>
       <div className="official-edit-body">
-        {editing.linked_user_id && <p className="linked-account-note">This account is linked. The user manages their personal information in Account Settings; organization staff can update the badge and organization roles.</p>}
+        {editing.linked_user_id && <p className="linked-account-note">{editing.personal_contact_locked ? "This user has locked their personal contact information. Staff may still update badge, organization roles, and event permissions." : "This linked user has left contact editing unlocked for authorized staff. They can lock it at any time in Account Settings."}</p>}
         <section className="official-edit-section"><h3>Personal information</h3><div className="official-fields-grid">
-          <label>Full name<input value={editValues.full_name} disabled={Boolean(editing.linked_user_id)} onChange={(e) => setEditValues({ ...editValues, full_name: e.target.value })} /></label>
-          <label>Primary email<input type="email" value={editValues.email} disabled={Boolean(editing.linked_user_id)} onChange={(e) => setEditValues({ ...editValues, email: e.target.value })} /></label>
-          <label>Secondary email<input type="email" value={editValues.secondary_email} disabled={Boolean(editing.linked_user_id)} onChange={(e) => setEditValues({ ...editValues, secondary_email: e.target.value })} /></label>
-          <label>Date of birth<input type="date" value={editValues.date_of_birth} disabled={Boolean(editing.linked_user_id)} onChange={(e) => setEditValues({ ...editValues, date_of_birth: e.target.value })} /></label>
-          <label>Phone<input value={editValues.phone} disabled={Boolean(editing.linked_user_id)} onChange={(e) => setEditValues({ ...editValues, phone: e.target.value })} /></label>
+          <label>Full name<input value={editValues.full_name} disabled={Boolean(editing.personal_contact_locked)} onChange={(e) => setEditValues({ ...editValues, full_name: e.target.value })} /></label>
+          <label>Primary email<input type="email" value={editValues.email} disabled={Boolean(editing.personal_contact_locked)} onChange={(e) => setEditValues({ ...editValues, email: e.target.value })} /></label>
+          <label>Secondary email<input type="email" value={editValues.secondary_email} disabled={Boolean(editing.personal_contact_locked)} onChange={(e) => setEditValues({ ...editValues, secondary_email: e.target.value })} /></label>
+          <label>Date of birth<input type="date" value={editValues.date_of_birth} disabled={Boolean(editing.personal_contact_locked)} onChange={(e) => setEditValues({ ...editValues, date_of_birth: e.target.value })} /></label>
+          <label>Phone<input value={editValues.phone} disabled={Boolean(editing.personal_contact_locked)} onChange={(e) => setEditValues({ ...editValues, phone: e.target.value })} /></label>
           <label>Badge or level<input value={editValues.badge_level} onChange={(e) => setEditValues({ ...editValues, badge_level: e.target.value })} /></label>
         </div></section>
         <section className="official-edit-section"><h3>Organization roles</h3><fieldset className={`official-role-grid ${editingIsSiteOwner ? "owner-locked" : ""}`} disabled={editingIsSiteOwner || !canManageOrganizationRoles}>{displayedOrganizationRoles.map((role) => {
@@ -2451,6 +2452,7 @@ function AccountSettings({
   const [phone, setPhone] = useState(profile.phone || "");
   const [dateOfBirth, setDateOfBirth] = useState(profile.date_of_birth || "");
   const [secondaryEmail, setSecondaryEmail] = useState(profile.secondary_email || "");
+  const [personalContactLocked, setPersonalContactLocked] = useState(Boolean(profile.personal_contact_locked));
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [ratingAveragePreferences, setRatingAveragePreferences] = useState({ event_scope: profile.rating_average_preferences?.event_scope || "current_event", display_mode: profile.rating_average_preferences?.display_mode || (profile.rating_average_preferences?.match_position ? "position" : "overall"), match_position: profile.rating_average_preferences?.match_position || false, from: profile.rating_average_preferences?.from || "", through: profile.rating_average_preferences?.through || "" });
@@ -2473,6 +2475,7 @@ function AccountSettings({
         phone: phone.trim() || null,
         date_of_birth: dateOfBirth || null,
         secondary_email: secondaryEmail.trim().toLowerCase() || null,
+        personal_contact_locked: personalContactLocked,
       });
       if (updated) onUpdated(updated);
       setMessage("Your account details were saved.");
@@ -2500,6 +2503,7 @@ function AccountSettings({
       <label>Date of birth<input type="date" required value={dateOfBirth} onChange={(event) => setDateOfBirth(event.target.value)} /></label>
       <label>{minor ? "Parent or guardian email" : "Secondary email"}<input type="email" required={minor} value={secondaryEmail} onChange={(event) => setSecondaryEmail(event.target.value)} placeholder={minor ? "Required for referees under 18" : "Optional"} /></label>
       <label>Phone number<input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Optional" /></label>
+      <label className="visibility-lock personal-contact-lock"><input type="checkbox" checked={personalContactLocked} onChange={(event) => setPersonalContactLocked(event.target.checked)} /><span><strong>Lock personal contact information</strong><small>Prevents organization and event staff from editing your name, email addresses, date of birth, or phone number. They can still manage your organization and event permissions.</small></span></label>
       <label>Role<input value={profile.role} disabled /></label>
       {message && <p className="pilot-message">{message}</p>}
       <button className="primary" disabled={busy || !fullName.trim()} onClick={save}>{busy ? "Saving…" : "Save account details"}</button>
@@ -3137,7 +3141,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal official={official} event={event} data={data} canEdit={isAdministrativeStaff} onClose={() => setScheduleOfficialId(null)} onEdit={() => { setScheduleOfficialId(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.12.2</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.12.3</span></footer>
   </main>;
 }
 

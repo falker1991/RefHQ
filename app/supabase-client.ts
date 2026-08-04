@@ -14,6 +14,7 @@ export type Profile = {
   preferred_name?: string | null;
   is_site_owner?: boolean;
   phone?: string | null;
+  personal_contact_locked?: boolean;
   personal_schedule_colors?: Record<string, string>;
   personal_schedule_color_modes?: Record<string, Array<"mark" | "card" | "label">>;
   rating_average_preferences?: {
@@ -103,6 +104,7 @@ export type OfficialRecord = {
   secondary_email?: string | null;
   date_of_birth?: string | null;
   phone?: string | null;
+  personal_contact_locked?: boolean;
   badge_level?: string | null;
   source?: string;
   source_official_id?: string | null;
@@ -578,7 +580,7 @@ export async function deleteAppearanceTheme(session: Law18Session, themeId: stri
 
 export async function updateOwnProfile(
   session: Law18Session,
-  changes: Pick<Profile, "full_name" | "phone" | "secondary_email" | "date_of_birth" | "preferred_name">,
+  changes: Pick<Profile, "full_name" | "phone" | "secondary_email" | "date_of_birth" | "preferred_name" | "personal_contact_locked">,
 ) {
   const rows = await rest<Profile[]>(
     session,
@@ -1534,7 +1536,7 @@ export async function updateOfficial(
   if (existing.length) throw new Error("That primary email is already used by another official in this organization.");
 
   const intendedRoles = values.pending_org_roles?.length ? values.pending_org_roles : ["referee" as MembershipRole];
-  const changes = official.linked_user_id
+  const changes = official.linked_user_id && official.personal_contact_locked
     ? {
       badge_level: values.badge_level?.trim() || null,
       pending_org_role: intendedRoles[0],

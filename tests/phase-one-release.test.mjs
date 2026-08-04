@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.12.2 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.12.3 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,10 +14,10 @@ test("Version 0.12.2 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.12\.2/);
+  assert.match(page, /Version 0\.12\.3/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.12.2");
+  assert.equal(JSON.parse(packageJson).version, "0.12.3");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -114,6 +114,21 @@ test("v0.12.0 prevents profile self-escalation and enforces the organization rol
   assert.match(page, /canChangeOrganizationRole/);
   assert.match(page, /canChangeEventRole/);
   assert.match(client, /rpc\/secure_merge_organization_accounts/);
+});
+
+test("users can lock personal contact fields without locking organization or event permissions", async () => {
+  const [page, client, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/202608040038_personal_contact_lock.sql"),
+  ]);
+  assert.match(page, /Lock personal contact information/);
+  assert.match(page, /editing\.personal_contact_locked/);
+  assert.match(page, /They can still manage your organization and event permissions/);
+  assert.match(client, /personal_contact_locked\?: boolean/);
+  assert.match(migration, /protect_locked_official_contact/);
+  assert.match(migration, /Only the account owner can change the personal contact lock/);
+  assert.match(migration, /This user has locked their personal contact information/);
 });
 
 test("administrative operations show rating averages and richer attendance context", async () => {

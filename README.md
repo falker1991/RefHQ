@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.12.2 integrates active-event roles, schedule scope, coaching tools, and rating-history permissions into the official editor. It retains the shared full-event schedule modal introduced in v0.12.1 and the database-enforced role hierarchy introduced in v0.12.0.
+Version 0.12.3 lets users lock their personal contact information while leaving organization and event permission management available to authorized staff. It retains the integrated active-event permissions introduced in v0.12.2.
 
 Bulk lifecycle management remains available for officials, ratings, and events. Games and assignments are designed to join the same workflow when manual schedule editing is introduced.
 

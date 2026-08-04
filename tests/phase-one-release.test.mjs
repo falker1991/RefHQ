@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.11.2 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.12.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,10 +14,10 @@ test("Version 0.11.2 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.11\.2/);
+  assert.match(page, /Version 0\.12\.0/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.11.2");
+  assert.equal(JSON.parse(packageJson).version, "0.12.0");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -91,6 +91,29 @@ test("calendar colors support combined presentation modes and custom dropdowns c
   assert.match(client, /personal_schedule_color_modes/);
   assert.match(css, /calendar-color-label/);
   assert.match(migration, /personal_schedule_color_modes/);
+});
+
+test("v0.12.0 prevents profile self-escalation and enforces the organization role hierarchy", async () => {
+  const [page, client, roleMigration, securityMigration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/202608040036_organization_director_role.sql"),
+    read("supabase/migrations/202608040037_role_hierarchy_security.sql"),
+  ]);
+  assert.match(roleMigration, /organization_director/);
+  assert.match(securityMigration, /protect_profile_security_fields/);
+  assert.match(securityMigration, /new\.is_site_owner is distinct from old\.is_site_owner/);
+  assert.match(securityMigration, /protect_official_pending_roles/);
+  assert.match(securityMigration, /cleared leaders insert organization memberships/);
+  assert.match(securityMigration, /cleared staff insert event memberships/);
+  assert.match(securityMigration, /role in \('site_coordinator','referee_coach'\)/);
+  assert.match(securityMigration, /organization_join_links_referee_only/);
+  assert.match(securityMigration, /secure_merge_organization_accounts/);
+  assert.match(securityMigration, /revoke execute on function public\.merge_organization_accounts/);
+  assert.match(page, /Organization director/);
+  assert.match(page, /canChangeOrganizationRole/);
+  assert.match(page, /canChangeEventRole/);
+  assert.match(client, /rpc\/secure_merge_organization_accounts/);
 });
 
 test("administrative operations show rating averages and richer attendance context", async () => {
@@ -259,8 +282,8 @@ test("site owner and delegated administrator access follow protected removal hie
     read("app/supabase-client.ts"),
     read("supabase/migrations/202607300027_protected_administrator_roles.sql"),
   ]);
-  assert.match(page, /Site-owner and organization-admin accounts cannot be mass deleted/);
-  assert.match(page, /protectedAdminRole/);
+  assert.match(page, /Site-owner, organization-director, and organization-admin accounts cannot be mass deleted/);
+  assert.match(page, /protectedRole/);
   assert.match(page, /protectedEventAdmin && !canRemoveProtectedEventAdmin/);
   assert.match(client, /preserveEventAdmin/);
   assert.match(migration, /The site-owner account cannot be removed/);
@@ -480,7 +503,7 @@ test("authorized administrators can create an event without importing a schedule
   const [page, client] = await Promise.all([read("app/page.tsx"), read("app/supabase-client.ts")]);
   assert.match(page, /Create New Event/);
   assert.match(page, /Create an event without a schedule/);
-  assert.match(page, /canCreateEvent=\{Boolean\(profile\.is_site_owner \|\| organizationRoles\.includes\("organization_admin"\) \|\| organizationRoles\.includes\("event_admin"\)\)\}/);
+  assert.match(page, /canCreateEvent=\{Boolean\(profile\.is_site_owner \|\| organizationRoles\.includes\("organization_director"\) \|\| organizationRoles\.includes\("organization_admin"\) \|\| organizationRoles\.includes\("event_admin"\)\)\}/);
   assert.match(client, /export async function createEvent\(/);
   assert.match(client, /The end date cannot be before the start date/);
   assert.match(client, /check_in_slug: `\$\{slugBase\}-\$\{Date\.now\(\)\.toString\(36\)\}`/);
@@ -503,7 +526,7 @@ test("all users have active-group role-aware help", async () => {
   assert.match(page, /Select Rate Crew on a game to open its evaluation form/);
   assert.match(page, /activeGroupRoles/);
   assert.match(page, /Follow the directions below for your role/);
-  for (const role of ["site_owner", "organization_admin", "event_admin", "assignor", "site_coordinator", "referee_coach", "referee"]) {
+  for (const role of ["site_owner", "organization_director", "organization_admin", "event_admin", "assignor", "site_coordinator", "referee_coach", "referee"]) {
     assert.match(page, new RegExp(`${role}: \\{ title:`));
   }
 });

@@ -26,7 +26,7 @@ export type Profile = {
   role: "admin" | "assignor" | "referee" | "coach";
 };
 
-export type MembershipRole = "site_owner" | "organization_admin" | "event_admin" | "assignor" | "site_coordinator" | "referee_coach" | "referee";
+export type MembershipRole = "site_owner" | "organization_director" | "organization_admin" | "event_admin" | "assignor" | "site_coordinator" | "referee_coach" | "referee";
 
 export type OrganizationMembership = {
   id: string;
@@ -1184,7 +1184,7 @@ export async function mergeOrganizationAccounts(
     primary_official_id: string;
     primary_user_id: string;
     primary_email: string;
-  }>(session, "rpc/merge_organization_accounts", {
+  }>(session, "rpc/secure_merge_organization_accounts", {
     method: "POST",
     body: JSON.stringify({
       organization_uuid: organizationId,
@@ -1559,7 +1559,7 @@ export async function updateOfficial(
       body: JSON.stringify(changes),
     }, "return=representation");
     if (official.linked_user_id && syncMembershipRoles) {
-      const managedRoles = ["organization_admin", "assignor", "referee_coach", "referee"];
+      const managedRoles = ["organization_director", "organization_admin", "assignor", "referee_coach", "referee"];
       const existingMemberships = await rest<{ role: MembershipRole }[]>(
         session,
         `organization_memberships?organization_id=eq.${enc(official.organization_id)}&user_id=eq.${enc(official.linked_user_id)}&select=role`,
@@ -1649,7 +1649,7 @@ export async function saveUserEventAccess(
   session: Law18Session,
   eventId: string,
   userId: string,
-  roles: Exclude<MembershipRole, "site_owner" | "organization_admin">[],
+  roles: Exclude<MembershipRole, "site_owner" | "organization_director" | "organization_admin">[],
   options: {
     fullScheduleAccess: boolean;
     coachingToolsEnabled: boolean;

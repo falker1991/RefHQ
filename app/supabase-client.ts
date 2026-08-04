@@ -17,6 +17,7 @@ export type Profile = {
   personal_schedule_colors?: Record<string, string>;
   rating_average_preferences?: {
     event_scope?: "current_event" | "organization";
+    display_mode?: "overall" | "position" | "both";
     match_position?: boolean;
     from?: string;
     through?: string;

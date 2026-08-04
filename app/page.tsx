@@ -210,7 +210,7 @@ function EmptyState({ children }: { children: React.ReactNode }) {
   return <div className="panel empty-state"><span>◎</span><p>{children}</p></div>;
 }
 
-function administrativeRatingAverage(officialId: string, position: AssignmentRecord["position"], eventId: string, currentData: EventData, history: { assessments: AssessmentRecord[]; games: GameRecord[]; assignments: AssignmentRecord[] }, preferences?: Profile["rating_average_preferences"]) {
+function administrativeRatingAverage(officialId: string, position: AssignmentRecord["position"], eventId: string, currentData: EventData, history: { assessments: AssessmentRecord[]; games: GameRecord[]; assignments: AssignmentRecord[] }, preferences?: Profile["rating_average_preferences"], matchPosition = preferences?.match_position || false) {
   const source = preferences?.event_scope === "organization" ? history : currentData;
   const gameMap = new Map(source.games.map((game) => [game.id, game]));
   const scores = source.assessments.filter((assessment) => {
@@ -220,10 +220,26 @@ function administrativeRatingAverage(officialId: string, position: AssignmentRec
     const date = game.starts_at.slice(0, 10);
     if (preferences?.from && date < preferences.from) return false;
     if (preferences?.through && date > preferences.through) return false;
-    if (preferences?.match_position) return source.assignments.some((assignment) => assignment.game_id === assessment.game_id && assignment.official_id === officialId && assignment.position === position);
+    if (matchPosition) return source.assignments.some((assignment) => assignment.game_id === assessment.game_id && assignment.official_id === officialId && assignment.position === position);
     return true;
   }).map(assessmentScore).filter((score): score is number => score !== null);
   return scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : null;
+}
+
+function ratingPositionShortLabel(position: AssignmentRecord["position"]) {
+  return ({ referee: "Ref", assistant_referee: "AR", fourth_official: "4th", mentor: "Mentor", referee_coach: "Coach", site_coordinator: "Coordinator", site_supervisor: "Supervisor", standby: "Standby", other: "Position" } as const)[position];
+}
+
+function administrativeRatingLabel(officialId: string, position: AssignmentRecord["position"], eventId: string, currentData: EventData, history: { assessments: AssessmentRecord[]; games: GameRecord[]; assignments: AssignmentRecord[] }, preferences?: Profile["rating_average_preferences"]) {
+  const mode = preferences?.display_mode || (preferences?.match_position ? "position" : "overall");
+  const overall = administrativeRatingAverage(officialId, position, eventId, currentData, history, preferences, false);
+  const positionAverage = administrativeRatingAverage(officialId, position, eventId, currentData, history, preferences, true);
+  if (mode === "both") {
+    if (positionAverage === null && overall === null) return "";
+    return ` (${ratingPositionShortLabel(position)} ${positionAverage?.toFixed(1) || "—"}/Ovr ${overall?.toFixed(1) || "—"})`;
+  }
+  const average = mode === "position" ? positionAverage : overall;
+  return average === null ? "" : ` (${average.toFixed(1)})`;
 }
 
 function BoardGameTile({ game, data, officials, ratingLabel }: { game: GameRecord; data: EventData; officials: Map<string, OfficialRecord>; ratingLabel?: (officialId: string, position: AssignmentRecord["position"]) => string }) {
@@ -248,7 +264,7 @@ function AssignmentBoard({ data, event, profile, ratingHistory, showRatingAverag
   const officials = useMemo(() => new Map(data.officials.map((official) => [official.id, official])), [data.officials]);
   const [boardView, setBoardView] = useState<"grid" | "field" | "first_assignment">("grid");
   const [collapsedFields, setCollapsedFields] = useState<Set<string>>(new Set());
-  const ratingLabel = showRatingAverages ? (officialId: string, position: AssignmentRecord["position"]) => { const average = administrativeRatingAverage(officialId, position, event.id, data, ratingHistory, profile.rating_average_preferences); return average === null ? "" : ` (${average.toFixed(2)})`; } : undefined;
+  const ratingLabel = showRatingAverages ? (officialId: string, position: AssignmentRecord["position"]) => administrativeRatingLabel(officialId, position, event.id, data, ratingHistory, profile.rating_average_preferences) : undefined;
   const fields = [...new Set(data.games.map((game) => game.field_name))];
   const times = [...new Map(data.games.map((game) => [formatTime(game.starts_at), timeSortValue(game.starts_at)])).entries()]
     .sort((a, b) => a[1] - b[1])
@@ -683,7 +699,7 @@ function ScheduleView({ session, event, data, canEdit, canRateCrew, coachView, o
   const [message, setMessage] = useState("");
   const [sortBy, setSortBy] = useActiveFilterState<"date" | "time" | "site" | "field" | "age_group" | "gender" | "competition">(`schedule-sort:${event.id}`, "time");
   const [game, setGame] = useState({ starts_at: "", field_name: "", home_team: "", away_team: "", division: "" });
-  const ratingLabel = showRatingAverages ? (officialId: string, position: AssignmentRecord["position"]) => { const average = administrativeRatingAverage(officialId, position, event.id, data, ratingHistory, profile.rating_average_preferences); return average === null ? "" : ` (${average.toFixed(2)})`; } : undefined;
+  const ratingLabel = showRatingAverages ? (officialId: string, position: AssignmentRecord["position"]) => administrativeRatingLabel(officialId, position, event.id, data, ratingHistory, profile.rating_average_preferences) : undefined;
   async function addGame() {
     setBusy(true);
     setMessage("");
@@ -2371,7 +2387,7 @@ function AccountSettings({
   const [secondaryEmail, setSecondaryEmail] = useState(profile.secondary_email || "");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [ratingAveragePreferences, setRatingAveragePreferences] = useState({ event_scope: profile.rating_average_preferences?.event_scope || "current_event", match_position: profile.rating_average_preferences?.match_position || false, from: profile.rating_average_preferences?.from || "", through: profile.rating_average_preferences?.through || "" });
+  const [ratingAveragePreferences, setRatingAveragePreferences] = useState({ event_scope: profile.rating_average_preferences?.event_scope || "current_event", display_mode: profile.rating_average_preferences?.display_mode || (profile.rating_average_preferences?.match_position ? "position" : "overall"), match_position: profile.rating_average_preferences?.match_position || false, from: profile.rating_average_preferences?.from || "", through: profile.rating_average_preferences?.through || "" });
   const minor = Boolean(dateOfBirth && new Date(dateOfBirth) > new Date(new Date().setFullYear(new Date().getFullYear() - 18)));
   async function save() {
     if (minor && !secondaryEmail.trim()) {
@@ -2422,7 +2438,7 @@ function AccountSettings({
       {message && <p className="pilot-message">{message}</p>}
       <button className="primary" disabled={busy || !fullName.trim()} onClick={save}>{busy ? "Saving…" : "Save account details"}</button>
     </article>
-    <article className="panel settings-card rating-average-settings"><div><p className="eyebrow">ASSIGNMENT DISPLAYS</p><h2>Referee Rating Averages</h2><p>Choose which submitted ratings contribute to the averages shown beside referee names in administrative schedule and assigning views.</p></div><label>Rating history<select value={ratingAveragePreferences.event_scope} onChange={(event) => setRatingAveragePreferences({ ...ratingAveragePreferences, event_scope: event.target.value as "current_event" | "organization" })}><option value="current_event">Current event only</option><option value="organization">All permitted ratings in the organization</option></select></label><label className="preference-check"><input type="checkbox" checked={ratingAveragePreferences.match_position} onChange={(event) => setRatingAveragePreferences({ ...ratingAveragePreferences, match_position: event.target.checked })} /> Match the assignment position</label><label>From date<input type="date" value={ratingAveragePreferences.from} onChange={(event) => setRatingAveragePreferences({ ...ratingAveragePreferences, from: event.target.value })} /></label><label>Through date<input type="date" min={ratingAveragePreferences.from || undefined} value={ratingAveragePreferences.through} onChange={(event) => setRatingAveragePreferences({ ...ratingAveragePreferences, through: event.target.value })} /></label><button className="primary" disabled={busy} onClick={() => void saveRatingAveragePreferences()}>Save Rating Display</button></article>
+    <article className="panel settings-card rating-average-settings"><div><p className="eyebrow">ASSIGNMENT DISPLAYS</p><h2>Referee Rating Averages</h2><p>Choose which submitted ratings contribute to the averages shown beside referee names in administrative schedule and assigning views.</p></div><label>Rating history<select value={ratingAveragePreferences.event_scope} onChange={(event) => setRatingAveragePreferences({ ...ratingAveragePreferences, event_scope: event.target.value as "current_event" | "organization" })}><option value="current_event">Current event only</option><option value="organization">All permitted ratings in the organization</option></select></label><label>Average display<select value={ratingAveragePreferences.display_mode} onChange={(event) => { const displayMode = event.target.value as "overall" | "position" | "both"; setRatingAveragePreferences({ ...ratingAveragePreferences, display_mode: displayMode, match_position: displayMode === "position" }); }}><option value="overall">Overall average</option><option value="position">Assigned-position average</option><option value="both">Position and overall averages</option></select></label><label>From date<input type="date" value={ratingAveragePreferences.from} onChange={(event) => setRatingAveragePreferences({ ...ratingAveragePreferences, from: event.target.value })} /></label><label>Through date<input type="date" min={ratingAveragePreferences.from || undefined} value={ratingAveragePreferences.through} onChange={(event) => setRatingAveragePreferences({ ...ratingAveragePreferences, through: event.target.value })} /></label><button className="primary" disabled={busy} onClick={() => void saveRatingAveragePreferences()}>Save Rating Display</button></article>
     <ConnectedSchedules session={session} profile={profile} onUpdated={onUpdated} />
   </section>;
 }
@@ -3041,7 +3057,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.11.0</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.11.1</span></footer>
   </main>;
 }
 

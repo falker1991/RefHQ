@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.11.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.11.1 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,10 +14,10 @@ test("Version 0.11.0 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.11\.0/);
+  assert.match(page, /Version 0\.11\.1/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.11.0");
+  assert.equal(JSON.parse(packageJson).version, "0.11.1");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -78,6 +78,9 @@ test("Version 0.11.0 adds color-coded date-filtered assignments and reusable ses
 test("administrative operations show rating averages and richer attendance context", async () => {
   const [page, css] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
   assert.match(page, /administrativeRatingAverage/);
+  assert.match(page, /administrativeRatingLabel/);
+  assert.match(page, /Position and overall averages/);
+  assert.match(page, /Ovr/);
   assert.match(page, /rating_average_preferences/);
   assert.match(page, /firstAssignment/);
   assert.match(page, /firstGame\.age_group/);

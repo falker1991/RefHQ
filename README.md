@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.11.0 adds reusable and session-persistent filters, date-filtered and color-coded unified assignments, administrative rating averages, richer check-in details, checked-in schedule highlighting, multi-select coaching filters, and modal manual-entry workflows.
+Version 0.11.1 adds reusable and session-persistent filters, date-filtered and color-coded unified assignments, configurable overall/position rating averages, richer check-in details, checked-in schedule highlighting, multi-select coaching filters, and modal manual-entry workflows.
 
 Bulk lifecycle management remains available for officials, ratings, and events. Games and assignments are designed to join the same workflow when manual schedule editing is introduced.
 

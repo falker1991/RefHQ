@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.11.1 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.11.2 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,10 +14,10 @@ test("Version 0.11.1 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.11\.1/);
+  assert.match(page, /Version 0\.11\.2/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.11.1");
+  assert.equal(JSON.parse(packageJson).version, "0.11.2");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -73,6 +73,24 @@ test("Version 0.11.0 adds color-coded date-filtered assignments and reusable ses
   assert.match(client, /updateDisplayPreferences/);
   assert.match(css, /--assignment-color/);
   assert.match(migration, /rating_average_preferences/);
+});
+
+test("calendar colors support combined presentation modes and custom dropdowns close outside", async () => {
+  const [page, client, css, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("app/globals.css"),
+    read("supabase/migrations/202608030035_personal_schedule_color_modes.sql"),
+  ]);
+  assert.match(page, /Color mark/);
+  assert.match(page, /Highlight entire assignment/);
+  assert.match(page, /Color calendar label/);
+  assert.match(page, /calendar-color-card/);
+  assert.match(page, /document\.querySelectorAll<HTMLDetailsElement>\("details\[open\]"\)/);
+  assert.match(page, /closest\?\.\("\.account-menu"\)/);
+  assert.match(client, /personal_schedule_color_modes/);
+  assert.match(css, /calendar-color-label/);
+  assert.match(migration, /personal_schedule_color_modes/);
 });
 
 test("administrative operations show rating averages and richer attendance context", async () => {

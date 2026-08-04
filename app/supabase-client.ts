@@ -15,6 +15,7 @@ export type Profile = {
   is_site_owner?: boolean;
   phone?: string | null;
   personal_schedule_colors?: Record<string, string>;
+  personal_schedule_color_modes?: Record<string, Array<"mark" | "card" | "label">>;
   rating_average_preferences?: {
     event_scope?: "current_event" | "organization";
     display_mode?: "overall" | "position" | "both";
@@ -590,7 +591,7 @@ export async function updateOwnProfile(
 
 export async function updateDisplayPreferences(
   session: Law18Session,
-  changes: Pick<Profile, "personal_schedule_colors" | "rating_average_preferences">,
+  changes: Pick<Profile, "personal_schedule_colors" | "personal_schedule_color_modes" | "rating_average_preferences">,
 ) {
   const rows = await rest<Profile[]>(session, `profiles?id=eq.${enc(session.user.id)}`, {
     method: "PATCH",

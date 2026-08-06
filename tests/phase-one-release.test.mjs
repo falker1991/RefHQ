@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.14.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.15.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,11 +14,29 @@ test("Version 0.14.0 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.14\.0/);
+  assert.match(page, /Version 0\.15\.0/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.14.0");
+  assert.equal(JSON.parse(packageJson).version, "0.15.0");
   assert.match(viteConfig, /keep_vars: true/);
+});
+
+test("event settings respect organization feature ceilings and enforce disabled modules", async () => {
+  const [page, client, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/202608050041_event_feature_settings.sql"),
+  ]);
+  assert.match(page, /function EventSettingsPanel/);
+  assert.match(page, /event_settings", "Event Settings"/);
+  assert.match(page, /eventFeatureEnabled\(event, "check_in"\)/);
+  assert.match(page, /Not enabled for this organization/);
+  assert.match(client, /updateEventSettings/);
+  assert.match(migration, /feature_entitlements jsonb not null/);
+  assert.match(migration, /feature_settings jsonb not null/);
+  assert.match(migration, /enforce_event_feature_enabled/);
+  assert.match(migration, /enforce_check_in_feature/);
+  assert.match(migration, /enforce_rating_feature/);
 });
 
 test("event types and private Rules of Competition documents are available throughout assigned-event views", async () => {
@@ -35,9 +53,9 @@ test("event types and private Rules of Competition documents are available throu
   assert.match(client, /uploadEventDocument/);
   assert.match(client, /loadMyRulesDocuments/);
   assert.match(page, /ROC — Rules of Competition/);
-  assert.match(page, /function EventDocumentsPanel/);
-  assert.match(page, /Part of league \(optional\)/);
-  assert.match(page, /event\?\.check_in_enabled !== false/);
+  assert.match(page, /function EventSettingsPanel/);
+  assert.match(page, /Parent league/);
+  assert.match(page, /eventFeatureEnabled\(event, "check_in"\)/);
 });
 
 test("referees use an account-wide workspace without active organization or event selectors", async () => {
@@ -493,7 +511,7 @@ test("coach-only schedules exclude operational and HQ locations", async () => {
 
 test("coaching administration is hidden from referee coaches", async () => {
   const page = await read("app/page.tsx");
-  assert.match(page, /isCoach\s*\?\s*\[\["dashboard", "Dashboard"\], \.\.\.\(event\?\.check_in_enabled !== false && coachHasCurrentOrFutureAssignment/);
+  assert.match(page, /isCoach\s*\?\s*\[\["dashboard", "Dashboard"\], \.\.\.\(eventFeatureEnabled\(event, "check_in"\) && coachHasCurrentOrFutureAssignment/);
   assert.match(page, /view === "coaching" && isAdministrativeStaff/);
 });
 

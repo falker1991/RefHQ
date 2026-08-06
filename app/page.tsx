@@ -71,7 +71,7 @@ import {
   updateOrganizationSettings,
   updateOfficial,
   updateEventRatingSettings,
-  updateEventStructure,
+  updateEventSettings,
   updatePositionTitleAliases,
   uploadAppearanceLogo,
   uploadOrganizationLogo,
@@ -89,6 +89,8 @@ import {
   type EventRecord,
   type EventMembership,
   type EventDocumentRecord,
+  type EventFeatureKey,
+  type EventFeatureSettings,
   type GameRecord,
   type ImportRow,
   type OfficialRecord,
@@ -102,8 +104,8 @@ import {
   type UnifiedAssignment,
 } from "./supabase-client";
 
-type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "activity" | "appearance" | "account" | "groups";
-const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "activity", "appearance", "account", "groups"];
+type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups";
+const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups"];
 type EventData = {
   games: GameRecord[];
   assignments: AssignmentRecord[];
@@ -392,7 +394,7 @@ function RefereeDay({
     || games[0]?.game.starts_at.slice(0, 10)
     || new Date().toISOString().slice(0, 10);
   const isChecked = Boolean(official && data.checkIns.some((item) => item.official_id === official.id && item.event_date === checkInDate && item.status === "checked_in"));
-  const rulesDocument = data.documents.find((document) => document.document_type === "rules_of_competition");
+  const rulesDocument = eventFeatureEnabled(event, "event_documents") ? data.documents.find((document) => document.document_type === "rules_of_competition") : undefined;
 
   if (!official || !games.length) return <EmptyState>No imported assignments match {session.user.email}. Ask your assignor to confirm the email in the CSV.</EmptyState>;
   return <section className="referee-home">
@@ -555,7 +557,7 @@ function PersonalCheckInHub({ session, events }: { session: Law18Session; events
       const matches = [...new Set(assignments.filter((item) => {
         if (item.source_type !== "law18ref") return false;
         const event = byId.get(item.event_id || item.source_id);
-        return Boolean(event?.check_in_enabled !== false && event && dateKeyInTimeZone(item.starts_at, event.timezone) === dateKeyInTimeZone(new Date(), event.timezone));
+        return Boolean(event && eventFeatureEnabled(event, "check_in") && dateKeyInTimeZone(item.starts_at, event.timezone) === dateKeyInTimeZone(new Date(), event.timezone));
       }).map((item) => item.event_id || item.source_id))].map((id) => byId.get(id)).filter((event): event is EventRecord => Boolean(event));
       setEligibleEvents(matches);
       if (matches.length === 1) return loadSelected(matches[0]);
@@ -800,7 +802,7 @@ function ScheduleView({ session, event, data, canEdit, canRateCrew, coachView, o
   const [message, setMessage] = useState("");
   const [sortBy, setSortBy] = useActiveFilterState<"date" | "time" | "site" | "field" | "age_group" | "gender" | "competition">(`schedule-sort:${event.id}`, "time");
   const [game, setGame] = useState({ starts_at: "", field_name: "", home_team: "", away_team: "", division: "" });
-  const rulesDocument = data.documents.find((document) => document.document_type === "rules_of_competition");
+  const rulesDocument = eventFeatureEnabled(event, "event_documents") ? data.documents.find((document) => document.document_type === "rules_of_competition") : undefined;
   const ratingLabel = showRatingAverages ? (officialId: string, position: AssignmentRecord["position"]) => administrativeRatingLabel(officialId, position, event.id, data, ratingHistory, profile.rating_average_preferences) : undefined;
   async function addGame() {
     setBusy(true);
@@ -847,10 +849,29 @@ function ScheduleView({ session, event, data, canEdit, canRateCrew, coachView, o
   </section>;
 }
 
-function EventDocumentsPanel({ session, event, events, onChanged }: { session: Law18Session; event: EventRecord; events: EventRecord[]; onChanged: () => Promise<void> }) {
+const eventFeatureLabels: Record<EventFeatureKey, { title: string; description: string }> = {
+  assignment_board: { title: "Assignment Board", description: "Event schedule, crews, and staffing board." },
+  check_in: { title: "Check-In", description: "QR, attendance dashboard, and manual check-in." },
+  ratings: { title: "Ratings", description: "Crew evaluations, history, and rating averages." },
+  coaching: { title: "Coaching", description: "Referee-coach assignments and coaching schedule." },
+  event_documents: { title: "Event Documents", description: "Rules of Competition and other private PDFs." },
+};
+const defaultEventFeatures: EventFeatureSettings = { assignment_board: true, check_in: true, ratings: true, coaching: true, event_documents: true };
+function eventFeatureEnabled(event: EventRecord | undefined, feature: EventFeatureKey) {
+  if (!event) return false;
+  if (feature === "check_in" && event.check_in_enabled === false) return false;
+  return event.feature_settings?.[feature] ?? true;
+}
+
+function EventSettingsPanel({ session, organization, event, events, onChanged }: { session: Law18Session; organization: OrganizationRecord; event: EventRecord; events: EventRecord[]; onChanged: () => Promise<void> }) {
+  const [name, setName] = useState(event.name);
+  const [venueName, setVenueName] = useState(event.venue_name);
+  const [startsOn, setStartsOn] = useState(event.starts_on);
+  const [endsOn, setEndsOn] = useState(event.ends_on);
+  const [timezone, setTimezone] = useState(event.timezone);
   const [eventType, setEventType] = useState<EventRecord["event_type"]>(event.event_type || "tournament");
   const [parentLeagueId, setParentLeagueId] = useState(event.parent_league_id || "");
-  const [checkInEnabled, setCheckInEnabled] = useState(event.check_in_enabled !== false);
+  const [features, setFeatures] = useState<EventFeatureSettings>({ ...defaultEventFeatures, ...(event.feature_settings || {}), check_in: event.check_in_enabled !== false });
   const [documents, setDocuments] = useState<EventDocumentRecord[]>([]);
   const [documentType, setDocumentType] = useState<EventDocumentRecord["document_type"]>("rules_of_competition");
   const [title, setTitle] = useState("Rules of Competition");
@@ -859,10 +880,15 @@ function EventDocumentsPanel({ session, event, events, onChanged }: { session: L
   const [message, setMessage] = useState("");
   const refreshDocuments = useCallback(() => loadEventDocuments(session, event.id).then(setDocuments), [event.id, session]);
   useEffect(() => { void refreshDocuments(); }, [refreshDocuments]);
-  useEffect(() => { setEventType(event.event_type || "tournament"); setParentLeagueId(event.parent_league_id || ""); setCheckInEnabled(event.check_in_enabled !== false); }, [event]);
-  async function saveStructure() {
+  useEffect(() => { setName(event.name); setVenueName(event.venue_name); setStartsOn(event.starts_on); setEndsOn(event.ends_on); setTimezone(event.timezone); setEventType(event.event_type || "tournament"); setParentLeagueId(event.parent_league_id || ""); setFeatures({ ...defaultEventFeatures, ...(event.feature_settings || {}), check_in: event.check_in_enabled !== false }); }, [event]);
+  const entitled = (feature: EventFeatureKey) => organization.feature_entitlements?.[feature] ?? true;
+  async function saveSettings() {
     setBusy(true); setMessage("");
-    try { await updateEventStructure(session, event.id, { event_type: eventType, parent_league_id: eventType === "tournament" ? parentLeagueId || null : null, check_in_enabled: checkInEnabled }); await onChanged(); setMessage("Event type and check-in settings saved."); }
+    try {
+      const effectiveFeatures = Object.fromEntries((Object.keys(defaultEventFeatures) as EventFeatureKey[]).map((feature) => [feature, entitled(feature) && features[feature]])) as EventFeatureSettings;
+      await updateEventSettings(session, event.id, { name: name.trim(), venue_name: venueName.trim(), starts_on: startsOn, ends_on: endsOn, timezone, event_type: eventType, parent_league_id: eventType === "tournament" ? parentLeagueId || null : null, feature_settings: effectiveFeatures });
+      await onChanged(); setMessage("Event settings saved and applied to authorized users.");
+    }
     catch (reason) { setMessage(reason instanceof Error ? reason.message : "Unable to save event settings."); }
     finally { setBusy(false); }
   }
@@ -874,7 +900,7 @@ function EventDocumentsPanel({ session, event, events, onChanged }: { session: L
     finally { setBusy(false); }
   }
   const leagues = events.filter((item) => item.event_type === "league" && item.id !== event.id);
-  return <article className="panel event-documents-settings"><div><p className="eyebrow">EVENT STRUCTURE & DOCUMENTS</p><h2>Event configuration</h2><p>League events default to no check-in. A tournament may stand alone or belong to a league.</p></div><div className="event-structure-fields"><label>Event type<select value={eventType} onChange={(change) => { const type = change.target.value as EventRecord["event_type"]; setEventType(type); if (type === "league") { setParentLeagueId(""); setCheckInEnabled(false); } else setCheckInEnabled(true); }}><option value="tournament">Tournament</option><option value="league">League</option></select></label>{eventType === "tournament" && <label>Parent league<select value={parentLeagueId} onChange={(change) => setParentLeagueId(change.target.value)}><option value="">Standalone tournament</option>{leagues.map((league) => <option value={league.id} key={league.id}>{league.name}</option>)}</select></label>}<label className="preference-check"><input type="checkbox" checked={checkInEnabled} onChange={(change) => setCheckInEnabled(change.target.checked)} />Enable event check-in</label><button className="secondary" disabled={busy} onClick={() => void saveStructure()}>Save Event Settings</button></div><hr /><div><h3>Event documents</h3><p>PDFs are stored privately and available only to authorized event participants and staff.</p></div><div className="event-document-upload"><label>Document type<select value={documentType} onChange={(change) => { const type = change.target.value as EventDocumentRecord["document_type"]; setDocumentType(type); if (type === "rules_of_competition") setTitle("Rules of Competition"); }}><option value="rules_of_competition">Rules of Competition</option><option value="other">Other event document</option></select></label><label>Display title<input value={title} onChange={(change) => setTitle(change.target.value)} /></label><label className="secondary file-button">Choose PDF<input type="file" accept="application/pdf,.pdf" onChange={(change) => setFile(change.target.files?.[0] || null)} /></label><button className="primary" disabled={busy || !file} onClick={() => void upload()}>{busy ? "Saving…" : "Upload Document"}</button></div>{file && <p className="selected-document-file">Selected: {file.name}</p>}<div className="event-document-list">{documents.map((document) => <div key={document.id}><span><strong>{document.document_type === "rules_of_competition" ? "ROC · " : ""}{document.title}</strong><small>{document.file_name}</small></span><EventDocumentLink session={session} document={document} compact /></div>)}</div>{message && <p className="pilot-message">{message}</p>}</article>;
+  return <section className="page-section"><div className="section-title"><div><p className="eyebrow">EVENT SETTINGS</p><h1>{event.name}</h1><p>Configure this event within the features enabled for {organization.name}.</p></div></div><article className="panel event-documents-settings"><div><p className="eyebrow">GENERAL</p><h2>Event details</h2></div><div className="event-general-fields"><label>Event name<input value={name} onChange={(change) => setName(change.target.value)} /></label><label>Default venue<input value={venueName} onChange={(change) => setVenueName(change.target.value)} /></label><label>Starts<input type="date" value={startsOn} onChange={(change) => setStartsOn(change.target.value)} /></label><label>Ends<input type="date" min={startsOn} value={endsOn} onChange={(change) => setEndsOn(change.target.value)} /></label><label>Time zone<select value={timezone} onChange={(change) => setTimezone(change.target.value)}><option value="America/New_York">Eastern Time</option><option value="America/Chicago">Central Time</option><option value="America/Denver">Mountain Time</option><option value="America/Phoenix">Arizona Time</option><option value="America/Los_Angeles">Pacific Time</option><option value="America/Anchorage">Alaska Time</option><option value="Pacific/Honolulu">Hawaii Time</option></select></label><label>Event type<select value={eventType} onChange={(change) => { const type = change.target.value as EventRecord["event_type"]; setEventType(type); if (type === "league") { setParentLeagueId(""); setFeatures((current) => ({ ...current, check_in: false })); } }}><option value="tournament">Tournament</option><option value="league">League</option></select></label>{eventType === "tournament" && <label>Parent league<select value={parentLeagueId} onChange={(change) => setParentLeagueId(change.target.value)}><option value="">Standalone tournament</option>{leagues.map((league) => <option value={league.id} key={league.id}>{league.name}</option>)}</select></label>}</div><hr /><div><p className="eyebrow">EVENT FEATURES</p><h2>Enabled modules</h2><p>An event cannot enable a module that the Site Owner or organization has disabled.</p></div><div className="event-feature-grid">{(Object.keys(eventFeatureLabels) as EventFeatureKey[]).map((feature) => { const available = entitled(feature); const details = eventFeatureLabels[feature]; return <label className={`${features[feature] && available ? "selected" : ""}${available ? "" : " unavailable"}`} key={feature}><input type="checkbox" checked={available && features[feature]} disabled={!available} onChange={(change) => setFeatures((current) => ({ ...current, [feature]: change.target.checked }))} /><span><strong>{details.title}</strong><small>{available ? details.description : "Not enabled for this organization"}</small></span></label>; })}</div><button className="primary event-settings-save" disabled={busy || !name.trim() || !venueName.trim() || !startsOn || !endsOn || endsOn < startsOn} onClick={() => void saveSettings()}>{busy ? "Saving…" : "Save Event Settings"}</button>{entitled("event_documents") && features.event_documents && <><hr /><div><h2>Event documents</h2><p>PDFs are stored privately and available only to authorized event participants and staff.</p></div><div className="event-document-upload"><label>Document type<select value={documentType} onChange={(change) => { const type = change.target.value as EventDocumentRecord["document_type"]; setDocumentType(type); if (type === "rules_of_competition") setTitle("Rules of Competition"); }}><option value="rules_of_competition">Rules of Competition</option><option value="other">Other event document</option></select></label><label>Display title<input value={title} onChange={(change) => setTitle(change.target.value)} /></label><label className="secondary file-button">Choose PDF<input type="file" accept="application/pdf,.pdf" onChange={(change) => setFile(change.target.files?.[0] || null)} /></label><button className="primary" disabled={busy || !file} onClick={() => void upload()}>{busy ? "Saving…" : "Upload Document"}</button></div>{file && <p className="selected-document-file">Selected: {file.name}</p>}<div className="event-document-list">{documents.map((document) => <div key={document.id}><span><strong>{document.document_type === "rules_of_competition" ? "ROC · " : ""}{document.title}</strong><small>{document.file_name}</small></span><EventDocumentLink session={session} document={document} compact /></div>)}</div></>}{message && <p className="pilot-message">{message}</p>}</article></section>;
 }
 
 function EventLifecyclePanel({
@@ -1185,8 +1211,6 @@ function ImportView({
       </div>
       <button className="primary" disabled={busy || !eventDetails.name.trim() || !eventDetails.venue_name.trim() || !eventDetails.starts_on || !eventDetails.ends_on || eventDetails.ends_on < eventDetails.starts_on} onClick={confirmEventCreation}>{busy ? "Creating…" : "Create Event"}</button>
     </article>}
-    {activeEvent && canManageLifecycle && <EventLifecyclePanel session={session} event={activeEvent} onChanged={onEventsChanged} />}
-    {activeEvent && canManageLifecycle && <EventDocumentsPanel session={session} event={activeEvent} events={events} onChanged={onEventsChanged} />}
     <div className="segmented import-tabs">
       <button className={mode === "schedule" ? "active" : ""} onClick={() => switchImportMode("schedule")}>Schedule export</button>
       <button className={mode === "officials" ? "active" : ""} onClick={() => switchImportMode("officials")}>Officials export</button>
@@ -2983,6 +3007,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     || ["site_owner", "organization_director", "organization_admin", "event_admin"].some((role) => allRoles.has(role as MembershipRole))
     || eventAccess.some((membership) => membership.coaching_tools_enabled);
   const canConfigureRatings = ["site_owner", "organization_director", "organization_admin", "event_admin"].some((role) => allRoles.has(role as MembershipRole));
+  const canConfigureEvent = ["site_owner", "organization_director", "organization_admin", "event_admin"].some((role) => allRoles.has(role as MembershipRole));
   const event = events.find((item) => item.id === eventId);
   const effectiveRatingApprovalRole = event?.public_rating_approval_role && event.public_rating_approval_role !== "inherit"
     ? event.public_rating_approval_role
@@ -3077,7 +3102,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
             const today = selectedEvent
               ? new Intl.DateTimeFormat("en-CA", { timeZone: selectedEvent.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date())
               : "";
-            if (!selectedEvent || selectedEvent.check_in_enabled === false || selectedEvent.check_in_slug !== eventSlug || scannedDate < today || !official || !assignedThatDay) {
+            if (!selectedEvent || !eventFeatureEnabled(selectedEvent, "check_in") || selectedEvent.check_in_slug !== eventSlug || scannedDate < today || !official || !assignedThatDay) {
               setQrCheckInMessage("This QR code does not match one of your assigned event days.");
             } else {
               try {
@@ -3127,7 +3152,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
 
   async function switchEvent(nextId: string) {
     const nextEvent = allEvents.find((item) => item.id === nextId);
-    if (view === "checkin" && nextEvent?.check_in_enabled === false) setView("dashboard");
+    if (view === "checkin" && nextEvent && !eventFeatureEnabled(nextEvent, "check_in")) setView("dashboard");
     setEventId(nextId);
     setLoading(true);
     try {
@@ -3239,11 +3264,11 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
   });
 
   const nav: [View, string][] = isAdministrativeStaff
-    ? [["dashboard", "Dashboard"], ["board", "Assignment Board"], ...(event?.check_in_enabled !== false ? [["checkin", "Check-In"] as [View, string]] : []), ["schedule", "Schedule"], ["officials", "Officials"], ["coaching", "Coaching"], ["assessments", "Ratings"], ["import", "Import"], ...(profile?.is_site_owner || organizationRoles.includes("organization_director") || organizationRoles.includes("organization_admin") ? [["activity", "Activity"] as [View, string]] : [])]
+    ? [["dashboard", "Dashboard"], ...(eventFeatureEnabled(event, "assignment_board") ? [["board", "Assignment Board"] as [View, string]] : []), ...(eventFeatureEnabled(event, "check_in") ? [["checkin", "Check-In"] as [View, string]] : []), ["schedule", "Schedule"], ["officials", "Officials"], ...(eventFeatureEnabled(event, "coaching") ? [["coaching", "Coaching"] as [View, string]] : []), ...(eventFeatureEnabled(event, "ratings") ? [["assessments", "Ratings"] as [View, string]] : []), ["import", "Import"], ...(canConfigureEvent ? [["event_settings", "Event Settings"] as [View, string]] : []), ...(profile?.is_site_owner || organizationRoles.includes("organization_director") || organizationRoles.includes("organization_admin") ? [["activity", "Activity"] as [View, string]] : [])]
     : isSiteCoordinator
-      ? [["dashboard", "Dashboard"], ["board", "Assignment Board"], ...(event?.check_in_enabled !== false ? [["checkin", "Check-In"] as [View, string]] : []), ["schedule", "Schedule"]]
+      ? [["dashboard", "Dashboard"], ...(eventFeatureEnabled(event, "assignment_board") ? [["board", "Assignment Board"] as [View, string]] : []), ...(eventFeatureEnabled(event, "check_in") ? [["checkin", "Check-In"] as [View, string]] : []), ["schedule", "Schedule"]]
     : isCoach
-      ? [["dashboard", "Dashboard"], ...(event?.check_in_enabled !== false && coachHasCurrentOrFutureAssignment ? [["checkin", "Check-In"] as [View, string]] : []), ["schedule", "Schedule"], ["assessments", "Ratings"]]
+      ? [["dashboard", "Dashboard"], ...(eventFeatureEnabled(event, "check_in") && coachHasCurrentOrFutureAssignment ? [["checkin", "Check-In"] as [View, string]] : []), ["schedule", "Schedule"], ...(eventFeatureEnabled(event, "ratings") ? [["assessments", "Ratings"] as [View, string]] : [])]
       : [["dashboard", "Dashboard"], ["board", "My Assignments"], ["checkin", "Check-In"], ["assessments", "My Evals"]];
 
   if (loading) return <main className="auth-page"><p className="auth-loading">Loading Dashboard</p></main>;
@@ -3284,14 +3309,15 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       {organizationActionMessage && <p className="pilot-message organization-message">{organizationActionMessage}</p>}
       {qrCheckInMessage && <p className="pilot-message qr-checkin-message">{qrCheckInMessage}</p>}
       {profile && view === "dashboard" && (isPersonalWorkspace ? <PersonalDashboard session={session} profile={profile} organizations={organizations} onNavigate={setView} /> : <DashboardHome profile={profile} event={event} data={data} events={events} adminView={isAdministrativeStaff} onNavigate={setView} />)}
-      {view === "board" && (isStaff ? event && profile && <AssignmentBoard data={data} event={event} profile={profile} ratingHistory={administrativeRatingHistory} showRatingAverages={isAdministrativeStaff} onSelectOfficial={setScheduleOfficialId} /> : profile && <UnifiedAssignmentsView session={session} profile={profile} />)}
+      {view === "board" && (isStaff ? event && profile && eventFeatureEnabled(event, "assignment_board") && <AssignmentBoard data={data} event={event} profile={profile} ratingHistory={administrativeRatingHistory} showRatingAverages={isAdministrativeStaff} onSelectOfficial={setScheduleOfficialId} /> : profile && <UnifiedAssignmentsView session={session} profile={profile} />)}
       {view === "my_assignments" && profile && <UnifiedAssignmentsView session={session} profile={profile} />}
-      {view === "checkin" && (isPersonalWorkspace ? <PersonalCheckInHub session={session} events={allEvents} /> : event?.check_in_enabled !== false && event && (isStaff ? <CheckInView event={event} data={data} session={session} canManageCheckIns={isAdministrativeStaff} onRefresh={refreshCheckIns} onSelectOfficial={setScheduleOfficialId} /> : refereeHasCurrentOrFutureAssignment || coachHasCurrentOrFutureAssignment ? <RefereeCheckIn event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} /> : null))}
+      {view === "checkin" && (isPersonalWorkspace ? <PersonalCheckInHub session={session} events={allEvents} /> : eventFeatureEnabled(event, "check_in") && event && (isStaff ? <CheckInView event={event} data={data} session={session} canManageCheckIns={isAdministrativeStaff} onRefresh={refreshCheckIns} onSelectOfficial={setScheduleOfficialId} /> : refereeHasCurrentOrFutureAssignment || coachHasCurrentOrFutureAssignment ? <RefereeCheckIn event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} /> : null))}
       {event && profile && view === "schedule" && (isStaff || isCoach) && <ScheduleView session={session} event={event} data={data} canEdit={isAdministrativeStaff} canRateCrew={isCoach && canAssess} coachView={isCoach && !isAdministrativeStaff} onRateCrew={setRatingModalGameId} onCreated={() => refresh(event.id)} profile={profile} ratingHistory={administrativeRatingHistory} showRatingAverages={isAdministrativeStaff} onSelectOfficial={setScheduleOfficialId} />}
       {isAdministrativeStaff && profile && organization && view === "officials" && <OfficialsDirectory session={session} profile={profile} organizationRoles={organizationRoles} eventRoles={eventRoles} canManageOrganizationRoles={Boolean(profile.is_site_owner || organizationRoles.includes("organization_director") || organizationRoles.includes("organization_admin"))} organizationId={organization.id} officials={organizationOfficials} data={data} event={event} events={events} openOfficialId={officialToEditId} onOpenOfficialHandled={() => setOfficialToEditId(null)} onCreated={() => loadOrganizationOfficials(session, organization.id).then(setOrganizationOfficials)} />}
-      {event && view === "coaching" && isAdministrativeStaff && <CoachWorkspace session={session} event={event} data={data} organizationOfficials={organizationOfficials} canManage onSaved={() => refresh(event.id)} />}
-      {event && organization && view === "assessments" && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={canConfigureRatings} canApprovePublic={canApprovePublicRatings} hideWorkspace={canAssess} onOpenRating={() => setRatingModalGameId("")} onEditRating={async (gameId, targetEventId) => { if (targetEventId !== event.id) await switchEvent(targetEventId); setRatingModalGameId(gameId); }} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
+      {event && view === "coaching" && isAdministrativeStaff && eventFeatureEnabled(event, "coaching") && <CoachWorkspace session={session} event={event} data={data} organizationOfficials={organizationOfficials} canManage onSaved={() => refresh(event.id)} />}
+      {event && organization && view === "assessments" && eventFeatureEnabled(event, "ratings") && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={canConfigureRatings} canApprovePublic={canApprovePublicRatings} hideWorkspace={canAssess} onOpenRating={() => setRatingModalGameId("")} onEditRating={async (gameId, targetEventId) => { if (targetEventId !== event.id) await switchEvent(targetEventId); setRatingModalGameId(gameId); }} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
       {isAdministrativeStaff && organization && view === "import" && profile && <ImportView session={session} profile={profile} organizationId={organization.id} organization={organization} events={events} activeEvent={event} canCreateEvent={Boolean(profile.is_site_owner || organizationRoles.includes("organization_director") || organizationRoles.includes("organization_admin") || organizationRoles.includes("event_admin"))} canManageLifecycle={Boolean(profile.is_site_owner || organizationRoles.includes("organization_director") || organizationRoles.includes("organization_admin") || eventRoles.includes("event_admin"))} canConfigureAliases={canConfigureRatings} onEventsChanged={handleEventsChanged} onImported={handleImported} />}
+      {event && organization && view === "event_settings" && canConfigureEvent && <><EventSettingsPanel session={session} organization={organization} event={event} events={events} onChanged={handleEventsChanged} /><EventLifecyclePanel session={session} event={event} onChanged={handleEventsChanged} /></>}
       {organization && view === "activity" && Boolean(profile?.is_site_owner || organizationRoles.includes("organization_director") || organizationRoles.includes("organization_admin")) && <OrganizationActivity session={session} organization={organization} events={events} onEventsChanged={handleEventsChanged} />}
       {profile && view === "account" && <AccountSettings session={session} profile={profile} onUpdated={setProfile} />}
       {view === "groups" && (allRoles.has("site_owner")
@@ -3301,7 +3327,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal official={official} event={event} data={data} canEdit={isAdministrativeStaff} onClose={() => setScheduleOfficialId(null)} onEdit={() => { setScheduleOfficialId(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.14.0</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.15.0</span></footer>
   </main>;
 }
 

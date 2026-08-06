@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.14.0 adds private event PDF documents with a designated Rules of Competition document linked from referee dashboards, personal assignments, and event schedules. Events can now be Tournaments or Leagues; tournaments may belong to a league, and league check-in defaults off while remaining configurable. Version 0.13.0 introduced the account-wide referee workspace.
+Version 0.15.0 adds a dedicated Event Settings area with editable event details and organization-limited feature switches for the Assignment Board, Check-In, Ratings, Coaching, and Event Documents. Disabled modules disappear from event navigation and reject new backend activity while preserving history. Version 0.14.0 added private event PDFs and Tournament/League event types.
 
 Bulk lifecycle management remains available for officials, ratings, and events. Games and assignments are designed to join the same workflow when manual schedule editing is introduced.
 
@@ -37,6 +37,7 @@ Bulk lifecycle management remains available for officials, ratings, and events. 
 - Unified referee assignment view with source labels, source links, cancellations, and overlap warnings
 - Private event PDF documents with authenticated Rules of Competition access
 - Tournament and League event types, including league-linked tournaments and configurable check-in
+- Full event settings with organization entitlement ceilings and per-event feature controls
 
 ## Local setup
 

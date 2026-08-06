@@ -71,7 +71,11 @@ export type OrganizationRecord = {
   deactivated_by?: string | null;
   position_title_aliases: Record<string, string>;
   public_rating_approval_role?: "none" | "organization_admin" | "event_admin";
+  feature_entitlements: EventFeatureSettings;
 };
+
+export type EventFeatureKey = "assignment_board" | "check_in" | "ratings" | "coaching" | "event_documents";
+export type EventFeatureSettings = Record<EventFeatureKey, boolean>;
 
 export type EventRecord = {
   id: string;
@@ -85,6 +89,7 @@ export type EventRecord = {
   event_type: "tournament" | "league";
   parent_league_id: string | null;
   check_in_enabled: boolean;
+  feature_settings: EventFeatureSettings;
   rating_type: "skills_eval" | "basic_eval";
   ratings_admin_only: boolean;
   public_rating_approval_role?: "inherit" | "none" | "organization_admin" | "event_admin";
@@ -792,8 +797,8 @@ export async function createEvent(
   return rows[0];
 }
 
-export async function updateEventStructure(session: Law18Session, eventId: string, values: { event_type: "tournament" | "league"; parent_league_id: string | null; check_in_enabled: boolean }) {
-  const rows = await rest<EventRecord[]>(session, `events?id=eq.${enc(eventId)}`, { method: "PATCH", body: JSON.stringify({ ...values, parent_league_id: values.event_type === "tournament" ? values.parent_league_id : null }) }, "return=representation");
+export async function updateEventSettings(session: Law18Session, eventId: string, values: { name: string; venue_name: string; starts_on: string; ends_on: string; timezone: string; event_type: "tournament" | "league"; parent_league_id: string | null; feature_settings: EventFeatureSettings }) {
+  const rows = await rest<EventRecord[]>(session, `events?id=eq.${enc(eventId)}`, { method: "PATCH", body: JSON.stringify({ ...values, parent_league_id: values.event_type === "tournament" ? values.parent_league_id : null, check_in_enabled: values.feature_settings.check_in }) }, "return=representation");
   if (!rows[0]) throw new Error("The event settings could not be saved.");
   return rows[0];
 }

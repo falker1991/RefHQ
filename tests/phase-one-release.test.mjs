@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.16.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.17.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,10 +14,10 @@ test("Version 0.16.0 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.16\.0/);
+  assert.match(page, /Version 0\.17\.0/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.16.0");
+  assert.equal(JSON.parse(packageJson).version, "0.17.0");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -37,6 +37,30 @@ test("event settings respect organization feature ceilings and enforce disabled 
   assert.match(migration, /enforce_event_feature_enabled/);
   assert.match(migration, /enforce_check_in_feature/);
   assert.match(migration, /enforce_rating_feature/);
+});
+
+test("guest check-in matches an imported official and confirms the full daily schedule without an account", async () => {
+  const [page, client, css, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("app/globals.css"),
+    read("supabase/migrations/202608060044_guest_check_in.sql"),
+  ]);
+  assert.match(page, /function GuestCheckInPage/);
+  assert.match(page, /exactly as they appear in your Assignr account/);
+  assert.match(page, /Confirm Schedule & Check In/);
+  assert.match(page, /guest=1/);
+  assert.match(page, /Enable Guest Check-In/);
+  assert.match(client, /findGuestCheckIn/);
+  assert.match(client, /confirmGuestCheckIn/);
+  assert.match(client, /Authorization: `Bearer \$\{config\.anonKey\}`/);
+  assert.match(css, /\.guest-checkin-page/);
+  assert.match(css, /\.guest-schedule-list/);
+  assert.match(migration, /guest_check_in_enabled boolean not null default false/);
+  assert.match(migration, /security definer/);
+  assert.match(migration, /find_guest_check_in/);
+  assert.match(migration, /confirm_guest_check_in/);
+  assert.match(migration, /grant execute .* to anon, authenticated/);
 });
 
 test("event types and private Rules of Competition documents are available throughout assigned-event views", async () => {

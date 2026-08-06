@@ -89,6 +89,7 @@ export type EventRecord = {
   event_type: "tournament" | "league";
   parent_league_id: string | null;
   check_in_enabled: boolean;
+  guest_check_in_enabled: boolean;
   feature_settings: EventFeatureSettings;
   rating_type: "skills_eval" | "basic_eval";
   ratings_admin_only: boolean;
@@ -202,6 +203,26 @@ export type CheckInRecord = {
   status: "checked_in" | "late" | "missing" | "excused";
   method: string;
   event_date: string;
+};
+
+export type GuestCheckInLookup = {
+  token: string;
+  event_name: string;
+  event_date: string;
+  official_name: string;
+  already_checked_in: boolean;
+  assignments: Array<{
+    game_id: string;
+    starts_at: string;
+    field_name: string;
+    venue_name: string | null;
+    home_team: string;
+    away_team: string;
+    age_group: string | null;
+    gender: string | null;
+    position: AssignmentRecord["position"];
+    position_title: string | null;
+  }>;
 };
 
 export type CoachAssignmentRecord = {
@@ -337,6 +358,23 @@ async function rest<T>(
   if (!response.ok) {
     throw new Error(payload?.message || payload?.hint || "Supabase request failed.");
   }
+  return payload as T;
+}
+
+async function publicRest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const config = configuration();
+  const response = await fetch(`${config.baseUrl}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: config.anonKey,
+      Authorization: `Bearer ${config.anonKey}`,
+      "Content-Type": "application/json",
+      ...init.headers,
+    },
+  });
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) : null;
+  if (!response.ok) throw new Error(payload?.message || payload?.hint || "Supabase request failed.");
   return payload as T;
 }
 
@@ -798,10 +836,24 @@ export async function createEvent(
   return rows[0];
 }
 
-export async function updateEventSettings(session: Law18Session, eventId: string, values: { name: string; venue_name: string; starts_on: string; ends_on: string; timezone: string; event_type: "tournament" | "league"; parent_league_id: string | null; feature_settings: EventFeatureSettings }) {
-  const rows = await rest<EventRecord[]>(session, `events?id=eq.${enc(eventId)}`, { method: "PATCH", body: JSON.stringify({ ...values, parent_league_id: values.event_type === "tournament" ? values.parent_league_id : null, check_in_enabled: values.feature_settings.check_in }) }, "return=representation");
+export async function updateEventSettings(session: Law18Session, eventId: string, values: { name: string; venue_name: string; starts_on: string; ends_on: string; timezone: string; event_type: "tournament" | "league"; parent_league_id: string | null; feature_settings: EventFeatureSettings; guest_check_in_enabled: boolean }) {
+  const rows = await rest<EventRecord[]>(session, `events?id=eq.${enc(eventId)}`, { method: "PATCH", body: JSON.stringify({ ...values, parent_league_id: values.event_type === "tournament" ? values.parent_league_id : null, check_in_enabled: values.feature_settings.check_in, guest_check_in_enabled: values.feature_settings.check_in && values.guest_check_in_enabled }) }, "return=representation");
   if (!rows[0]) throw new Error("The event settings could not be saved.");
   return rows[0];
+}
+
+export async function findGuestCheckIn(eventSlug: string, eventDate: string, lastName: string, email: string) {
+  return publicRest<GuestCheckInLookup>("rpc/find_guest_check_in", {
+    method: "POST",
+    body: JSON.stringify({ event_slug: eventSlug, event_day: eventDate, entered_last_name: lastName, entered_email: email }),
+  });
+}
+
+export async function confirmGuestCheckIn(token: string) {
+  return publicRest<{ checked_in: boolean; already_checked_in: boolean; checked_in_at: string }>("rpc/confirm_guest_check_in", {
+    method: "POST",
+    body: JSON.stringify({ lookup_token: token }),
+  });
 }
 
 export async function loadEventDocuments(session: Law18Session, eventId: string) {

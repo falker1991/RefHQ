@@ -957,13 +957,17 @@ export async function updateEventRatingSettings(
   ratingsAdminOnly: boolean,
   publicRatingApprovalRole: EventRecord["public_rating_approval_role"],
 ) {
-  const rows = await rest<EventRecord[]>(
-    session,
-    `events?id=eq.${enc(eventId)}`,
-    { method: "PATCH", body: JSON.stringify({ rating_type: ratingType, ratings_admin_only: ratingsAdminOnly, public_rating_approval_role: publicRatingApprovalRole }) },
-    "return=representation",
-  );
-  return rows[0];
+  const updated = await rest<EventRecord>(session, "rpc/update_event_rating_settings", {
+    method: "POST",
+    body: JSON.stringify({
+      target_event: eventId,
+      next_rating_type: ratingType,
+      next_ratings_admin_only: ratingsAdminOnly,
+      next_public_rating_approval_role: publicRatingApprovalRole,
+    }),
+  });
+  if (!updated?.id) throw new Error("The event rating settings were not saved.");
+  return updated;
 }
 
 export async function approvePublicRating(session: Law18Session, assessmentId: string) {

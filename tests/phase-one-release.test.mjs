@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.15.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.15.1 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,10 +14,10 @@ test("Version 0.15.0 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.15\.0/);
+  assert.match(page, /Version 0\.15\.1/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.15.0");
+  assert.equal(JSON.parse(packageJson).version, "0.15.1");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -558,10 +558,14 @@ test("official schedule modal is scrollable and grays completed assignments", as
   assert.match(css, /\.checkin-crew-member\.selected-official/);
 });
 
-test("rating configuration requires an explicit save and Basic Eval stores notes", async () => {
-  const page = await read("app/page.tsx");
+test("rating configuration requires an explicit reliable save and Basic Eval stores notes", async () => {
+  const [page, client, migration] = await Promise.all([read("app/page.tsx"), read("app/supabase-client.ts"), read("supabase/migrations/202608050042_rating_configuration_save.sql")]);
   assert.match(page, /Save Configuration/);
   assert.match(page, /saveConfiguration/);
+  assert.match(page, /rating-config-message/);
+  assert.match(client, /rpc\/update_event_rating_settings/);
+  assert.match(migration, /create or replace function public\.update_event_rating_settings/);
+  assert.match(migration, /organization_director/);
   assert.match(page, /configuration\.ratingType === event\.rating_type/);
   assert.match(page, /className="basic-eval-notes"/);
   assert.match(page, /coach_notes: rating\.coach_notes \|\| null/);

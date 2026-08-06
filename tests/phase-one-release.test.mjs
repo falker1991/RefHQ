@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.15.1 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.16.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,10 +14,10 @@ test("Version 0.15.1 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.15\.1/);
+  assert.match(page, /Version 0\.16\.0/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.15.1");
+  assert.equal(JSON.parse(packageJson).version, "0.16.0");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -573,6 +573,26 @@ test("rating configuration requires an explicit reliable save and Basic Eval sto
   assert.match(page, /<option value="">N\/A<\/option>/);
   assert.match(page, /overall_rating: e\.target\.value \? Number\(e\.target\.value\) : null/);
   assert.match(page, /<textarea rows=\{2\}/);
+});
+
+test("Skills Eval uses position-specific categories and expanded written feedback", async () => {
+  const [page, client, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/202608050043_position_specific_skills_eval.sql"),
+  ]);
+  assert.match(page, /Match Control/);
+  assert.match(page, /Signaling\/Offside/);
+  assert.match(page, /Teamwork/);
+  assert.match(page, /Positioning and Movement/);
+  assert.match(page, /Management of the Technical Area/);
+  assert.match(page, /Positive Areas of Performance/);
+  assert.match(page, /Areas for Improvement/);
+  assert.match(page, /Additional Comments\/Suggestions/);
+  assert.match(page, /Private Coach\/Admin Notes/);
+  assert.match(page, /skillValuesForAssignment/);
+  assert.match(client, /additional_comments: string \| null/);
+  assert.match(migration, /add column if not exists additional_comments text/);
 });
 
 test("administrative roster supports immediate manual check-in and undo", async () => {

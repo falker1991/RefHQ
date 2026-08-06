@@ -1727,6 +1727,7 @@ type CrewRatingDraft = {
   match_control: number;
   strengths: string;
   development_focus: string;
+  additional_comments: string;
   coach_notes: string;
 };
 
@@ -1738,8 +1739,41 @@ const blankCrewRating = (): CrewRatingDraft => ({
   match_control: 3,
   strengths: "",
   development_focus: "",
+  additional_comments: "",
   coach_notes: "",
 });
+
+type SkillRatingKey = "positioning" | "decision_making" | "communication" | "match_control";
+
+function skillsForAssignment(assignment: AssignmentRecord): { key: SkillRatingKey; label: string }[] {
+  const title = (assignment.position_title || "").trim().toLowerCase();
+  const assistantReferee = assignment.position === "assistant_referee" || /^(ar(?:\s*\d+)?|assistant referee(?:\s*\d+)?|asst\.? referee(?:\s*\d+)?)$/.test(title);
+  const fourthOfficial = assignment.position === "fourth_official" || /^(4th|fourth) official$/.test(title);
+  if (assistantReferee) return [
+    { key: "decision_making", label: "Signaling/Offside" },
+    { key: "communication", label: "Teamwork" },
+    { key: "positioning", label: "Positioning and Movement" },
+  ];
+  if (fourthOfficial) return [
+    { key: "communication", label: "Teamwork" },
+    { key: "match_control", label: "Management of the Technical Area" },
+  ];
+  return [
+    { key: "match_control", label: "Match Control" },
+    { key: "communication", label: "Teamwork" },
+    { key: "positioning", label: "Positioning and Movement" },
+  ];
+}
+
+function skillValuesForAssignment(assignment: AssignmentRecord, rating: CrewRatingDraft) {
+  const enabled = new Set(skillsForAssignment(assignment).map((item) => item.key));
+  return {
+    positioning: enabled.has("positioning") ? rating.positioning : null,
+    decision_making: enabled.has("decision_making") ? rating.decision_making : null,
+    communication: enabled.has("communication") ? rating.communication : null,
+    match_control: enabled.has("match_control") ? rating.match_control : null,
+  };
+}
 
 function assessmentScore(assessment: AssessmentRecord): number | null {
   if (assessment.evaluation_type === "basic_eval") return assessment.overall_rating;
@@ -1981,9 +2015,10 @@ function AssessmentCenter({
     for (let index = 1; index <= maximumCrew; index += 1) {
       headings.push(
         `Official ${index} Name`, `Official ${index} Position`, `Official ${index} Eval Type`,
-        `Official ${index} Score`, `Official ${index} Positioning`, `Official ${index} Decision Making`,
-        `Official ${index} Communication`, `Official ${index} Match Control`,
-        `Official ${index} Strengths`, `Official ${index} Development Focus`, `Official ${index} Notes`,
+        `Official ${index} Score`, `Official ${index} Positioning and Movement`, `Official ${index} Signaling/Offside`,
+        `Official ${index} Teamwork`, `Official ${index} Match Control or Technical Area Management`,
+        `Official ${index} Positive Areas of Performance`, `Official ${index} Areas for Improvement`,
+        `Official ${index} Additional Comments/Suggestions`, `Official ${index} Private Coach/Admin Notes`,
       );
     }
     const escapeCell = (value: unknown) => `"${String(value ?? "").replaceAll("\"", "\"\"")}"`;
@@ -2001,7 +2036,7 @@ function AssessmentCenter({
         rating.evaluation_type === "basic_eval" ? "Basic Eval" : "Skills Eval",
         assessmentScore(rating)?.toFixed(2) || "",
         rating.positioning ?? "", rating.decision_making ?? "", rating.communication ?? "", rating.match_control ?? "",
-        rating.strengths || "", rating.development_focus || "", rating.coach_notes || "",
+        rating.strengths || "", rating.development_focus || "", rating.additional_comments || "", rating.coach_notes || "",
       ));
       while (cells.length < headings.length) cells.push("");
       return cells.map(escapeCell).join(",");
@@ -2028,6 +2063,7 @@ function AssessmentCenter({
         match_control: saved.match_control || 3,
         strengths: saved.strengths || "",
         development_focus: saved.development_focus || "",
+        additional_comments: saved.additional_comments || "",
         coach_notes: saved.coach_notes || "",
       } : blankCrewRating();
     });
@@ -2048,6 +2084,7 @@ function AssessmentCenter({
     try {
       await Promise.all(gameAssignments.map((assignment) => {
         const rating = drafts[assignment.official_id] || blankCrewRating();
+        const skillValues = skillValuesForAssignment(assignment, rating);
         return saveAssessment(session, organizationId, {
           game_id: gameId,
           official_id: assignment.official_id,
@@ -2055,12 +2092,13 @@ function AssessmentCenter({
           status,
           evaluation_type: event.rating_type,
           overall_rating: event.rating_type === "basic_eval" ? rating.overall_rating : null,
-          positioning: event.rating_type === "skills_eval" ? rating.positioning : null,
-          decision_making: event.rating_type === "skills_eval" ? rating.decision_making : null,
-          communication: event.rating_type === "skills_eval" ? rating.communication : null,
-          match_control: event.rating_type === "skills_eval" ? rating.match_control : null,
+          positioning: event.rating_type === "skills_eval" ? skillValues.positioning : null,
+          decision_making: event.rating_type === "skills_eval" ? skillValues.decision_making : null,
+          communication: event.rating_type === "skills_eval" ? skillValues.communication : null,
+          match_control: event.rating_type === "skills_eval" ? skillValues.match_control : null,
           strengths: event.rating_type === "skills_eval" ? rating.strengths || null : null,
           development_focus: event.rating_type === "skills_eval" ? rating.development_focus || null : null,
+          additional_comments: event.rating_type === "skills_eval" ? rating.additional_comments || null : null,
           coach_notes: rating.coach_notes || null,
         });
       }));
@@ -2111,12 +2149,7 @@ function AssessmentCenter({
         return <section className="crew-rating-card" key={assignment.official_id}><div className="crew-rating-heading"><span className="avatar">{initials(officialMap.get(assignment.official_id)?.full_name || "R")}</span><div className="crew-rating-identity"><h3>{officialMap.get(assignment.official_id)?.full_name || "Official"}</h3><p>{positionLabel(assignment.position, assignment.position_title)}</p></div>{event.rating_type === "basic_eval" && <label className="inline-basic-rating"><span>Rating</span><select aria-label={`Rating for ${officialMap.get(assignment.official_id)?.full_name || "official"}`} value={rating.overall_rating ?? ""} onChange={(e) => updateDraft(assignment.official_id, { overall_rating: e.target.value ? Number(e.target.value) : null })}><option value="">N/A</option>{[1,2,3,4,5].map((score) => <option value={score} key={score}>{score}</option>)}</select></label>}</div>
           {event.rating_type === "basic_eval"
             ? <div className="basic-eval-fields"><label className="basic-eval-notes">Notes<textarea rows={2} value={rating.coach_notes} placeholder="Add notes about this official…" onChange={(e) => updateDraft(assignment.official_id, { coach_notes: e.target.value })} /></label></div>
-            : <><div className="skill-rating-grid">{([
-              ["positioning", "Positioning"],
-              ["decision_making", "Decision Making"],
-              ["communication", "Communication"],
-              ["match_control", "Match Control"],
-            ] as const).map(([key, label]) => <label key={key}><span>{label}</span><select value={rating[key]} onChange={(e) => updateDraft(assignment.official_id, { [key]: Number(e.target.value) })}>{[1,2,3,4,5].map((score) => <option key={score}>{score}</option>)}</select></label>)}</div><div className="crew-notes-grid"><label>Strengths<textarea value={rating.strengths} onChange={(e) => updateDraft(assignment.official_id, { strengths: e.target.value })} /></label><label>Development Focus<textarea value={rating.development_focus} onChange={(e) => updateDraft(assignment.official_id, { development_focus: e.target.value })} /></label><label>Private Coach Notes<textarea value={rating.coach_notes} onChange={(e) => updateDraft(assignment.official_id, { coach_notes: e.target.value })} /></label></div></>}
+            : <><div className="skill-rating-grid">{skillsForAssignment(assignment).map(({ key, label }) => <label key={key}><span>{label}</span><select value={rating[key]} onChange={(e) => updateDraft(assignment.official_id, { [key]: Number(e.target.value) })}>{[1,2,3,4,5].map((score) => <option key={score}>{score}</option>)}</select></label>)}</div><div className="crew-notes-grid"><label>Positive Areas of Performance<textarea value={rating.strengths} onChange={(e) => updateDraft(assignment.official_id, { strengths: e.target.value })} /></label><label>Areas for Improvement<textarea value={rating.development_focus} onChange={(e) => updateDraft(assignment.official_id, { development_focus: e.target.value })} /></label><label>Additional Comments/Suggestions<textarea value={rating.additional_comments} onChange={(e) => updateDraft(assignment.official_id, { additional_comments: e.target.value })} /></label><label>Private Coach/Admin Notes<textarea value={rating.coach_notes} onChange={(e) => updateDraft(assignment.official_id, { coach_notes: e.target.value })} /></label></div></>}
         </section>;
       })}{gameId && !gameAssignments.length && <EmptyState>No officials are assigned to this game.</EmptyState>}</div>
       {message && !canConfigure && <p className="pilot-message assessment-message">{message}</p>}
@@ -3327,7 +3360,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal official={official} event={event} data={data} canEdit={isAdministrativeStaff} onClose={() => setScheduleOfficialId(null)} onEdit={() => { setScheduleOfficialId(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.15.1</span></footer>
+    <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.16.0</span></footer>
   </main>;
 }
 

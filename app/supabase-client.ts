@@ -231,6 +231,7 @@ export type AssessmentRecord = {
   match_control: number | null;
   strengths: string | null;
   development_focus: string | null;
+  additional_comments: string | null;
   coach_notes: string | null;
   submitted_at: string | null;
   created_at?: string;

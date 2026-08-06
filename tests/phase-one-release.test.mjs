@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.12.5 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.14.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,11 +14,41 @@ test("Version 0.12.5 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.12\.5/);
+  assert.match(page, /Version 0\.14\.0/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.12.5");
+  assert.equal(JSON.parse(packageJson).version, "0.14.0");
   assert.match(viteConfig, /keep_vars: true/);
+});
+
+test("event types and private Rules of Competition documents are available throughout assigned-event views", async () => {
+  const [page, client, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/202608050040_event_types_and_documents.sql"),
+  ]);
+  assert.match(migration, /event_type text not null default 'tournament'/);
+  assert.match(migration, /parent_league_id uuid references public\.events/);
+  assert.match(migration, /check_in_enabled boolean not null default true/);
+  assert.match(migration, /create table if not exists public\.event_documents/);
+  assert.match(migration, /values \('event-documents', 'event-documents', false/);
+  assert.match(client, /uploadEventDocument/);
+  assert.match(client, /loadMyRulesDocuments/);
+  assert.match(page, /ROC — Rules of Competition/);
+  assert.match(page, /function EventDocumentsPanel/);
+  assert.match(page, /Part of league \(optional\)/);
+  assert.match(page, /event\?\.check_in_enabled !== false/);
+});
+
+test("referees use an account-wide workspace without active organization or event selectors", async () => {
+  const [page, css] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
+  assert.match(page, /function PersonalDashboard/);
+  assert.match(page, /function PersonalCheckInHub/);
+  assert.match(page, /isPersonalWorkspace && <div className="personal-header-spacer"/);
+  assert.match(page, /isPersonalWorkspace \? <PersonalDashboard/);
+  assert.match(page, /isPersonalWorkspace \? <PersonalCheckInHub/);
+  assert.match(page, /You have assignments in more than one event today/);
+  assert.match(css, /\.personal-header-spacer/);
 });
 
 test("application header remains visible while scrolling", async () => {
@@ -463,7 +493,7 @@ test("coach-only schedules exclude operational and HQ locations", async () => {
 
 test("coaching administration is hidden from referee coaches", async () => {
   const page = await read("app/page.tsx");
-  assert.match(page, /isCoach\s*\?\s*\[\["dashboard", "Dashboard"\], \.\.\.\(coachHasCurrentOrFutureAssignment/);
+  assert.match(page, /isCoach\s*\?\s*\[\["dashboard", "Dashboard"\], \.\.\.\(event\?\.check_in_enabled !== false && coachHasCurrentOrFutureAssignment/);
   assert.match(page, /view === "coaching" && isAdministrativeStaff/);
 });
 
@@ -565,7 +595,7 @@ test("all users have active-group role-aware help", async () => {
   assert.match(page, /className="help-button"/);
   assert.match(page, /HELP & HOW-TO/);
   assert.match(page, /How to Navigate Law18Ref/);
-  assert.match(page, /Open My Assignments to view one schedule containing your Law18Ref games/);
+  assert.match(page, /Open My Assignments to view one schedule containing all of your Law18Ref games/);
   assert.match(page, /Select Rate Crew on a game to open its evaluation form/);
   assert.match(page, /activeGroupRoles/);
   assert.match(page, /Follow the directions below for your role/);

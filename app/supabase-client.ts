@@ -82,6 +82,9 @@ export type EventRecord = {
   ends_on: string;
   timezone: string;
   check_in_slug: string;
+  event_type: "tournament" | "league";
+  parent_league_id: string | null;
+  check_in_enabled: boolean;
   rating_type: "skills_eval" | "basic_eval";
   ratings_admin_only: boolean;
   public_rating_approval_role?: "inherit" | "none" | "organization_admin" | "event_admin";
@@ -90,6 +93,19 @@ export type EventRecord = {
   archived_at?: string | null;
   archived_by?: string | null;
   archive_reason?: string | null;
+};
+
+export type EventDocumentRecord = {
+  id: string;
+  event_id: string;
+  document_type: "rules_of_competition" | "other";
+  title: string;
+  file_name: string;
+  storage_path: string;
+  mime_type: string;
+  size_bytes: number;
+  created_by: string;
+  created_at: string;
 };
 
 export type GameRecord = {
@@ -740,6 +756,9 @@ export async function createEvent(
     starts_on: string;
     ends_on: string;
     timezone: string;
+    event_type: "tournament" | "league";
+    parent_league_id: string | null;
+    check_in_enabled: boolean;
   },
 ) {
   if (!organizationId) throw new Error("Select an organization before creating an event.");
@@ -760,6 +779,9 @@ export async function createEvent(
         starts_on: values.starts_on,
         ends_on: values.ends_on,
         timezone: values.timezone,
+        event_type: values.event_type,
+        parent_league_id: values.event_type === "tournament" ? values.parent_league_id : null,
+        check_in_enabled: values.check_in_enabled,
         check_in_slug: `${slugBase}-${Date.now().toString(36)}`,
         created_by: profile.id,
       }),
@@ -770,12 +792,60 @@ export async function createEvent(
   return rows[0];
 }
 
+export async function updateEventStructure(session: Law18Session, eventId: string, values: { event_type: "tournament" | "league"; parent_league_id: string | null; check_in_enabled: boolean }) {
+  const rows = await rest<EventRecord[]>(session, `events?id=eq.${enc(eventId)}`, { method: "PATCH", body: JSON.stringify({ ...values, parent_league_id: values.event_type === "tournament" ? values.parent_league_id : null }) }, "return=representation");
+  if (!rows[0]) throw new Error("The event settings could not be saved.");
+  return rows[0];
+}
+
+export async function loadEventDocuments(session: Law18Session, eventId: string) {
+  return rest<EventDocumentRecord[]>(session, `event_documents?event_id=eq.${enc(eventId)}&select=*&order=created_at.desc`);
+}
+
+export async function loadMyRulesDocuments(session: Law18Session) {
+  return rest<EventDocumentRecord[]>(session, "event_documents?document_type=eq.rules_of_competition&select=*&order=created_at.desc");
+}
+
+async function removeEventDocumentObject(session: Law18Session, storagePath: string) {
+  if (!baseUrl || !anonKey) throw new Error("Supabase is not configured.");
+  const response = await fetch(`${baseUrl}/storage/v1/object/event-documents/${storagePath.split("/").map(enc).join("/")}`, { method: "DELETE", headers: { apikey: anonKey, Authorization: `Bearer ${session.access_token}` } });
+  if (!response.ok && response.status !== 404) throw new Error("Unable to remove the previous event document.");
+}
+
+export async function uploadEventDocument(session: Law18Session, eventId: string, file: File, documentType: EventDocumentRecord["document_type"], title: string) {
+  if (!baseUrl || !anonKey) throw new Error("Supabase is not configured.");
+  if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) throw new Error("Event documents must be PDF files.");
+  if (file.size > 25 * 1024 * 1024) throw new Error("Event documents cannot exceed 25 MB.");
+  if (documentType === "rules_of_competition") {
+    const previous = (await loadEventDocuments(session, eventId)).find((item) => item.document_type === documentType);
+    if (previous) {
+      await rest(session, `event_documents?id=eq.${enc(previous.id)}`, { method: "DELETE" }, "return=minimal");
+      await removeEventDocumentObject(session, previous.storage_path);
+    }
+  }
+  const objectPath = `${eventId}/${crypto.randomUUID()}.pdf`;
+  const response = await fetch(`${baseUrl}/storage/v1/object/event-documents/${objectPath.split("/").map(enc).join("/")}`, { method: "POST", headers: { apikey: anonKey, Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/pdf", "x-upsert": "false" }, body: file });
+  if (!response.ok) { const result = await response.json().catch(() => ({})); throw new Error(result.message || result.error || "Unable to upload the event document."); }
+  const rows = await rest<EventDocumentRecord[]>(session, "event_documents", { method: "POST", body: JSON.stringify({ event_id: eventId, document_type: documentType, title: title.trim() || file.name.replace(/\.pdf$/i, ""), file_name: file.name, storage_path: objectPath, mime_type: "application/pdf", size_bytes: file.size, created_by: session.user.id }) }, "return=representation");
+  return rows[0];
+}
+
+export async function openEventDocument(session: Law18Session, document: EventDocumentRecord) {
+  if (!baseUrl || !anonKey) throw new Error("Supabase is not configured.");
+  const response = await fetch(`${baseUrl}/storage/v1/object/authenticated/event-documents/${document.storage_path.split("/").map(enc).join("/")}`, { headers: { apikey: anonKey, Authorization: `Bearer ${session.access_token}` } });
+  if (!response.ok) throw new Error("Unable to open this event document.");
+  const objectUrl = URL.createObjectURL(await response.blob());
+  window.open(objectUrl, "_blank", "noopener,noreferrer");
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+}
+
 export async function loadEventData(session: Law18Session, eventId: string) {
-  const [games, coachAssignments, eventMembers, eventRows] = await Promise.all([
+  const [games, coachAssignments, eventMembers, eventRows, documents] = await Promise.all([
     rest<GameRecord[]>(session, `games?event_id=eq.${enc(eventId)}&select=*&order=starts_at.asc`),
     rest<CoachAssignmentRecord[]>(session, `coach_assignments?event_id=eq.${enc(eventId)}&select=*`),
     rest<{ user_id: string }[]>(session, `event_memberships?event_id=eq.${enc(eventId)}&select=user_id`),
     rest<{ organization_id: string }[]>(session, `events?id=eq.${enc(eventId)}&select=organization_id`),
+    loadEventDocuments(session, eventId),
   ]);
   const eventOrganizationId = eventRows[0]?.organization_id;
   const gameIds = games.map((game) => game.id).join(",");
@@ -803,7 +873,7 @@ export async function loadEventData(session: Law18Session, eventId: string) {
   const assessments = gameIds
     ? await rest<AssessmentRecord[]>(session, `assessments?game_id=in.(${gameIds})&select=*`)
     : [];
-  return { games, assignments, officials, checkIns, assessments, coachAssignments };
+  return { games, assignments, officials, checkIns, assessments, coachAssignments, documents };
 }
 
 export async function createCoachAssignment(

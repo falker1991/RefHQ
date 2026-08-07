@@ -1325,17 +1325,19 @@ export async function mergeOrganizationAccounts(
   organizationId: string,
   primaryOfficialId: string,
   secondaryOfficialId: string,
+  fieldSources: Record<"full_name" | "secondary_email" | "date_of_birth" | "phone" | "badge_level", "primary" | "secondary">,
 ) {
   return rest<{
     primary_official_id: string;
     primary_user_id: string;
     primary_email: string;
-  }>(session, "rpc/secure_merge_organization_accounts", {
+  }>(session, "rpc/secure_merge_organization_accounts_with_profile", {
     method: "POST",
     body: JSON.stringify({
       organization_uuid: organizationId,
       primary_official_uuid: primaryOfficialId,
       secondary_official_uuid: secondaryOfficialId,
+      field_sources: fieldSources,
     }),
   });
 }

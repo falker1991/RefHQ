@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.18.0 renames user-facing Organizations to Groups, including Group Director and Group Admin roles, and gives the Site Owner per-group feature entitlement controls. Disabling a group feature immediately disables it across that group’s events. Version 0.17.0 added optional account-free Guest Check-In.
+Version 0.18.1 adds a field-by-field account merge review so authorized group leadership can choose which name, secondary email, date of birth, phone, and badge information survives while preserving the selected primary login. Version 0.18.0 renamed user-facing Organizations to Groups and added Site Owner per-group feature entitlement controls.
 
 Bulk lifecycle management remains available for officials, ratings, and events. Games and assignments are designed to join the same workflow when manual schedule editing is introduced.
 

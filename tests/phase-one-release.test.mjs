@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.18.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.18.1 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,10 +14,10 @@ test("Version 0.18.0 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.18\.0/);
+  assert.match(page, /Version 0\.18\.1/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.18.0");
+  assert.equal(JSON.parse(packageJson).version, "0.18.1");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -795,6 +795,19 @@ test("account merge migration transfers operational records and audits the merge
   assert.match(migration, /event_memberships/);
   assert.match(migration, /accounts_merged/);
   assert.match(migration, /merged_into_official_id/);
+});
+
+test("account merge review supports field-by-field profile resolution", async () => {
+  const page = await read("app/page.tsx");
+  const client = await read("app/supabase-client.ts");
+  const migration = await read("supabase/migrations/202608060046_account_merge_profile_review.sql");
+  assert.match(page, /merge-profile-review/);
+  for (const field of ["full_name", "secondary_email", "date_of_birth", "phone", "badge_level"]) {
+    assert.match(page, new RegExp(field));
+  }
+  assert.match(client, /secure_merge_organization_accounts_with_profile/);
+  assert.match(migration, /primary_official\.personal_contact_locked/);
+  assert.match(migration, /account_merge_profile_resolved/);
 });
 
 test("assignment board exposes all three Phase 1 views", async () => {

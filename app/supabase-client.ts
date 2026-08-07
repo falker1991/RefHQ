@@ -444,12 +444,12 @@ export async function updateOrganizationName(session: Law18Session, organization
 export async function updateOrganizationSettings(
   session: Law18Session,
   organizationId: string,
-  values: { name: string; logo_url: string | null; public_rating_approval_role?: OrganizationRecord["public_rating_approval_role"] },
+  values: { name: string; logo_url: string | null; public_rating_approval_role?: OrganizationRecord["public_rating_approval_role"]; feature_entitlements?: EventFeatureSettings },
 ) {
   const rows = await rest<OrganizationRecord[]>(
     session,
     `organizations?id=eq.${enc(organizationId)}`,
-    { method: "PATCH", body: JSON.stringify({ name: values.name.trim(), logo_url: values.logo_url, ...(values.public_rating_approval_role ? { public_rating_approval_role: values.public_rating_approval_role } : {}) }) },
+    { method: "PATCH", body: JSON.stringify({ name: values.name.trim(), logo_url: values.logo_url, ...(values.public_rating_approval_role ? { public_rating_approval_role: values.public_rating_approval_role } : {}), ...(values.feature_entitlements ? { feature_entitlements: values.feature_entitlements } : {}) }) },
     "return=representation",
   );
   return rows[0];
@@ -600,7 +600,7 @@ export async function uploadOrganizationLogo(session: Law18Session, organization
   });
   if (!response.ok) {
     const result = await response.json().catch(() => ({}));
-    throw new Error(result.message || result.error || "Unable to upload the organization logo.");
+    throw new Error(result.message || result.error || "Unable to upload the group logo.");
   }
   return `${baseUrl}/storage/v1/object/public/organization-logos/${objectPath.split("/").map(enc).join("/")}`;
 }
@@ -805,7 +805,7 @@ export async function createEvent(
     check_in_enabled: boolean;
   },
 ) {
-  if (!organizationId) throw new Error("Select an organization before creating an event.");
+  if (!organizationId) throw new Error("Select a group before creating an event.");
   if (!values.name.trim()) throw new Error("Enter an event name.");
   if (!values.venue_name.trim()) throw new Error("Enter a default venue.");
   if (!values.starts_on || !values.ends_on) throw new Error("Enter the event dates.");
@@ -1347,7 +1347,7 @@ export async function importOfficials(
   fileName: string,
   rows: OfficialImportRow[],
 ): Promise<OfficialImportResult> {
-  if (!organizationId) throw new Error("Select an organization before importing officials.");
+  if (!organizationId) throw new Error("Select a group before importing officials.");
   const existing = await loadOrganizationOfficials(session, organizationId, true);
   const byId = new Map(existing.map((item) => [item.id, item]));
   const resolvedOfficial = (official?: OfficialRecord) =>
@@ -1475,7 +1475,7 @@ export async function importTournament(
   },
   rows: ImportRow[],
 ) {
-  if (!organizationId) throw new Error("Select an organization before importing a schedule.");
+  if (!organizationId) throw new Error("Select a group before importing a schedule.");
   let event: EventRecord;
   if (details.eventId) {
     const existingEvents = await rest<EventRecord[]>(
@@ -1677,7 +1677,7 @@ export async function updateOfficial(
       `officials?organization_id=eq.${enc(official.organization_id)}&email=ilike.${enc(email)}&id=neq.${enc(official.id)}&select=id`,
     )
     : [];
-  if (existing.length) throw new Error("That primary email is already used by another official in this organization.");
+  if (existing.length) throw new Error("That primary email is already used by another official in this group.");
 
   const intendedRoles = values.pending_org_roles?.length ? values.pending_org_roles : ["referee" as MembershipRole];
   const changes = official.linked_user_id && official.personal_contact_locked
@@ -1733,7 +1733,7 @@ export async function updateOfficial(
     return rows[0];
   } catch (reason) {
     if (reason instanceof Error && /unique|duplicate/i.test(reason.message)) {
-      throw new Error("That primary email is already used by another official in this organization.");
+      throw new Error("That primary email is already used by another official in this group.");
     }
     throw reason;
   }

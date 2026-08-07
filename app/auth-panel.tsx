@@ -108,8 +108,8 @@ export function AuthPanel({ onSession, recovery = false, initialMessage = "" }: 
           {mode === "recovery"
             ? "Choose a secure password to finish setting up your account."
             : mode === "signup"
-              ? joinToken ? "Create your account to join the organization connected to this invitation." : "Use the same email address your assignor imported from Assignr."
-              : joinToken ? "Sign in to join the organization connected to this invitation." : "Access tournament check-in, schedules, coaching, and ratings."}
+              ? joinToken ? "Create your account to join the group connected to this invitation." : "Use the same email address your assignor imported from Assignr."
+              : joinToken ? "Sign in to join the group connected to this invitation." : "Access tournament check-in, schedules, coaching, and ratings."}
         </p>
         <form onSubmit={mode === "recovery" ? updatePassword : mode === "signup" ? createAccount : signIn}>
           {mode === "signup" && <label>Full name<input value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" required /></label>}

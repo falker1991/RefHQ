@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.17.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.18.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,10 +14,10 @@ test("Version 0.17.0 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.17\.0/);
+  assert.match(page, /Version 0\.18\.0/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.17.0");
+  assert.equal(JSON.parse(packageJson).version, "0.18.0");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -37,6 +37,25 @@ test("event settings respect organization feature ceilings and enforce disabled 
   assert.match(migration, /enforce_event_feature_enabled/);
   assert.match(migration, /enforce_check_in_feature/);
   assert.match(migration, /enforce_rating_feature/);
+});
+
+test("user-facing groups replace organization terminology and Site Owner controls group features", async () => {
+  const [page, client, css, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("app/admin-features.css"),
+    read("supabase/migrations/202608060045_group_feature_entitlements.sql"),
+  ]);
+  assert.match(page, /organization_director: "Group Director"/);
+  assert.match(page, /organization_admin: "Group Admin"/);
+  assert.match(page, /Enabled Group Features/);
+  assert.match(page, /Law18Ref Groups/);
+  assert.match(page, /Active Group/);
+  assert.match(client, /feature_entitlements\?: EventFeatureSettings/);
+  assert.match(css, /\.site-owner-feature-settings/);
+  assert.match(migration, /Only the Site Owner can change group feature entitlements/);
+  assert.match(migration, /apply_group_feature_entitlements/);
+  assert.match(migration, /update public\.events/);
 });
 
 test("guest check-in matches an imported official and confirms the full daily schedule without an account", async () => {
@@ -124,7 +143,7 @@ test("personal calendar feeds are encrypted and appear in a unified private sche
   assert.match(page, /className="panel unified-assignment-list"/);
   assert.match(page, /Calendar Imports/);
   assert.match(page, /Law18Ref Events/);
-  assert.match(page, /Law18Ref Organizations/);
+  assert.match(page, /Law18Ref Groups/);
   assert.match(client, /my_law18_assignment_context/);
   assert.match(migration, /create table if not exists public\.personal_calendar_feeds/);
   assert.match(migration, /revoke all on public\.personal_calendar_feeds from authenticated/);
@@ -189,7 +208,7 @@ test("v0.12.0 prevents profile self-escalation and enforces the organization rol
   assert.match(securityMigration, /organization_join_links_referee_only/);
   assert.match(securityMigration, /secure_merge_organization_accounts/);
   assert.match(securityMigration, /revoke execute on function public\.merge_organization_accounts/);
-  assert.match(page, /Organization director/);
+  assert.match(page, /Group Director/);
   assert.match(page, /canChangeOrganizationRole/);
   assert.match(page, /canChangeEventRole/);
   assert.match(client, /rpc\/secure_merge_organization_accounts/);
@@ -363,7 +382,7 @@ test("organization administrators can upload a logo for the active organization 
   ]);
   assert.match(page, /function OrganizationLogoEditor/);
   assert.match(page, /className="event-organization-logo"/);
-  assert.match(page, /Save Organization Settings/);
+  assert.match(page, /Save Group Settings/);
   assert.match(client, /export async function uploadOrganizationLogo/);
   assert.match(client, /organization-logos/);
   assert.match(css, /\.event-organization-logo/);
@@ -393,7 +412,7 @@ test("site owner and delegated administrator access follow protected removal hie
     read("app/supabase-client.ts"),
     read("supabase/migrations/202607300027_protected_administrator_roles.sql"),
   ]);
-  assert.match(page, /Site-owner, organization-director, and organization-admin accounts cannot be mass deleted/);
+  assert.match(page, /Site Owner, Group Director, and Group Admin accounts cannot be mass deleted/);
   assert.match(page, /protectedRole/);
   assert.match(page, /protectedEventAdmin && !canRemoveProtectedEventAdmin/);
   assert.match(client, /preserveEventAdmin/);
@@ -439,7 +458,7 @@ test("Assignr import supports drag and drop with CSV validation", async () => {
 
 test("officials directory displays all organization roles", async () => {
   const page = await read("app/page.tsx");
-  assert.match(page, /Organization Roles/);
+  assert.match(page, /Group Roles/);
   assert.match(page, /roles\.map\(\(role\) => <span className="role-badge"/);
 });
 
@@ -554,7 +573,7 @@ test("administrative dashboard shows today's check-in progress and role only", a
   assert.match(page, /adminView \? `\$\{checkedIn\}\/\$\{expectedToday\.size\}` : checkedIn/);
   assert.match(page, /adminView \? "Today's Check-ins" : "Officials checked in"/);
   assert.match(page, /\{relevantEvents\.length\} Active Events/);
-  assert.match(page, /Account and Organization/);
+  assert.match(page, /Account and Group/);
   assert.match(page, /\{!adminView && <article><span className="metric-icon green">◇/);
   assert.match(page, /\{!adminView && <article><span className="metric-icon blue">☷/);
   assert.match(page, /Your account role/);
@@ -754,7 +773,7 @@ test("officials directory shows authorized submitted-rating averages", async () 
   assert.match(page, /assessment\.status !== "draft"/);
   assert.match(page, /<span className="directory-average">Average Rating<\/span>/);
   assert.match(page, /officialAverage\(official\.id\)\?\.toFixed\(2\) \|\| "—"/);
-  assert.match(page, /<option value="rating">Average rating<\/option>/);
+  assert.match(page, /<option value="rating">Average Rating<\/option>/);
 });
 
 test("rating authors can reopen and edit an entire game crew", async () => {
@@ -829,7 +848,7 @@ test("officials directory shows last login and supports recoverable member remov
     read("supabase/migrations/202607300023_audit_join_links_and_member_removal.sql"),
   ]);
   assert.match(page, />Last Login</);
-  assert.match(page, /Remove From Organization/);
+  assert.match(page, /Remove From Group/);
   assert.match(page, /Their Law18Ref account, assignments, ratings, check-ins, and audit history are preserved/);
   assert.match(client, /last_login_at\?: string \| null/);
   assert.match(client, /export async function removeOrganizationMember/);

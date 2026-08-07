@@ -168,13 +168,13 @@ function initials(name: string) {
 }
 
 const roleNames: Record<MembershipRole, string> = {
-  site_owner: "Site owner",
-  organization_director: "Organization director",
-  organization_admin: "Organization admin",
-  event_admin: "Event admin",
+  site_owner: "Site Owner",
+  organization_director: "Group Director",
+  organization_admin: "Group Admin",
+  event_admin: "Event Admin",
   assignor: "Assignor",
-  site_coordinator: "Site supervisor",
-  referee_coach: "Referee coach",
+  site_coordinator: "Site Supervisor",
+  referee_coach: "Referee Coach",
   referee: "Referee",
 };
 const organizationRoleChoices: MembershipRole[] = ["organization_director", "organization_admin", "assignor", "referee_coach", "referee"];
@@ -458,7 +458,7 @@ function UnifiedAssignmentsView({ session, profile }: { session: Law18Session; p
   const uniqueOptions = (items: { id: string; name: string }[]) => [...new Map(items.map((item) => [item.id, item])).values()].sort((left, right) => left.name.localeCompare(right.name));
   const calendarOptions = uniqueOptions(recent.filter((item) => item.source_type !== "law18ref").map((item) => ({ id: item.source_id, name: item.source_name })));
   const eventOptions = uniqueOptions(recent.filter((item) => item.event_id).map((item) => ({ id: item.event_id!, name: item.event_name || item.source_name })));
-  const organizationOptions = uniqueOptions(recent.filter((item) => item.organization_id).map((item) => ({ id: item.organization_id!, name: item.organization_name || "Law18Ref organization" })));
+  const organizationOptions = uniqueOptions(recent.filter((item) => item.organization_id).map((item) => ({ id: item.organization_id!, name: item.organization_name || "Law18Ref group" })));
   const visible = recent.filter((item) => {
     if (scheduleType === "law18ref" && item.source_type !== "law18ref") return false;
     if (scheduleType === "external" && item.source_type === "law18ref") return false;
@@ -498,7 +498,7 @@ function UnifiedAssignmentsView({ session, profile }: { session: Law18Session; p
   return <section className="page-section unified-assignments-page">
     <div className="section-title"><div><p className="eyebrow">PERSONAL SCHEDULE</p><h1>My Assignments</h1><p>Your Law18Ref games and connected external calendar feeds in one view.</p></div><button className="secondary" disabled={loading} onClick={() => void refresh()}>{loading ? "Refreshing…" : "Refresh"}</button></div>
     {message && <p className="pilot-message">{message}</p>}
-    <div className="assignment-filter-bar"><label>Schedule Type<select value={scheduleType} onChange={(event) => setScheduleType(event.target.value)}><option value="all">All Assignments</option><option value="law18ref">Law18Ref Only</option><option value="external">External Calendars Only</option></select></label><AssignmentFilterMenu label="Calendar Imports" options={calendarOptions} selected={calendarIds} onChange={setCalendarIds} /><AssignmentFilterMenu label="Law18Ref Events" options={eventOptions} selected={eventIds} onChange={setEventIds} /><AssignmentFilterMenu label="Law18Ref Organizations" options={organizationOptions} selected={organizationIds} onChange={setOrganizationIds} /><fieldset className="assignment-date-filter"><legend>Dates</legend><input aria-label="Assignments from" type="date" value={dateRange.from} onChange={(event) => setDateRange({ ...dateRange, from: event.target.value })} /><input aria-label="Assignments through" type="date" min={dateRange.from || undefined} value={dateRange.through} onChange={(event) => setDateRange({ ...dateRange, through: event.target.value })} /></fieldset><SavedFilterControls filterKey="my-assignments" value={filterValue} onApply={applyFilters} /><button className="text-button" disabled={!filtersActive} onClick={() => { setScheduleType("all"); setCalendarIds([]); setEventIds([]); setOrganizationIds([]); setDateRange({ from: today, through: "" }); }}>Clear Filters</button></div>
+    <div className="assignment-filter-bar"><label>Schedule Type<select value={scheduleType} onChange={(event) => setScheduleType(event.target.value)}><option value="all">All Assignments</option><option value="law18ref">Law18Ref Only</option><option value="external">External Calendars Only</option></select></label><AssignmentFilterMenu label="Calendar Imports" options={calendarOptions} selected={calendarIds} onChange={setCalendarIds} /><AssignmentFilterMenu label="Law18Ref Events" options={eventOptions} selected={eventIds} onChange={setEventIds} /><AssignmentFilterMenu label="Law18Ref Groups" options={organizationOptions} selected={organizationIds} onChange={setOrganizationIds} /><fieldset className="assignment-date-filter"><legend>Dates</legend><input aria-label="Assignments from" type="date" value={dateRange.from} onChange={(event) => setDateRange({ ...dateRange, from: event.target.value })} /><input aria-label="Assignments through" type="date" min={dateRange.from || undefined} value={dateRange.through} onChange={(event) => setDateRange({ ...dateRange, through: event.target.value })} /></fieldset><SavedFilterControls filterKey="my-assignments" value={filterValue} onApply={applyFilters} /><button className="text-button" disabled={!filtersActive} onClick={() => { setScheduleType("all"); setCalendarIds([]); setEventIds([]); setOrganizationIds([]); setDateRange({ from: today, through: "" }); }}>Clear Filters</button></div>
     {!!grouped.size && <div className="panel unified-assignment-list">{[...grouped.entries()].map(([date, items]) => <section className="unified-assignment-day" key={date}><header><h2>{new Intl.DateTimeFormat([], { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date(`${date}T12:00:00`))}</h2><small>{items.length} assignment{items.length === 1 ? "" : "s"}</small></header>{items.map((item) => { const colorModes = assignmentColorModes(item); const rulesDocument = rulesDocuments.find((document) => document.event_id === item.event_id); return <div className={`unified-assignment-row ${colorModes.includes("mark") ? "calendar-color-mark" : ""} ${colorModes.includes("card") ? "calendar-color-card" : ""} ${colorModes.includes("label") ? "calendar-color-label" : ""} ${conflicts.has(item.id) ? "has-conflict" : ""}`} style={{ "--assignment-color": assignmentColor(item) } as CSSProperties} key={`${item.source_type}-${item.id}`}><time>{formatTime(item.starts_at)}</time><div className="unified-assignment-details"><strong>{item.title || "Assignment"}</strong><span>{[item.venue, item.position_title].filter(Boolean).join(" · ") || "Details available from the source platform"}</span>{rulesDocument && <EventDocumentLink session={session} document={rulesDocument} compact />}</div><div className="unified-assignment-meta"><span className={`source-badge source-${item.source_type}`}>{item.source_name}</span><small>{item.status === "cancelled" ? "Cancelled" : item.source_type === "law18ref" ? "Law18Ref assignment" : "External calendar"}{conflicts.has(item.id) && <b>Schedule conflict</b>}</small></div>{item.source_url ? <a className="unified-source-link" href={item.source_url} target="_blank" rel="noreferrer">Open Source</a> : <span />}</div>; })}</section>)}</div>}
     {!loading && !visible.length && <EmptyState>{filtersActive ? "No assignments match the selected filters." : "No assignments are available. Add a personal calendar feed in Account Settings or ask your Law18Ref assignor to link your account."}</EmptyState>}
   </section>;
@@ -521,19 +521,19 @@ function PersonalDashboard({ session, profile, organizations, onNavigate }: { se
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const upcoming = assignments.filter((item) => item.source_type === "law18ref" && new Date(item.starts_at).getTime() >= today.getTime());
-  const eventOptions = [...new Map(upcoming.filter((item) => item.event_id).map((item) => [item.event_id!, { id: item.event_id!, name: item.event_name || item.source_name, organization: item.organization_name || "Law18Ref organization", startsAt: item.starts_at }])).values()]
+  const eventOptions = [...new Map(upcoming.filter((item) => item.event_id).map((item) => [item.event_id!, { id: item.event_id!, name: item.event_name || item.source_name, organization: item.organization_name || "Law18Ref group", startsAt: item.starts_at }])).values()]
     .sort((left, right) => left.startsAt.localeCompare(right.startsAt));
   return <section className="page-section personal-dashboard">
-    <div className="welcome"><div><p className="eyebrow">MY DASHBOARD</p><h1>Welcome, {profile.full_name.split(" ")[0]}.</h1><p>Your organizations, events, assignments, and account tools in one place.</p></div></div>
+    <div className="welcome"><div><p className="eyebrow">MY DASHBOARD</p><h1>Welcome, {profile.full_name.split(" ")[0]}.</h1><p>Your groups, events, assignments, and account tools in one place.</p></div></div>
     {message && <p className="pilot-message">{message}</p>}
     <div className="metrics personal-dashboard-metrics">
-      <article><span className="metric-icon green">♙</span><div><strong>{organizations.length}</strong><p>Organizations</p></div></article>
+      <article><span className="metric-icon green">♙</span><div><strong>{organizations.length}</strong><p>Groups</p></div></article>
       <article><span className="metric-icon blue">◇</span><div><strong>{eventOptions.length}</strong><p>Upcoming Events</p></div></article>
       <article><span className="metric-icon green">☷</span><div><strong>{upcoming.length}</strong><p>Upcoming Assignments</p></div></article>
       <article><span className="metric-icon blue">◎</span><div><strong className="role-metric">Referee</strong><p>Your Account Role</p></div></article>
     </div>
     <div className="dashboard-grid personal-dashboard-grid">
-      <article className="panel dashboard-event"><div className="panel-head"><div><p className="eyebrow">MY ORGANIZATIONS</p><h2>{organizations.length} Group{organizations.length === 1 ? "" : "s"}</h2></div></div><div className="personal-context-list">{organizations.map((item) => <div key={item.id}>{item.logo_url ? <img src={item.logo_url} alt="" /> : <span className="event-mark">{item.name[0]}</span>}<strong>{item.name}</strong></div>)}{!organizations.length && !loading && <p>No organization memberships are linked to this account.</p>}</div></article>
+      <article className="panel dashboard-event"><div className="panel-head"><div><p className="eyebrow">MY GROUPS</p><h2>{organizations.length} Group{organizations.length === 1 ? "" : "s"}</h2></div></div><div className="personal-context-list">{organizations.map((item) => <div key={item.id}>{item.logo_url ? <img src={item.logo_url} alt="" /> : <span className="event-mark">{item.name[0]}</span>}<strong>{item.name}</strong></div>)}{!organizations.length && !loading && <p>No group memberships are linked to this account.</p>}</div></article>
       <article className="panel dashboard-event"><div className="panel-head"><div><p className="eyebrow">MY EVENTS</p><h2>Current and Upcoming</h2></div></div><div className="personal-event-list">{eventOptions.slice(0, 8).map((item) => { const rulesDocument = rulesDocuments.find((document) => document.event_id === item.id); return <div key={item.id}><strong>{item.name}</strong><span>{item.organization} · Next assignment {formatDate(item.startsAt)} at {formatTime(item.startsAt)}</span>{rulesDocument && <EventDocumentLink session={session} document={rulesDocument} compact />}</div>; })}{!eventOptions.length && !loading && <p>No upcoming Law18Ref events are assigned to you.</p>}</div></article>
     </div>
     <div className="dashboard-actions personal-dashboard-actions"><button className="primary" onClick={() => onNavigate("board")}>View My Assignments</button><button className="secondary" onClick={() => onNavigate("checkin")}>Check In</button><button className="secondary" onClick={() => onNavigate("account")}>Account Settings</button></div>
@@ -1076,7 +1076,7 @@ function ImportView({
     setBusy(true);
     try {
       await updatePositionTitleAliases(session, aliasScope, targetId, aliases);
-      setMessage(`${aliasScope === "event" ? "Event" : "Organization"} position titles saved for future imports.`);
+      setMessage(`${aliasScope === "event" ? "Event" : "Group"} position titles saved for future imports.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to save position titles.");
     } finally {
@@ -1448,7 +1448,7 @@ function OfficialsDirectory({
       });
       setOfficial({ full_name: "", email: "", secondary_email: "", date_of_birth: "", phone: "", badge_level: "", pending_org_roles: ["referee"] });
       setAdding(false);
-      setMessage(`Official added to this organization${event ? ` with staged access for ${event.name}` : ""}. No login account or email was created.`);
+      setMessage(`Official added to this group${event ? ` with staged access for ${event.name}` : ""}. No login account or email was created.`);
       onCreated();
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "Unable to add the official.");
@@ -1622,12 +1622,12 @@ function OfficialsDirectory({
     setMessage("");
     try {
       await removeOrganizationMember(session, organizationId, removing.linked_user_id);
-      setMessage(`${removing.full_name} was removed from this organization. Their account and historical records were preserved.`);
+      setMessage(`${removing.full_name} was removed from this group. Their account and historical records were preserved.`);
       setRemoving(null);
       setEditing(null);
       onCreated();
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "Unable to remove this organization member.");
+      setMessage(reason instanceof Error ? reason.message : "Unable to remove this group member.");
     } finally {
       setBusy(false);
     }
@@ -1644,7 +1644,7 @@ function OfficialsDirectory({
       ? selectedOfficialIds.filter((id) => !protectedIds.has(id))
       : selectedOfficialIds;
     if (!applicableIds.length) {
-      setMessage("Site-owner, organization-director, and organization-admin accounts cannot be mass deleted. Open a protected account's profile to manage its access.");
+      setMessage("Site Owner, Group Director, and Group Admin accounts cannot be mass deleted. Open a protected account's profile to manage its access.");
       return;
     }
     const prompt = action === "delete"
@@ -1696,12 +1696,12 @@ function OfficialsDirectory({
     ? ["site_owner", ...organizationRoleChoices]
     : organizationRoleChoices;
   return <section className="page-section">
-    <div className="section-title"><div><p className="eyebrow">OFFICIALS</p><h1>Referee directory</h1><p>Organization officials and the active event roster.</p></div></div>
+    <div className="section-title"><div><p className="eyebrow">OFFICIALS</p><h1>Referee Directory</h1><p>Group officials and the active event roster.</p></div></div>
     <div className="official-directory-actions">{canManageOrganizationRoles && <button className="primary" disabled={busy} onClick={copyJoinLink}>{busy ? "Preparing…" : "Copy Join Link"}</button>}<button className="secondary" onClick={() => setAdding(true)}>Add Official</button>{canManageOrganizationRoles && <button className="secondary" disabled={linkedAccounts.length < 2} onClick={() => setMerging(true)}>Merge Accounts</button>}</div>
     <div className="directory-tools">
-      <div className="segmented"><button className={scope === "organization" ? "active" : ""} onClick={() => setScope("organization")}>Organization</button><button className={scope === "event" ? "active" : ""} onClick={() => setScope("event")}>Active event</button></div>
+      <div className="segmented"><button className={scope === "organization" ? "active" : ""} onClick={() => setScope("organization")}>Group</button><button className={scope === "event" ? "active" : ""} onClick={() => setScope("event")}>Active Event</button></div>
       <input className="search" type="search" placeholder="Search name, email, or badge…" value={query} onChange={(event) => setQuery(event.target.value)} />
-      <label className="compact-sort">Sort by<select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}><option value="name">Name</option><option value="email">Email</option><option value="phone">Phone</option><option value="badge">Badge</option><option value="identity">Account status</option><option value="role">Organization role</option><option value="event">Event assignment</option><option value="rating">Average rating</option><option value="last_login">Last login</option></select></label>
+      <label className="compact-sort">Sort by<select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}><option value="name">Name</option><option value="email">Email</option><option value="phone">Phone</option><option value="badge">Badge</option><option value="identity">Account Status</option><option value="role">Group Role</option><option value="event">Event Assignment</option><option value="rating">Average Rating</option><option value="last_login">Last Login</option></select></label>
       <label className="compact-sort">Order<select value={sortDirection} onChange={(event) => setSortDirection(event.target.value as typeof sortDirection)}><option value="asc">{sortDirectionLabels.asc}</option><option value="desc">{sortDirectionLabels.desc}</option></select></label>
       {canManageOrganizationRoles && <label className="show-archived-ratings"><input type="checkbox" checked={showArchivedOfficials} onChange={(event) => setShowArchivedOfficials(event.target.checked)} /> Show Archived</label>}
       <SavedFilterControls filterKey="officials-directory" value={{ scope, query, sortBy, sortDirection, showArchivedOfficials }} onApply={(value) => { setScope(value.scope); setQuery(value.query); setSortBy(value.sortBy); setSortDirection(value.sortDirection); setShowArchivedOfficials(value.showArchivedOfficials); }} />
@@ -1710,7 +1710,7 @@ function OfficialsDirectory({
     {message && <p className="pilot-message">{message}</p>}
     {canManageOrganizationRoles && <div className="bulk-action-bar panel"><label><input type="checkbox" checked={filtered.length > 0 && filtered.filter((item) => item.source !== "site_owner_profile").every((item) => selectedOfficialIds.includes(item.id))} onChange={(event) => setSelectedOfficialIds(event.target.checked ? filtered.filter((item) => item.source !== "site_owner_profile").map((item) => item.id) : [])} /> Select All Visible</label><strong>{selectedOfficialIds.length} selected</strong><button className="secondary" disabled={busy || !selectedOfficialIds.length} onClick={() => bulkOfficials("archive")}>Archive</button>{showArchivedOfficials && <button className="secondary" disabled={busy || !selectedOfficialIds.length} onClick={() => bulkOfficials("restore")}>Restore</button>}<button className="danger-button" disabled={busy || !selectedOfficialIds.length} onClick={() => bulkOfficials("delete")}>Delete Eligible</button></div>}
     <article className="panel directory-list">
-      <div className="directory-row directory-head"><span>Official</span><span className="directory-contact">Contact</span><span>Identity</span><span>Organization Roles</span><span className="directory-average">Average Rating</span><span className="directory-login">Last Login</span><span className="directory-event">Event</span></div>
+      <div className="directory-row directory-head"><span>Official</span><span className="directory-contact">Contact</span><span>Identity</span><span>Group Roles</span><span className="directory-average">Average Rating</span><span className="directory-login">Last Login</span><span className="directory-event">Event</span></div>
       {filtered.map((official) => {
         const listedRoles = official.pending_org_roles?.length
           ? official.pending_org_roles
@@ -1734,7 +1734,7 @@ function OfficialsDirectory({
     {editing && <div className="confirmation-backdrop" role="presentation"><section className="confirmation-dialog role-dialog official-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="edit-official-title">
       <header className="official-edit-header"><p className="eyebrow">OFFICIAL RECORD</p><h2 id="edit-official-title">Edit {editing.full_name}</h2></header>
       <div className="official-edit-body">
-        {editing.linked_user_id && <p className="linked-account-note">{editing.personal_contact_locked ? "This user has locked their personal contact information. Staff may still update badge, organization roles, and event permissions." : "This linked user has left contact editing unlocked for authorized staff. They can lock it at any time in Account Settings."}</p>}
+        {editing.linked_user_id && <p className="linked-account-note">{editing.personal_contact_locked ? "This user has locked their personal contact information. Staff may still update badge, group roles, and event permissions." : "This linked user has left contact editing unlocked for authorized staff. They can lock it at any time in Account Settings."}</p>}
         <section className="official-edit-section"><h3>Personal information</h3><div className="official-fields-grid">
           <label>Full name<input value={editValues.full_name} disabled={Boolean(editing.personal_contact_locked)} onChange={(e) => setEditValues({ ...editValues, full_name: e.target.value })} /></label>
           <label>Primary email<input type="email" value={editValues.email} disabled={Boolean(editing.personal_contact_locked)} onChange={(e) => setEditValues({ ...editValues, email: e.target.value })} /></label>
@@ -1743,23 +1743,23 @@ function OfficialsDirectory({
           <label>Phone<input value={editValues.phone} disabled={Boolean(editing.personal_contact_locked)} onChange={(e) => setEditValues({ ...editValues, phone: e.target.value })} /></label>
           <label>Badge or level<input value={editValues.badge_level} onChange={(e) => setEditValues({ ...editValues, badge_level: e.target.value })} /></label>
         </div></section>
-        <section className="official-edit-section"><h3>Organization roles</h3><fieldset className={`official-role-grid ${editingIsSiteOwner ? "owner-locked" : ""}`} disabled={editingIsSiteOwner || !canManageOrganizationRoles}>{displayedOrganizationRoles.map((role) => {
+        <section className="official-edit-section"><h3>Group Roles</h3><fieldset className={`official-role-grid ${editingIsSiteOwner ? "owner-locked" : ""}`} disabled={editingIsSiteOwner || !canManageOrganizationRoles}>{displayedOrganizationRoles.map((role) => {
           const checked = editingIsSiteOwner || editValues.pending_org_roles.includes(role);
           const protectedRole = !canChangeOrganizationRole(role) || (role === "organization_director" && editingIsOrganizationDirector && !profile.is_site_owner) || (role === "organization_admin" && editingIsOrganizationAdmin && !profile.is_site_owner && !actorIsOrganizationDirector);
           return <label className={`${checked ? "selected" : ""} ${editingIsSiteOwner || protectedRole ? "locked" : ""}`} key={role}><input type="checkbox" checked={checked} disabled={protectedRole} onChange={() => !editingIsSiteOwner && !protectedRole && setEditValues({ ...editValues, pending_org_roles: toggleRole(editValues.pending_org_roles, role) })} /><span>{roleNames[role]}</span>{(editingIsSiteOwner || protectedRole) && <small className="role-lock">Locked</small>}</label>;
         })}</fieldset></section>
-        {editingIsSiteOwner && <div className="official-edit-note owner-access-note"><strong>Site Owner — Full Access</strong><span>Your site-owner account automatically inherits every organization and event capability. These permissions are locked and cannot be removed here.</span></div>}
+        {editingIsSiteOwner && <div className="official-edit-note owner-access-note"><strong>Site Owner — Full Access</strong><span>Your Site Owner account automatically inherits every group and event capability. These permissions are locked and cannot be removed here.</span></div>}
         {!editingIsSiteOwner && event && <section className="official-edit-section official-event-permissions"><div className="official-event-permissions-heading"><div><p className="eyebrow">ACTIVE EVENT PERMISSIONS</p><h3>{event.name}</h3></div><span>{editing.linked_user_id ? "These permissions apply only to the current active event." : "These permissions will activate automatically when this provisional official creates their account."}</span></div>
           <fieldset className="official-role-grid"><legend>Event roles</legend>{eventRoleChoices.map((role) => { const locked = !canChangeEventRole(role) || (role === "event_admin" && protectedEventAdmin && !canRemoveProtectedEventAdmin); return <label className={`${eventRoleSelections.includes(role) ? "selected" : ""} ${locked ? "locked" : ""}`} key={role}><input type="checkbox" checked={eventRoleSelections.includes(role)} disabled={locked} onChange={() => !locked && setEventRoleSelections((current) => current.includes(role) ? current.filter((item) => item !== role) : [...current, role])} /><span>{roleNames[role]}</span>{locked && <small className="role-lock">Locked</small>}</label>; })}</fieldset>
-          {protectedEventAdmin && !canRemoveProtectedEventAdmin && <p className="import-note">This Event Admin role can only be removed by an Organization Admin, Organization Director, site owner, or the Event Admin themselves.</p>}
+          {protectedEventAdmin && !canRemoveProtectedEventAdmin && <p className="import-note">This Event Admin role can only be removed by a Group Admin, Group Director, Site Owner, or the Event Admin themselves.</p>}
           <div className="official-event-options"><label className="visibility-lock"><input type="checkbox" checked={fullScheduleAccess} onChange={(change) => setFullScheduleAccess(change.target.checked)} /><span><strong>Full schedule access</strong><small>When disabled, this person sees only the selected games below.</small></span></label><label className="visibility-lock"><input type="checkbox" checked={coachingToolsEnabled} onChange={(change) => setCoachingToolsEnabled(change.target.checked)} /><span><strong>Enable coaching tools</strong><small>Allows ratings tools when the selected event role supports them.</small></span></label></div>
           {!fullScheduleAccess && <fieldset className="event-game-scope"><legend>Games available in {event.name}</legend>{data.games.slice().sort((a, b) => a.starts_at.localeCompare(b.starts_at)).map((eventGame) => <label key={eventGame.id}><input type="checkbox" checked={assignedGameIds.includes(eventGame.id)} onChange={(change) => setAssignedGameIds((current) => change.target.checked ? [...current, eventGame.id] : current.filter((id) => id !== eventGame.id))} /><span><strong>{formatDate(eventGame.starts_at)} · {formatTime(eventGame.starts_at)} · {eventGame.field_name}</strong><small>{eventGame.home_team} vs. {eventGame.away_team}</small></span></label>)}</fieldset>}
           <label className="official-event-history-scope">Previous-event ratings<select value={ratingScope} onChange={(change) => setRatingScope(change.target.value as typeof ratingScope)}><option value="none">No previous events</option><option value="specific">Selected previous events</option><option value="all">All organization events</option></select></label>{ratingScope === "specific" && <fieldset className="event-game-scope"><legend>Allowed previous events</legend>{events.filter((item) => item.id !== event.id).map((item) => <label key={item.id}><input type="checkbox" checked={ratingEventIds.includes(item.id)} onChange={(change) => setRatingEventIds((current) => change.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))} /><span><strong>{item.name}</strong></span></label>)}</fieldset>}
         </section>}
       </div>
-      <div className="official-edit-actions">{canManageOrganizationRoles && canRemoveEditingMember && <button className="danger-button remove-member-button" disabled={busy} onClick={() => setRemoving(editing)}>Remove From Organization</button>}<button className="secondary" onClick={() => setEditing(null)}>Cancel</button><button className="primary" disabled={busy || !editValues.full_name.trim()} onClick={saveOfficial}>{busy ? "Saving…" : "Save official"}</button></div>
+      <div className="official-edit-actions">{canManageOrganizationRoles && canRemoveEditingMember && <button className="danger-button remove-member-button" disabled={busy} onClick={() => setRemoving(editing)}>Remove From Group</button>}<button className="secondary" onClick={() => setEditing(null)}>Cancel</button><button className="primary" disabled={busy || !editValues.full_name.trim()} onClick={saveOfficial}>{busy ? "Saving…" : "Save Official"}</button></div>
     </section></div>}
-    {removing && <div className="confirmation-backdrop" role="presentation"><section className="confirmation-dialog" role="dialog" aria-modal="true"><p className="eyebrow">REMOVE ORGANIZATION MEMBER</p><h2>Remove {removing.full_name}?</h2><p>This removes their organization and event access. Their Law18Ref account, assignments, ratings, check-ins, and audit history are preserved.</p><div><button className="secondary" disabled={busy} onClick={() => setRemoving(null)}>Cancel</button><button className="danger-button" disabled={busy} onClick={removeMember}>{busy ? "Removing…" : "Remove Member"}</button></div></section></div>}
+    {removing && <div className="confirmation-backdrop" role="presentation"><section className="confirmation-dialog" role="dialog" aria-modal="true"><p className="eyebrow">REMOVE GROUP MEMBER</p><h2>Remove {removing.full_name}?</h2><p>This removes their group and event access. Their Law18Ref account, assignments, ratings, check-ins, and audit history are preserved.</p><div><button className="secondary" disabled={busy} onClick={() => setRemoving(null)}>Cancel</button><button className="danger-button" disabled={busy} onClick={removeMember}>{busy ? "Removing…" : "Remove Member"}</button></div></section></div>}
     {managing && event && <div className="confirmation-backdrop" role="presentation"><section className="confirmation-dialog role-dialog event-access-dialog" role="dialog" aria-modal="true"><p className="eyebrow">EVENT ACCESS</p><h2>{managing.full_name}</h2><p>Assign one or more roles and schedule access for {event.name}.</p><fieldset className="role-checkboxes"><legend>Event roles</legend>{eventRoleChoices.map((role) => {
       const locked = !canChangeEventRole(role) || (role === "event_admin" && protectedEventAdmin && !canRemoveProtectedEventAdmin);
       return <label key={role}><input type="checkbox" checked={eventRoleSelections.includes(role)} disabled={locked} onChange={() => !locked && setEventRoleSelections((current) => current.includes(role) ? current.filter((item) => item !== role) : [...current, role])} />{roleNames[role]}{locked && <small className="role-lock">Locked</small>}</label>;
@@ -2544,7 +2544,7 @@ function DashboardHome({
         </div> : <div className="empty-dashboard"><p>No tournament is available yet.</p>{profile.role !== "referee" && <button className="primary" onClick={() => onNavigate("import")}>Import an event</button>}</div>}
       </article>
       <article className="panel dashboard-quick">
-        <div className="panel-head"><div><p className="eyebrow">QUICK ACCESS</p><h2>Account and Organization</h2></div></div>
+        <div className="panel-head"><div><p className="eyebrow">QUICK ACCESS</p><h2>Account and Group</h2></div></div>
         <button onClick={() => onNavigate("account")}><span>Personal details</span><b>Account settings →</b></button>
         <button onClick={() => onNavigate("groups")}><span>Membership</span><b>View my groups →</b></button>
       </article>
@@ -2577,7 +2577,7 @@ function OrganizationActivity({
   useEffect(() => {
     // Activity is loaded from the remote organization audit stream.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    refresh().catch((reason) => setMessage(reason instanceof Error ? reason.message : "Unable to load organization activity."));
+    refresh().catch((reason) => setMessage(reason instanceof Error ? reason.message : "Unable to load group activity."));
   }, [refresh]);
   async function restoreArchivedEvent(event: EventRecord) {
     setBusy(true);
@@ -2617,13 +2617,13 @@ function OrganizationActivity({
     part.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
   ).join(" · ");
   return <section className="page-section organization-activity-page">
-    <div className="section-title"><div><p className="eyebrow">ORGANIZATION ADMINISTRATION</p><h1>Activity</h1><p>Review meaningful organization changes and manage archived events.</p></div><button className="secondary" disabled={busy} onClick={() => refresh()}>{busy ? "Refreshing…" : "Refresh"}</button></div>
+    <div className="section-title"><div><p className="eyebrow">GROUP ADMINISTRATION</p><h1>Activity</h1><p>Review meaningful group changes and manage archived events.</p></div><button className="secondary" disabled={busy} onClick={() => refresh()}>{busy ? "Refreshing…" : "Refresh"}</button></div>
     {message && <p className="pilot-message">{message}</p>}
     <article className="panel archived-event-list"><div className="panel-head"><div><p className="eyebrow">ARCHIVED EVENTS</p><h2>Bulk event actions</h2><p>Archive active events, restore archived events, or permanently delete events already in the archive.</p></div></div>
       <div className="bulk-action-bar"><strong>{selectedEventIds.length} selected</strong><button className="secondary" disabled={busy || !selectedEventIds.some((id) => events.some((item) => item.id === id))} onClick={() => bulkEvents("archive")}>Archive Selected</button><button className="secondary" disabled={busy || !selectedEventIds.some((id) => archivedEvents.some((item) => item.id === id))} onClick={() => bulkEvents("restore")}>Restore Selected</button><button className="danger-button" disabled={busy || !selectedEventIds.length || selectedEventIds.some((id) => !archivedEvents.some((item) => item.id === id))} onClick={() => bulkEvents("delete")}>Delete Archived</button></div>
       <h3 className="lifecycle-list-title">Active Events</h3>{events.map((event) => <div className="archived-event-row" key={event.id}><div><strong>{event.name}</strong><small>{formatDate(event.starts_on)} through {formatDate(event.ends_on)}</small></div><input className="bulk-row-check" type="checkbox" aria-label={`Select ${event.name}`} checked={selectedEventIds.includes(event.id)} onChange={(change) => setSelectedEventIds((current) => change.target.checked ? [...current, event.id] : current.filter((id) => id !== event.id))} /></div>)}{!events.length && <EmptyState>No active events.</EmptyState>}
       <h3 className="lifecycle-list-title">Archived Events</h3>{archivedEvents.map((event) => <div className="archived-event-row" key={event.id}><div><strong>{event.name}</strong><small>{formatDate(event.starts_on)} through {formatDate(event.ends_on)} · {event.archive_reason === "automatic" ? "Automatically archived" : "Manually archived"}</small></div><div className="archived-event-actions"><input className="bulk-row-check" type="checkbox" aria-label={`Select ${event.name}`} checked={selectedEventIds.includes(event.id)} onChange={(change) => setSelectedEventIds((current) => change.target.checked ? [...current, event.id] : current.filter((id) => id !== event.id))} /><button className="secondary" disabled={busy} onClick={() => restoreArchivedEvent(event)}>Restore Event</button></div></div>)}{!archivedEvents.length && <EmptyState>No events are archived.</EmptyState>}</article>
-    <article className="panel activity-log"><div className="panel-head"><div><p className="eyebrow">AUDIT LOG</p><h2>Organization activity</h2><p>Ratings, imports, schedules, assignments, members, events, check-ins, and other meaningful changes appear here.</p></div></div>
+    <article className="panel activity-log"><div className="panel-head"><div><p className="eyebrow">AUDIT LOG</p><h2>Group Activity</h2><p>Ratings, imports, schedules, assignments, members, events, check-ins, and other meaningful changes appear here.</p></div></div>
       <div className="activity-log-head"><span>Action</span><span>Performed by</span><span>Record</span><span>Date</span></div>
       {activity.map((item) => <div className="activity-log-row" key={item.id}><strong>{actionLabel(item.action)}</strong><span>{item.actor_name}</span><span>{item.entity_type.replace(/_/g, " ")}</span><time>{new Intl.DateTimeFormat([], { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at))}</time></div>)}
       {!activity.length && <EmptyState>No organization activity has been recorded yet.</EmptyState>}
@@ -2696,7 +2696,7 @@ function ConnectedSchedules({ session, profile, onUpdated }: { session: Law18Ses
     <div className="calendar-feed-form"><label>Platform<select value={provider} onChange={(event) => { const next = event.target.value as CalendarFeedConnection["provider"]; setProvider(next); setDisplayName(providerNames[next]); }}><option value="assignr">Assignr</option><option value="arbiter">ArbiterSports</option><option value="usofficials">USOfficials</option><option value="refquest">RefQuest / RQ+</option><option value="other">Other ICS feed</option></select></label><label>Schedule name<input maxLength={80} value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label><label className="calendar-feed-url">Private calendar-feed URL<input type="url" inputMode="url" autoComplete="off" placeholder="https://…/calendar.ics" value={feedUrl} onChange={(event) => setFeedUrl(event.target.value)} /><small>The URL is encrypted and will not be displayed again after it is saved.</small></label><button className="primary" disabled={busyId === "new" || !displayName.trim() || !feedUrl.trim()} onClick={() => void connect()}>{busyId === "new" ? "Connecting…" : "Connect Feed"}</button></div>
     {message && <p className="pilot-message">{message}</p>}
     <div className="calendar-feed-list">{feeds.map((feed) => { const sourceKey = `feed:${feed.id}`; return <section key={feed.id}><div><strong>{feed.display_name}</strong><small>{providerNames[feed.provider]} · <span className={`feed-status status-${feed.sync_status}`}>{feed.sync_status}</span></small><small>{feed.last_synced_at ? `Last synchronized ${new Intl.DateTimeFormat([], { dateStyle: "medium", timeStyle: "short" }).format(new Date(feed.last_synced_at))}` : "Waiting for first synchronization"}</small>{feed.last_error && <small className="feed-error">{feed.last_error}</small>}</div><label className="calendar-color-picker">Calendar color<input type="color" value={profile.personal_schedule_colors?.[sourceKey] || "#c62f68"} onChange={(event) => void saveColor(sourceKey, event.target.value)} /></label><AssignmentFilterMenu label="Color display" options={colorModeOptions} selected={profile.personal_schedule_color_modes?.[sourceKey] || ["mark"]} onChange={(modes) => void saveColorModes(sourceKey, modes)} /><div><button className="secondary" disabled={busyId === feed.id || !feed.active} onClick={() => void synchronize(feed)}>Sync Now</button><button className="secondary" disabled={busyId === feed.id} onClick={() => void toggle(feed)}>{feed.active ? "Pause" : "Resume"}</button><button className="danger-button" disabled={busyId === feed.id} onClick={() => void remove(feed)}>Remove</button></div></section>; })}{!feeds.length && <EmptyState>No external calendar feeds are connected.</EmptyState>}</div>
-    {!!organizationSources.length && <div className="organization-calendar-colors"><h3>Law18Ref Organization Colors</h3>{organizationSources.map((organization) => { const sourceKey = `org:${organization.id}`; return <section key={organization.id}><span>{organization.name}</span><label>Color<input type="color" value={profile.personal_schedule_colors?.[sourceKey] || "#285783"} onChange={(event) => void saveColor(sourceKey, event.target.value)} /></label><AssignmentFilterMenu label="Color display" options={colorModeOptions} selected={profile.personal_schedule_color_modes?.[sourceKey] || ["mark"]} onChange={(modes) => void saveColorModes(sourceKey, modes)} /></section>; })}</div>}
+    {!!organizationSources.length && <div className="organization-calendar-colors"><h3>Law18Ref Group Colors</h3>{organizationSources.map((organization) => { const sourceKey = `org:${organization.id}`; return <section key={organization.id}><span>{organization.name}</span><label>Color<input type="color" value={profile.personal_schedule_colors?.[sourceKey] || "#285783"} onChange={(event) => void saveColor(sourceKey, event.target.value)} /></label><AssignmentFilterMenu label="Color display" options={colorModeOptions} selected={profile.personal_schedule_color_modes?.[sourceKey] || ["mark"]} onChange={(modes) => void saveColorModes(sourceKey, modes)} /></section>; })}</div>}
   </article>;
 }
 
@@ -2794,11 +2794,11 @@ function OrganizationLogoEditor({
   async function chooseLogo(file?: File) {
     if (!file) return;
     if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-      onError("Choose a PNG, JPEG, or WebP organization logo.");
+      onError("Choose a PNG, JPEG, or WebP group logo.");
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      onError("Organization logos must be 5 MB or smaller.");
+      onError("Group logos must be 5 MB or smaller.");
       return;
     }
     onBusyChange(true);
@@ -2806,14 +2806,14 @@ function OrganizationLogoEditor({
     try {
       onChange(await uploadOrganizationLogo(session, organizationId, file));
     } catch (reason) {
-      onError(reason instanceof Error ? reason.message : "Unable to upload the organization logo.");
+      onError(reason instanceof Error ? reason.message : "Unable to upload the group logo.");
     } finally {
       onBusyChange(false);
     }
   }
   return <div className={`organization-logo-upload ${dragging ? "dragging" : ""}`} onDragEnter={(event) => { event.preventDefault(); setDragging(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { event.preventDefault(); if (event.currentTarget === event.target) setDragging(false); }} onDrop={(event) => { event.preventDefault(); setDragging(false); void chooseLogo(event.dataTransfer.files[0]); }}>
-    <div className="organization-logo-preview">{logoUrl ? <img src={logoUrl} alt="Organization logo preview" /> : <span>ORG</span>}</div>
-    <div><strong>{logoUrl ? "Organization logo selected" : "Add an organization logo"}</strong><small>Drop a PNG, JPEG, or WebP here · maximum 5 MB</small></div>
+    <div className="organization-logo-preview">{logoUrl ? <img src={logoUrl} alt="Group logo preview" /> : <span>GRP</span>}</div>
+    <div><strong>{logoUrl ? "Group logo selected" : "Add a group logo"}</strong><small>Drop a PNG, JPEG, or WebP here · maximum 5 MB</small></div>
     <label className="secondary file-button">{logoUrl ? "Replace Logo" : "Choose Logo"}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { void chooseLogo(event.target.files?.[0]); event.target.value = ""; }} /></label>
     {logoUrl && <button className="text-button organization-logo-remove" type="button" onClick={() => onChange("")}>Remove Logo</button>}
   </div>;
@@ -2847,9 +2847,9 @@ function GroupsSettings({
     try {
       const updated = await updateOrganizationSettings(session, organization.id, { name: organizationName, logo_url: logoUrl || null, public_rating_approval_role: approvalRole });
       onUpdated(updated);
-      setMessage("Organization settings saved.");
+      setMessage("Group settings saved.");
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "Unable to save organization settings.");
+      setMessage(reason instanceof Error ? reason.message : "Unable to save group settings.");
     } finally {
       setBusy(false);
     }
@@ -2866,18 +2866,18 @@ function GroupsSettings({
     }
   }
   return <section className="page-section settings-page">
-    <div className="section-title"><div><p className="eyebrow">GROUPS</p><h1>Organization membership</h1><p>Review the organizations connected to your account.</p></div></div>
+    <div className="section-title"><div><p className="eyebrow">GROUPS</p><h1>Group Membership</h1><p>Review the groups connected to your account.</p></div></div>
     {organization && canManage && <article className="panel organization-profile-settings">
-      <div className="panel-head"><div><p className="eyebrow">ORGANIZATION SETTINGS</p><h2>Organization identity</h2><p>The logo appears in the active-organization bar for all members.</p></div></div>
-      <label>Organization name<input value={organizationName} maxLength={120} onChange={(event) => setOrganizationName(event.target.value)} /></label>
+      <div className="panel-head"><div><p className="eyebrow">GROUP SETTINGS</p><h2>Group Identity</h2><p>The logo appears in the active-group bar for all members.</p></div></div>
+      <label>Group Name<input value={organizationName} maxLength={120} onChange={(event) => setOrganizationName(event.target.value)} /></label>
       <OrganizationLogoEditor session={session} organizationId={organization.id} logoUrl={logoUrl} onChange={setLogoUrl} onBusyChange={setBusy} onError={setMessage} />
-      <label>Default Public Eval Approval<select value={approvalRole} onChange={(event) => setApprovalRole(event.target.value as typeof approvalRole)}><option value="none">No Approval — Share Immediately</option><option value="organization_admin">Organization Admin Approval</option><option value="event_admin">Event Admin Approval</option></select><small>Events can inherit or override this setting.</small></label>
-      <button className="primary" disabled={busy || organizationName.trim().length < 2} onClick={saveSettings}>{busy ? "Saving…" : "Save Organization Settings"}</button>
+      <label>Default Public Eval Approval<select value={approvalRole} onChange={(event) => setApprovalRole(event.target.value as typeof approvalRole)}><option value="none">No Approval — Share Immediately</option><option value="organization_admin">Group Admin Approval</option><option value="event_admin">Event Admin Approval</option></select><small>Events can inherit or override this setting.</small></label>
+      <button className="primary" disabled={busy || organizationName.trim().length < 2} onClick={saveSettings}>{busy ? "Saving…" : "Save Group Settings"}</button>
       {message && <p className="pilot-message">{message}</p>}
     </article>}
     <article className="panel group-card">
       {organization?.logo_url ? <img className="group-logo" src={organization.logo_url} alt="" /> : <span className="group-mark">{organization?.name?.[0] || "L"}</span>}
-      <div><h2>{organization?.name || "Current organization"}</h2><p>Your events and assignments from this organization appear in Law18Ref.</p></div>
+      <div><h2>{organization?.name || "Current group"}</h2><p>Your events and assignments from this group appear in Law18Ref.</p></div>
       <button className="danger-button" disabled={busy} onClick={leave}>{busy ? "Leaving…" : "Leave group"}</button>
       {message && <p className="group-message">{message}</p>}
     </article>
@@ -2895,13 +2895,14 @@ function SiteGroupsAdmin({ session, ownerEmail, onOpen, onUpdated }: { session: 
   const [editing, setEditing] = useState<OrganizationRecord | null>(null);
   const [editingName, setEditingName] = useState("");
   const [editingLogoUrl, setEditingLogoUrl] = useState("");
+  const [editingFeatures, setEditingFeatures] = useState<EventFeatureSettings>({ ...defaultEventFeatures });
   const [showDeactivated, setShowDeactivated] = useState(false);
   const refreshOrganizations = useCallback(async () => {
     setOrganizations(await loadOrganizations(session));
   }, [session]);
 
   useEffect(() => {
-    refreshOrganizations().catch((reason) => setMessage(reason instanceof Error ? reason.message : "Unable to load organizations."));
+    refreshOrganizations().catch((reason) => setMessage(reason instanceof Error ? reason.message : "Unable to load groups."));
   }, [refreshOrganizations]);
 
   async function create() {
@@ -2911,9 +2912,9 @@ function SiteGroupsAdmin({ session, ownerEmail, onOpen, onUpdated }: { session: 
       const created = await createOrganization(session, name.trim());
       setName("");
       await refreshOrganizations();
-      setMessage(`${created.name} was created. You can now add organization administrators and events.`);
+      setMessage(`${created.name} was created. You can now add Group Admins and events.`);
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "Unable to create the organization.");
+      setMessage(reason instanceof Error ? reason.message : "Unable to create the group.");
     } finally {
       setBusy(false);
     }
@@ -2927,7 +2928,7 @@ function SiteGroupsAdmin({ session, ownerEmail, onOpen, onUpdated }: { session: 
       await refreshOrganizations();
       setMessage(`${organization.name} is active again.`);
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "Unable to reactivate the organization.");
+      setMessage(reason instanceof Error ? reason.message : "Unable to reactivate the group.");
     } finally {
       setBusy(false);
     }
@@ -2938,13 +2939,13 @@ function SiteGroupsAdmin({ session, ownerEmail, onOpen, onUpdated }: { session: 
     setBusy(true);
     setMessage("");
     try {
-      const updated = await updateOrganizationSettings(session, editing.id, { name: editingName, logo_url: editingLogoUrl || null });
+      const updated = await updateOrganizationSettings(session, editing.id, { name: editingName, logo_url: editingLogoUrl || null, feature_entitlements: editingFeatures });
       onUpdated(updated);
       setEditing(null);
       await refreshOrganizations();
-      setMessage("Organization settings saved.");
+      setMessage("Group settings saved.");
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "Unable to save organization settings.");
+      setMessage(reason instanceof Error ? reason.message : "Unable to save group settings.");
     } finally {
       setBusy(false);
     }
@@ -2974,12 +2975,12 @@ function SiteGroupsAdmin({ session, ownerEmail, onOpen, onUpdated }: { session: 
   }
 
   return <section className="page-section site-groups-page">
-    <div className="section-title"><div><p className="eyebrow">SITE OWNER · GROUPS</p><h1>Organizations</h1><p>Create and manage every organization using Law18Ref.</p></div></div>
+    <div className="section-title"><div><p className="eyebrow">SITE OWNER · GROUPS</p><h1>Groups</h1><p>Create and manage every group using Law18Ref.</p></div></div>
     <div className="organization-admin-grid">
       <article className="panel create-organization-card">
-        <div className="panel-head"><div><p className="eyebrow">NEW ORGANIZATION</p><h2>Create a group</h2><p>Only the site owner can create organizations.</p></div></div>
-        <label>Organization name<input value={name} maxLength={120} onChange={(event) => setName(event.target.value)} placeholder="Example Soccer Association" /></label>
-        <button className="primary" disabled={busy || name.trim().length < 2} onClick={create}>{busy ? "Working…" : "Create organization"}</button>
+        <div className="panel-head"><div><p className="eyebrow">NEW GROUP</p><h2>Create a Group</h2><p>Only the Site Owner can create groups.</p></div></div>
+        <label>Group Name<input value={name} maxLength={120} onChange={(event) => setName(event.target.value)} placeholder="Example Soccer Association" /></label>
+        <button className="primary" disabled={busy || name.trim().length < 2} onClick={create}>{busy ? "Working…" : "Create Group"}</button>
       </article>
       <article className="panel organization-safety">
         <p className="eyebrow">SAFE ORGANIZATION CONTROL</p>
@@ -2996,34 +2997,34 @@ function SiteGroupsAdmin({ session, ownerEmail, onOpen, onUpdated }: { session: 
           <span className="group-mark">{item.name[0]}</span>
           <div><h2>{item.name}</h2><p>{item.slug}</p><span className={`status ${item.active === false ? "missing" : "ready"}`}><b />{item.active === false ? "Deactivated" : "Active"}</span></div>
           <div className="organization-actions">
-            {item.active !== false && <button className="primary" onClick={() => onOpen(item.id)}>Open organization</button>}
-            <button className="secondary" onClick={() => { setEditing(item); setEditingName(item.name); setEditingLogoUrl(item.logo_url || ""); }}>Settings</button>
+            {item.active !== false && <button className="primary" onClick={() => onOpen(item.id)}>Open Group</button>}
+            <button className="secondary" onClick={() => { setEditing(item); setEditingName(item.name); setEditingLogoUrl(item.logo_url || ""); setEditingFeatures({ ...defaultEventFeatures, ...(item.feature_entitlements || {}) }); }}>Settings</button>
             {item.active === false
               ? <>
                 <button className="secondary" disabled={busy} onClick={() => reactivate(item)}>Reactivate</button>
-                <button className="danger-button" disabled={busy || !deleteAvailable} title={deleteAvailable ? "Permanently delete organization" : "Available seven days after deactivation"} onClick={() => { setPending({ organization: item, action: "delete" }); setMessage(""); }}>Delete permanently</button>
+                <button className="danger-button" disabled={busy || !deleteAvailable} title={deleteAvailable ? "Permanently delete group" : "Available seven days after deactivation"} onClick={() => { setPending({ organization: item, action: "delete" }); setMessage(""); }}>Delete Permanently</button>
               </>
               : <button className="danger-button" disabled={busy} onClick={() => { setPending({ organization: item, action: "deactivate" }); setMessage(""); }}>Deactivate</button>}
           </div>
           {item.active === false && item.deactivated_at && <small className="deactivation-note">Deactivated {formatDate(item.deactivated_at)}{deleteAvailable ? " · Eligible for permanent deletion" : " · Seven-day recovery period in progress"}</small>}
         </article>;
       })}
-      {!organizations.length && <article className="panel empty-state">No organizations have been created yet.</article>}
+      {!organizations.length && <article className="panel empty-state">No groups have been created yet.</article>}
     </div>
     {pending && <div className="confirmation-backdrop" role="presentation">
       <section className="confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="organization-confirm-title">
         <p className="eyebrow">{pending.action === "delete" ? "PERMANENT ACTION" : "SECURITY CONFIRMATION"}</p>
         <h2 id="organization-confirm-title">{pending.action === "delete" ? "Permanently delete" : "Deactivate"} {pending.organization.name}?</h2>
         <p>{pending.action === "delete"
-          ? "This permanently removes the organization and all connected events, schedules, officials, ratings, and history. It cannot be recovered."
-          : "Members will lose access and event operations will stop. All data remains stored and the organization can be reactivated."}</p>
-        {pending.action === "delete" && <label>Type the organization name<input value={confirmName} onChange={(event) => setConfirmName(event.target.value)} /></label>}
+          ? "This permanently removes the group and all connected events, schedules, officials, ratings, and history. It cannot be recovered."
+          : "Members will lose access and event operations will stop. All data remains stored and the group can be reactivated."}</p>
+        {pending.action === "delete" && <label>Type the group name<input value={confirmName} onChange={(event) => setConfirmName(event.target.value)} /></label>}
         <label>Confirm your password<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
         <p className="verification-note">After password confirmation, Law18Ref will email you a one-time verification link. The action occurs only when you open that link.</p>
         <div><button className="secondary" disabled={busy} onClick={() => { setPending(null); setPassword(""); setConfirmName(""); }}>Cancel</button><button className="danger-button" disabled={busy || !password} onClick={requestVerification}>{busy ? "Verifying…" : "Email verification link"}</button></div>
       </section>
     </div>}
-    {editing && <div className="confirmation-backdrop" role="presentation"><section className="confirmation-dialog organization-settings-dialog" role="dialog" aria-modal="true"><p className="eyebrow">ORGANIZATION SETTINGS</p><h2>{editing.name}</h2><label>Organization name<input value={editingName} maxLength={120} onChange={(event) => setEditingName(event.target.value)} /></label><OrganizationLogoEditor session={session} organizationId={editing.id} logoUrl={editingLogoUrl} onChange={setEditingLogoUrl} onBusyChange={setBusy} onError={setMessage} /><p className="verification-note">The logo appears in the active-organization bar. The internal organization address remains unchanged so imports and existing links continue working.</p><div><button className="secondary" onClick={() => setEditing(null)}>Cancel</button><button className="primary" disabled={busy || editingName.trim().length < 2} onClick={saveOrganizationSettings}>{busy ? "Saving…" : "Save settings"}</button></div></section></div>}
+    {editing && <div className="confirmation-backdrop" role="presentation"><section className="confirmation-dialog organization-settings-dialog" role="dialog" aria-modal="true"><p className="eyebrow">GROUP SETTINGS</p><h2>{editing.name}</h2><label>Group name<input value={editingName} maxLength={120} onChange={(event) => setEditingName(event.target.value)} /></label><OrganizationLogoEditor session={session} organizationId={editing.id} logoUrl={editingLogoUrl} onChange={setEditingLogoUrl} onBusyChange={setBusy} onError={setMessage} /><fieldset className="site-owner-feature-settings"><legend>Enabled Group Features</legend><p>These switches are the maximum features this group can use. Disabled features cannot be enabled by Group or Event Admins.</p>{(Object.keys(eventFeatureLabels) as EventFeatureKey[]).map((feature) => <label className={editingFeatures[feature] ? "selected" : ""} key={feature}><input type="checkbox" checked={editingFeatures[feature]} onChange={(change) => setEditingFeatures((current) => ({ ...current, [feature]: change.target.checked }))} /><span><strong>{eventFeatureLabels[feature].title}</strong><small>{eventFeatureLabels[feature].description}</small></span></label>)}</fieldset><p className="verification-note">The logo appears in the active-group bar. The internal group address remains unchanged so imports and existing links continue working.</p><div><button className="secondary" onClick={() => setEditing(null)}>Cancel</button><button className="primary" disabled={busy || editingName.trim().length < 2} onClick={saveOrganizationSettings}>{busy ? "Saving…" : "Save Settings"}</button></div></section></div>}
   </section>;
 }
 
@@ -3071,14 +3072,14 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     ...eventRoles,
   ])];
   const helpByRole: Record<MembershipRole, { title: string; items: string[] }> = {
-    site_owner: { title: "Site Owner Navigation", items: ["Use the organization selector below the header to open the group you want to manage.", "Open Groups from your initials menu to create, open, archive, restore, rename, or upload a logo for an organization.", "Open Site Appearance from your initials menu to edit, save, schedule, or restore site themes.", "Open Officials and use Copy Join Link to invite members to the active organization.", "Open Activity within an organization to review its audit log and event archive.", "After selecting an organization and event, use the same event tabs described for organization administrators."] },
-    organization_director: { title: "Organization Director Navigation", items: ["Use the organization and event selectors below the header to choose your working scope.", "Open Officials to appoint organization administrators and lower organization roles, or open Event Access to appoint event administrators and lower event roles.", "Use Groups, Activity, Import, Assignment Board, Schedule, Check-In, Coaching, and Ratings for complete organization administration.", "Only the site owner can appoint or remove an Organization Director."] },
-    organization_admin: { title: "Organization Admin Navigation", items: ["Choose the organization and active event from the selectors below the header.", "Open Groups from your initials menu to update the active organization's name or logo.", "Open Officials to copy the organization join link, add or edit people, review last login, set organization roles, remove a member, merge accounts, or open Event Access. Use the selection boxes for bulk archive or deletion.", "Open Activity to review meaningful changes or bulk archive, restore, and delete events.", "Open Import to add officials, upload an Assignr schedule, configure automatic archiving, or archive the selected event now.", "Open Assignment Board or Schedule to review the day, Check-In to manage arrivals, and Coaching to assign coaches.", "Open Ratings to configure evaluations, filter history, switch between individual and full-game views, export a spreadsheet, or use selection boxes to archive and delete ratings. Archived-event ratings remain available here."] },
+    site_owner: { title: "Site Owner Navigation", items: ["Use the group selector below the header to open the group you want to manage.", "Open Groups from your initials menu to create, open, archive, restore, rename, upload a logo, or configure features for a group.", "Open Site Appearance from your initials menu to edit, save, schedule, or restore site themes.", "Open Officials and use Copy Join Link to invite members to the active group.", "Open Activity within a group to review its audit log and event archive.", "After selecting a group and event, use the same event tabs described for Group Admins."] },
+    organization_director: { title: "Group Director Navigation", items: ["Use the group and event selectors below the header to choose your working scope.", "Open Officials to appoint Group Admins and lower group roles, or open Event Access to appoint Event Admins and lower event roles.", "Use Groups, Activity, Import, Assignment Board, Schedule, Check-In, Coaching, and Ratings for complete group administration.", "Only the Site Owner can appoint or remove a Group Director."] },
+    organization_admin: { title: "Group Admin Navigation", items: ["Choose the group and active event from the selectors below the header.", "Open Groups from your initials menu to update the active group's name or logo.", "Open Officials to copy the group join link, add or edit people, review last login, set group roles, remove a member, merge accounts, or open Event Access. Use the selection boxes for bulk archive or deletion.", "Open Activity to review meaningful changes or bulk archive, restore, and delete events.", "Open Import to add officials, upload an Assignr schedule, configure automatic archiving, or archive the selected event now.", "Open Assignment Board or Schedule to review the day, Check-In to manage arrivals, and Coaching to assign coaches.", "Open Ratings to configure evaluations, filter history, switch between individual and full-game views, export a spreadsheet, or use selection boxes to archive and delete ratings. Archived-event ratings remain available here."] },
     event_admin: { title: "Event Admin Navigation", items: ["Select an assigned event from the Active Event menu below the header.", "Open Officials, then Event Access, to add or update event staff for that event.", "Open Import for event schedule data and Event Lifecycle controls, including automatic archiving or Archive Now.", "Open Schedule for game details, Check-In for arrivals, Coaching for coach assignments, and Ratings for evaluation settings and history."] },
     assignor: { title: "Assignor Navigation", items: ["Select the event you are working from the Active Event menu below the header.", "Open Import to upload an authorized schedule, then use Assignment Board or Schedule to review crews.", "Open Check-In to filter arrivals, manually check someone in, undo a check-in, or select an official’s name to see their daily schedule.", "Open Coaching to place coaches on games. Use Rate Crew on a schedule game, or open Ratings and choose a game, when coaching tools are enabled."] },
     site_coordinator: { title: "Site Supervisor Navigation", items: ["Select today’s event from the Active Event menu.", "Open Assignment Board or Schedule to review the games in your event scope.", "Open Check-In to monitor arrivals. Use its filters to narrow the roster, and select an official’s name to view that person’s full schedule for the day."] },
     referee_coach: { title: "Referee Coach Navigation", items: ["Select the event you are coaching from the My Event menu.", "Open Schedule to see games and crews in your coaching scope.", "Select Rate Crew on a game to open its evaluation form, complete the crew ratings, and submit them together.", "Open Ratings to choose a game, review individual or full-game history, filter results, or export the filtered ratings. Your permitted history remains available after an event is archived.", "When Check-In appears, open it at the venue, select Scan QR Code, and scan the code displayed by event staff."] },
-    referee: { title: "Referee Navigation", items: ["Your Dashboard lists every organization and upcoming event linked to your account; referees do not need to select an active organization or event.", "Open My Assignments to view one schedule containing all of your Law18Ref games and any personal external calendar feeds you have connected.", "Open your initials menu, then Account Settings, to manage account-wide personal information and private calendar feeds.", "On an assigned event day, open Check-In. Law18Ref opens the eligible event automatically or asks you to choose when you have more than one check-in that day.", "Select Scan QR Code and scan the code displayed by event staff. The scanner disappears after your check-in is recorded.", "Open My Evals to view evaluations that have been shared with you."] },
+    referee: { title: "Referee Navigation", items: ["Your Dashboard lists every group and upcoming event linked to your account; referees do not need to select an active group or event.", "Open My Assignments to view one schedule containing all of your Law18Ref games and any personal external calendar feeds you have connected.", "Open your initials menu, then Account Settings, to manage account-wide personal information and private calendar feeds.", "On an assigned event day, open Check-In. Law18Ref opens the eligible event automatically or asks you to choose when you have more than one check-in that day.", "Select Scan QR Code and scan the code displayed by event staff. The scanner disappears after your check-in is recorded.", "Open My Evals to view evaluations that have been shared with you."] },
   };
   const isAdministrativeStaff = ["site_owner", "organization_director", "organization_admin", "event_admin", "assignor"].some((role) => allRoles.has(role as MembershipRole));
   const isSiteCoordinator = allRoles.has("site_coordinator");
@@ -3369,7 +3370,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
             <div className="account-roles">{[...allRoles].map((role) => <span key={role}>{roleNames[role]}</span>)}</div>
             <button onClick={() => { setView("my_assignments"); setAccountOpen(false); }}><span>☷</span><div><strong>My assignments</strong><small>Unified personal schedule</small></div></button>
             <button onClick={() => { setView("account"); setAccountOpen(false); }}><span>⚙</span><div><strong>Account settings</strong><small>Personal information</small></div></button>
-            <button onClick={() => { setView("groups"); setAccountOpen(false); }}><span>♙</span><div><strong>Groups</strong><small>Organization membership</small></div></button>
+            <button onClick={() => { setView("groups"); setAccountOpen(false); }}><span>♙</span><div><strong>Groups</strong><small>Group Membership</small></div></button>
             {allRoles.has("site_owner") && <button onClick={() => { setView("appearance"); setAccountOpen(false); }}><span>◐</span><div><strong>Site appearance</strong><small>Theme and schedule</small></div></button>}
             <button className="signout-menu" onClick={() => auth.signOut()}><span>↪</span><div><strong>Sign out</strong></div></button>
           </div>}
@@ -3377,13 +3378,13 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       </div>
     </header>
     {helpOpen && <div className="confirmation-backdrop help-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setHelpOpen(false); }}><section className="confirmation-dialog role-help-dialog" role="dialog" aria-modal="true" aria-labelledby="role-help-title">
-      <header><div><p className="eyebrow">HELP & HOW-TO</p><h2 id="role-help-title">How to Navigate Law18Ref</h2><p>Follow the directions below for your role in {organization?.name || "the active organization"}.</p></div><button className="modal-close-button" aria-label="Close help" onClick={() => setHelpOpen(false)}>×</button></header>
-      <aside className="role-help-roles" aria-label="Active organization roles">{activeGroupRoles.map((role) => <span className="role-badge" key={role}>{roleNames[role]}</span>)}</aside>
-      <main className="role-help-content">{activeGroupRoles.map((role) => <section key={role}><h3>{helpByRole[role].title}</h3><ol>{helpByRole[role].items.map((item) => <li key={item}>{item}</li>)}</ol></section>)}{!activeGroupRoles.length && <EmptyState>No active role is assigned in this organization.</EmptyState>}</main>
+      <header><div><p className="eyebrow">HELP & HOW-TO</p><h2 id="role-help-title">How to Navigate Law18Ref</h2><p>Follow the directions below for your role in {organization?.name || "the active group"}.</p></div><button className="modal-close-button" aria-label="Close help" onClick={() => setHelpOpen(false)}>×</button></header>
+      <aside className="role-help-roles" aria-label="Active group roles">{activeGroupRoles.map((role) => <span className="role-badge" key={role}>{roleNames[role]}</span>)}</aside>
+      <main className="role-help-content">{activeGroupRoles.map((role) => <section key={role}><h3>{helpByRole[role].title}</h3><ol>{helpByRole[role].items.map((item) => <li key={item}>{item}</li>)}</ol></section>)}{!activeGroupRoles.length && <EmptyState>No active role is assigned in this group.</EmptyState>}</main>
       <footer className="role-help-actions"><button className="primary" onClick={() => setHelpOpen(false)}>Close Help</button></footer>
     </section></div>}
     {!isPersonalWorkspace && <div className="eventbar">
-      <div>{organization?.logo_url ? <img className="event-organization-logo" src={organization.logo_url} alt={`${organization.name} logo`} /> : <span className="event-mark">{organization?.name[0] || "R"}</span>}{organizations.length > 1 && <label><span>Active organization</span><select value={organization?.id || ""} onChange={(event) => switchOrganization(event.target.value)}>{organizations.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>}<label><span>{isStaff ? "Active event" : "My event"}</span><select value={eventId} onChange={(event) => switchEvent(event.target.value)} disabled={!events.length}><option value="">{events.length ? "Select event" : "No events yet"}</option>{events.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label></div>
+      <div>{organization?.logo_url ? <img className="event-organization-logo" src={organization.logo_url} alt={`${organization.name} logo`} /> : <span className="event-mark">{organization?.name[0] || "R"}</span>}{organizations.length > 1 && <label><span>Active Group</span><select value={organization?.id || ""} onChange={(event) => switchOrganization(event.target.value)}>{organizations.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>}<label><span>{isStaff ? "Active Event" : "My Event"}</span><select value={eventId} onChange={(event) => switchEvent(event.target.value)} disabled={!events.length}><option value="">{events.length ? "Select Event" : "No Events Yet"}</option>{events.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label></div>
       <span>{event ? formatDate(event.starts_on) : "No event imported"}</span>
     </div>}
     {isPersonalWorkspace && <div className="personal-header-spacer" aria-hidden="true" />}
@@ -3409,7 +3410,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal official={official} event={event} data={data} canEdit={isAdministrativeStaff} onClose={() => setScheduleOfficialId(null)} onEdit={() => { setScheduleOfficialId(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-<footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.17.0</span></footer>
+<footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.18.0</span></footer>
   </main>;
 }
 

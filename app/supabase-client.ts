@@ -90,6 +90,12 @@ export type EventRecord = {
   parent_league_id: string | null;
   check_in_enabled: boolean;
   guest_check_in_enabled: boolean;
+  external_check_in_fields: ExternalCheckInField[];
+  external_check_in_other_label: string;
+  check_in_confirmation_message: string;
+  external_check_in_first_failure_message: string;
+  external_check_in_second_failure_message: string;
+  check_in_links: Array<{ title: string; url: string }>;
   feature_settings: EventFeatureSettings;
   rating_type: "skills_eval" | "basic_eval";
   ratings_admin_only: boolean;
@@ -140,6 +146,8 @@ export type OfficialRecord = {
   phone?: string | null;
   personal_contact_locked?: boolean;
   badge_level?: string | null;
+  ussf_id?: string | null;
+  external_check_in_other?: string | null;
   source?: string;
   source_official_id?: string | null;
   source_display_name?: string | null;
@@ -205,12 +213,24 @@ export type CheckInRecord = {
   event_date: string;
 };
 
-export type GuestCheckInLookup = {
+export type ExternalCheckInField = "last_name" | "first_name" | "email" | "phone" | "ussf_id" | "date_of_birth" | "other";
+
+export type ExternalCheckInConfig = {
+  event_name: string;
+  required_fields: ExternalCheckInField[];
+  other_label: string;
+  first_failure_message: string;
+  second_failure_message: string;
+};
+
+export type ExternalCheckInLookup = {
   token: string;
   event_name: string;
   event_date: string;
   official_name: string;
   already_checked_in: boolean;
+  confirmation_message: string;
+  check_in_links: Array<{ title: string; url: string }>;
   assignments: Array<{
     game_id: string;
     starts_at: string;
@@ -836,20 +856,27 @@ export async function createEvent(
   return rows[0];
 }
 
-export async function updateEventSettings(session: Law18Session, eventId: string, values: { name: string; venue_name: string; starts_on: string; ends_on: string; timezone: string; event_type: "tournament" | "league"; parent_league_id: string | null; feature_settings: EventFeatureSettings; guest_check_in_enabled: boolean }) {
+export async function updateEventSettings(session: Law18Session, eventId: string, values: { name: string; venue_name: string; starts_on: string; ends_on: string; timezone: string; event_type: "tournament" | "league"; parent_league_id: string | null; feature_settings: EventFeatureSettings; guest_check_in_enabled: boolean; external_check_in_fields: ExternalCheckInField[]; external_check_in_other_label: string; check_in_confirmation_message: string; external_check_in_first_failure_message: string; external_check_in_second_failure_message: string; check_in_links: Array<{ title: string; url: string }> }) {
   const rows = await rest<EventRecord[]>(session, `events?id=eq.${enc(eventId)}`, { method: "PATCH", body: JSON.stringify({ ...values, parent_league_id: values.event_type === "tournament" ? values.parent_league_id : null, check_in_enabled: values.feature_settings.check_in, guest_check_in_enabled: values.feature_settings.check_in && values.guest_check_in_enabled }) }, "return=representation");
   if (!rows[0]) throw new Error("The event settings could not be saved.");
   return rows[0];
 }
 
-export async function findGuestCheckIn(eventSlug: string, eventDate: string, lastName: string, email: string) {
-  return publicRest<GuestCheckInLookup>("rpc/find_guest_check_in", {
+export async function loadExternalCheckInConfig(eventSlug: string, eventDate: string) {
+  return publicRest<ExternalCheckInConfig>("rpc/get_external_check_in_config", {
     method: "POST",
-    body: JSON.stringify({ event_slug: eventSlug, event_day: eventDate, entered_last_name: lastName, entered_email: email }),
+    body: JSON.stringify({ event_slug: eventSlug, event_day: eventDate }),
   });
 }
 
-export async function confirmGuestCheckIn(token: string) {
+export async function findExternalCheckIn(eventSlug: string, eventDate: string, identity: Partial<Record<ExternalCheckInField, string>>) {
+  return publicRest<ExternalCheckInLookup>("rpc/find_external_check_in", {
+    method: "POST",
+    body: JSON.stringify({ event_slug: eventSlug, event_day: eventDate, entered_identity: identity }),
+  });
+}
+
+export async function confirmExternalCheckIn(token: string) {
   return publicRest<{ checked_in: boolean; already_checked_in: boolean; checked_in_at: string }>("rpc/confirm_guest_check_in", {
     method: "POST",
     body: JSON.stringify({ lookup_token: token }),
@@ -1102,6 +1129,8 @@ export type OfficialImportRow = {
   phone: string | null;
   date_of_birth: string | null;
   badge_level: string | null;
+  ussf_id: string | null;
+  external_check_in_other: string | null;
   source_official_id: string | null;
 };
 
@@ -1288,6 +1317,8 @@ export function parseAssignrOfficialsCsv(text: string): OfficialImportRow[] {
         phone: cell(record, headers, "mobile phone") || cell(record, headers, "home phone") || null,
         date_of_birth: null,
         badge_level: cell(record, headers, "grade/badge level") || cell(record, headers, "ussf referee certification") || null,
+        ussf_id: cell(record, headers, "ussf id") || cell(record, headers, "ussf id #") || null,
+        external_check_in_other: cell(record, headers, "external check-in identifier") || null,
         source_official_id: cell(record, headers, "assignr database id") || null,
       };
     })
@@ -1396,6 +1427,8 @@ export async function importOfficials(
       phone: row.phone,
       date_of_birth: row.date_of_birth,
       badge_level: row.badge_level,
+      ussf_id: row.ussf_id,
+      external_check_in_other: row.external_check_in_other,
       source: "assignr",
       source_official_id: row.source_official_id,
       updated_at: new Date().toISOString(),
@@ -1644,7 +1677,7 @@ export async function importTournament(
 export async function createOfficial(
   session: Law18Session,
   organizationId: string,
-  values: { full_name: string; email?: string | null; secondary_email?: string | null; date_of_birth?: string | null; phone?: string | null; badge_level?: string | null; pending_org_roles?: MembershipRole[] },
+  values: { full_name: string; email?: string | null; secondary_email?: string | null; date_of_birth?: string | null; phone?: string | null; badge_level?: string | null; ussf_id?: string | null; external_check_in_other?: string | null; pending_org_roles?: MembershipRole[] },
 ) {
   const rows = await rest<OfficialRecord[]>(session, "officials", {
     method: "POST",
@@ -1656,6 +1689,8 @@ export async function createOfficial(
       date_of_birth: values.date_of_birth || null,
       phone: values.phone?.trim() || null,
       badge_level: values.badge_level?.trim() || null,
+      ussf_id: values.ussf_id?.trim() || null,
+      external_check_in_other: values.external_check_in_other?.trim() || null,
       pending_org_role: values.pending_org_roles?.[0] || "referee",
       pending_org_roles: values.pending_org_roles?.length ? values.pending_org_roles : ["referee"],
       source: "manual",
@@ -1669,7 +1704,7 @@ export async function createOfficial(
 export async function updateOfficial(
   session: Law18Session,
   official: OfficialRecord,
-  values: { full_name: string; email?: string | null; secondary_email?: string | null; date_of_birth?: string | null; phone?: string | null; badge_level?: string | null; pending_org_roles?: MembershipRole[] },
+  values: { full_name: string; email?: string | null; secondary_email?: string | null; date_of_birth?: string | null; phone?: string | null; badge_level?: string | null; ussf_id?: string | null; external_check_in_other?: string | null; pending_org_roles?: MembershipRole[] },
   syncMembershipRoles = false,
 ) {
   const email = values.email?.trim().toLowerCase() || null;
@@ -1685,6 +1720,8 @@ export async function updateOfficial(
   const changes = official.linked_user_id && official.personal_contact_locked
     ? {
       badge_level: values.badge_level?.trim() || null,
+      ussf_id: values.ussf_id?.trim() || null,
+      external_check_in_other: values.external_check_in_other?.trim() || null,
       pending_org_role: intendedRoles[0],
       pending_org_roles: intendedRoles,
       updated_at: new Date().toISOString(),
@@ -1696,6 +1733,8 @@ export async function updateOfficial(
       date_of_birth: values.date_of_birth || null,
       phone: values.phone?.trim() || null,
       badge_level: values.badge_level?.trim() || null,
+      ussf_id: values.ussf_id?.trim() || null,
+      external_check_in_other: values.external_check_in_other?.trim() || null,
       pending_org_role: intendedRoles[0],
       pending_org_roles: intendedRoles,
       updated_at: new Date().toISOString(),

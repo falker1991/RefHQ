@@ -10,7 +10,7 @@ import {
   approvePublicRating,
   bulkManageRecords,
   checkIn,
-  confirmGuestCheckIn,
+  confirmExternalCheckIn,
   claimOrganizationJoinLink,
   createCoachAssignment,
   createOrganizationJoinLink,
@@ -26,7 +26,7 @@ import {
   deleteAppearanceTheme,
   deleteCoachAssignment,
   deleteRating,
-  findGuestCheckIn,
+  findExternalCheckIn,
   importTournament,
   importOfficials,
   leaveCurrentOrganization,
@@ -41,6 +41,7 @@ import {
   loadAuthorizedRatingHistory,
   loadCalendarFeedConnections,
   loadEventCheckIns,
+  loadExternalCheckInConfig,
   loadOrganization,
   loadOrganizationActivity,
   loadOrganizationJoinLinks,
@@ -94,7 +95,9 @@ import {
   type EventFeatureKey,
   type EventFeatureSettings,
   type GameRecord,
-  type GuestCheckInLookup,
+  type ExternalCheckInConfig,
+  type ExternalCheckInField,
+  type ExternalCheckInLookup,
   type ImportRow,
   type OfficialRecord,
   type OfficialImportRow,
@@ -616,42 +619,63 @@ function QrScanner({ onFound }: { onFound: (rawValue: string) => void }) {
   </section>;
 }
 
-function GuestCheckInPage({ eventSlug, eventDate, onExit }: { eventSlug: string; eventDate: string; onExit: () => void }) {
-  const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState("");
-  const [match, setMatch] = useState<GuestCheckInLookup | null>(null);
+function ExternalCheckInPage({ eventSlug, eventDate, onExit }: { eventSlug: string; eventDate: string; onExit: () => void }) {
+  const [config, setConfig] = useState<ExternalCheckInConfig | null>(null);
+  const [identity, setIdentity] = useState<Partial<Record<ExternalCheckInField, string>>>({});
+  const [match, setMatch] = useState<ExternalCheckInLookup | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [complete, setComplete] = useState(false);
+  const [lastFailedIdentity, setLastFailedIdentity] = useState("");
+  const [failedAttempts, setFailedAttempts] = useState(0);
+
+  useEffect(() => {
+    loadExternalCheckInConfig(eventSlug, eventDate).then(setConfig).catch((reason) => setMessage(reason instanceof Error ? reason.message : "External check-in is unavailable."));
+  }, [eventDate, eventSlug]);
+
+  const fieldDetails: Record<ExternalCheckInField, { label: string; type?: string; autoComplete?: string }> = {
+    last_name: { label: "Last name", autoComplete: "family-name" }, first_name: { label: "First name", autoComplete: "given-name" },
+    email: { label: "Email", type: "email", autoComplete: "email" }, phone: { label: "Phone", type: "tel", autoComplete: "tel" },
+    ussf_id: { label: "USSF ID #" }, date_of_birth: { label: "Date of birth", type: "date", autoComplete: "bday" },
+    other: { label: config?.other_label || "Other identifier" },
+  };
+  const requiredFields = config?.required_fields || [];
+  const canSearch = Boolean(config && requiredFields.length && requiredFields.every((field) => identity[field]?.trim()));
 
   async function findSchedule() {
     setBusy(true); setMessage("");
-    try { setMatch(await findGuestCheckIn(eventSlug, eventDate, lastName, email)); }
-    catch (reason) { setMessage(reason instanceof Error ? reason.message : "Unable to find your schedule."); }
+    const fingerprint = JSON.stringify(requiredFields.map((field) => [field, identity[field]?.trim().toLowerCase()]));
+    try { setMatch(await findExternalCheckIn(eventSlug, eventDate, identity)); setFailedAttempts(0); setLastFailedIdentity(""); }
+    catch {
+      const attempt = fingerprint === lastFailedIdentity ? failedAttempts + 1 : 1;
+      setLastFailedIdentity(fingerprint); setFailedAttempts(attempt);
+      setMessage(attempt >= 2 ? config?.second_failure_message || "Please check in in person with the Site Supervisor." : config?.first_failure_message || "No matching referee was found in today’s schedule. Try again and confirm the information matches your Assignr account.");
+    }
     finally { setBusy(false); }
   }
   async function confirmSchedule() {
     if (!match) return;
     setBusy(true); setMessage("");
     try {
-      await confirmGuestCheckIn(match.token);
+      await confirmExternalCheckIn(match.token);
       setComplete(true);
-      setMessage("You’re checked in. Have a great day!");
+      setMessage(match.confirmation_message || "You’re checked in. Have a great day!");
     } catch (reason) { setMessage(reason instanceof Error ? reason.message : "Unable to complete check-in."); }
     finally { setBusy(false); }
   }
 
   return <main className="guest-checkin-page"><div className="guest-checkin-shell">
-    <header className="guest-checkin-brand"><Mark /><div><strong>Law18Referee Management</strong><span>Guest Check-In</span></div></header>
+    <header className="guest-checkin-brand"><Mark /><div><strong>Law18Referee Management</strong><span>External Check-In</span></div></header>
     <section className="panel guest-checkin-card">
-      {complete ? <div className="guest-checkin-complete"><span aria-hidden="true">✓</span><p className="eyebrow">CHECK-IN COMPLETE</p><h1>You’re checked in</h1><p>{match?.event_name} · {formatDate(eventDate)}</p><p className="pilot-message">{message}</p></div> : !match ? <>
-        <p className="eyebrow">ON-SITE CHECK-IN</p><h1>Find your schedule</h1><p>Enter your last name and email exactly as they appear in your Assignr account.</p>
-        <div className="guest-checkin-form"><label>Last name<input autoComplete="family-name" value={lastName} onChange={(change) => setLastName(change.target.value)} /></label><label>Email<input type="email" inputMode="email" autoCapitalize="none" autoComplete="email" value={email} onChange={(change) => setEmail(change.target.value)} /></label><button className="primary" disabled={busy || !lastName.trim() || !email.trim()} onClick={() => void findSchedule()}>{busy ? "Checking…" : "Show My Schedule"}</button></div>
+      {complete ? <div className="guest-checkin-complete"><span aria-hidden="true">✓</span><p className="eyebrow">CHECK-IN COMPLETE</p><h1>You’re checked in</h1><p>{match?.event_name} · {formatDate(eventDate)}</p><p className="pilot-message">{message}</p>{!!match?.check_in_links.length && <div className="check-in-links">{match.check_in_links.map((link) => <a className="secondary" href={link.url} target="_blank" rel="noreferrer" key={`${link.title}-${link.url}`}>{link.title}</a>)}</div>}</div> : !match ? <>
+        <p className="eyebrow">ON-SITE CHECK-IN</p><h1>Find your schedule</h1><p>Enter the requested details exactly as they appear in your Assignr account or the event’s assigning system.</p>
+        {!config && !message ? <p>Loading check-in…</p> : <div className="guest-checkin-form">{requiredFields.map((field) => { const details = fieldDetails[field]; return <label key={field}>{details.label}<input type={details.type || "text"} inputMode={field === "email" ? "email" : field === "phone" ? "tel" : undefined} autoCapitalize={field === "email" ? "none" : undefined} autoComplete={details.autoComplete} value={identity[field] || ""} onChange={(change) => setIdentity((current) => ({ ...current, [field]: change.target.value }))} /></label>; })}<button className="primary" disabled={busy || !canSearch} onClick={() => void findSchedule()}>{busy ? "Checking…" : "Show My Schedule"}</button></div>}
         {message && <p className="pilot-message error-message">{message}</p>}
       </> : <>
         <p className="eyebrow">CONFIRM YOUR SCHEDULE</p><h1>{match.official_name}</h1><p>{match.event_name} · {formatDate(match.event_date)}</p>
         <div className="guest-schedule-list">{match.assignments.map((assignment) => <article className="guest-schedule-card" key={`${assignment.game_id}-${assignment.position}`}><div><time>{formatTime(assignment.starts_at)}</time><strong>{assignment.field_name}</strong></div><div><h2>{assignment.home_team} vs. {assignment.away_team}</h2><p>{[assignment.age_group, assignment.gender, assignment.venue_name].filter(Boolean).join(" · ")}</p><span>{positionLabel(assignment.position, assignment.position_title)}</span></div></article>)}</div>
         {match.already_checked_in ? <p className="pilot-message">✓ You are already checked in for this event day.</p> : <button className="primary guest-confirm-button" disabled={busy} onClick={() => void confirmSchedule()}>{busy ? "Checking In…" : "Confirm Schedule & Check In"}</button>}
+        {!!match.check_in_links.length && <div className="check-in-links">{match.check_in_links.map((link) => <a className="secondary" href={link.url} target="_blank" rel="noreferrer" key={`${link.title}-${link.url}`}>{link.title}</a>)}</div>}
         <button className="text-button" onClick={() => { setMatch(null); setMessage(""); }}>Not your schedule? Try again</button>
       </>}
     </section>
@@ -688,13 +712,13 @@ function RefereeCheckIn({ event, data, session, onCheckedIn }: { event: EventRec
       }
       await checkIn(session, event.id, official.id, "qr", scannedDate);
       setJustCheckedIn(true);
-      setMessage("You’re checked in. Have a great day!");
+      setMessage(event.check_in_confirmation_message || "You’re checked in. Have a great day!");
       onCheckedIn();
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "That QR code could not be verified.");
     }
   }
-  return <section className="page-section referee-checkin"><div className="section-title"><div><p className="eyebrow">OFFICIAL CHECK-IN</p><h1>{isCheckedIn ? "Check-in complete" : "Scan the on-site code"}</h1><p>{isCheckedIn ? `You are checked in for ${formatDate(selectedDate)}.` : "The check-in QR is displayed or printed by event staff at the venue."}</p></div></div>{!isCheckedIn && <QrScanner onFound={scanned} />}{message && <p className="pilot-message">{message}</p>}{isCheckedIn && !message && <p className="pilot-message">✓ You’re checked in. Have a great day!</p>}</section>;
+  return <section className="page-section referee-checkin"><div className="section-title"><div><p className="eyebrow">OFFICIAL CHECK-IN</p><h1>{isCheckedIn ? "Check-in complete" : "Scan the on-site code"}</h1><p>{isCheckedIn ? `You are checked in for ${formatDate(selectedDate)}.` : "The check-in QR is displayed or printed by event staff at the venue."}</p></div></div>{!isCheckedIn && <QrScanner onFound={scanned} />}{message && <p className="pilot-message">{message}</p>}{isCheckedIn && !message && <p className="pilot-message">✓ {event.check_in_confirmation_message || "You’re checked in. Have a great day!"}</p>}{isCheckedIn && !!event.check_in_links?.length && <div className="check-in-links">{event.check_in_links.map((link) => <a className="secondary" href={link.url} target="_blank" rel="noreferrer" key={`${link.title}-${link.url}`}>{link.title}</a>)}</div>}</section>;
 }
 
 function CheckInView({ event, data, session, canManageCheckIns, onRefresh, onSelectOfficial }: { event: EventRecord; data: EventData; session: Law18Session; canManageCheckIns: boolean; onRefresh: () => Promise<void>; onSelectOfficial: (officialId: string) => void }) {
@@ -709,7 +733,7 @@ function CheckInView({ event, data, session, canManageCheckIns, onRefresh, onSel
   const [manualCheckInOfficialId, setManualCheckInOfficialId] = useState<string | null>(null);
   const refreshingRef = useRef(false);
   const previousCheckedRef = useRef<{ date: string; ids: Set<string> } | null>(null);
-  const url = `${window.location.origin}/?event=${event.check_in_slug}&date=${eventDate}${event.guest_check_in_enabled ? "&guest=1" : ""}`;
+  const url = `${window.location.origin}/?event=${event.check_in_slug}&date=${eventDate}${event.guest_check_in_enabled ? "&external=1" : ""}`;
   const checked = new Set(data.checkIns.filter((item) => item.event_date === eventDate).map((item) => item.official_id));
   const assignedToday = new Set(data.assignments.filter((assignment) => data.games.some((game) => game.id === assignment.game_id && game.starts_at.startsWith(eventDate))).map((assignment) => assignment.official_id));
   const coachingOfficialIds = new Set<string>();
@@ -828,7 +852,7 @@ function CheckInView({ event, data, session, canManageCheckIns, onRefresh, onSel
   return <section className="page-section">
     <div className="section-title"><div><p className="eyebrow">TOURNAMENT CHECK-IN</p><h1>Arrival station</h1><p>Attendance refreshes every 15 seconds while this page is visible. Last updated {lastUpdated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}.</p></div><div className="checkin-refresh-tools"><label className="day-picker">Event day<select value={eventDate} onChange={(event) => { setEventDate(event.target.value); setSiteFilters([]); }}>{eventDates.map((date) => <option value={date} key={date}>{formatDate(date)}</option>)}</select></label><button className="secondary" disabled={refreshing} onClick={() => refreshAttendance()}>{refreshing ? "Refreshing…" : "Refresh Now"}</button></div></div>
     <div className="checkin-grid">
-      <article className="panel qr-panel print-qr"><div className="qr"><QRCodeSVG value={url} size={210} /></div><h2>{event.name}</h2><strong>{formatDate(eventDate)}</strong><small>{event.guest_check_in_enabled ? "Guest Check-In · Account not required" : "Law18Ref account sign-in required"}</small><p>{url}</p><button className="secondary print-button" onClick={() => window.print()}>Print daily QR</button></article>
+      <article className="panel qr-panel print-qr"><div className="qr"><QRCodeSVG value={url} size={210} /></div><h2>{event.name}</h2><strong>{formatDate(eventDate)}</strong><small>{event.guest_check_in_enabled ? "External Check-In · Account not required" : "Law18Ref account sign-in required"}</small><p>{url}</p><button className="secondary print-button" onClick={() => window.print()}>Print daily QR</button></article>
       <article className="panel roster-panel"><div className="panel-head"><div><p className="eyebrow">LIVE ROSTER</p><h2>{checked.size} checked in</h2><p>{visibleRoster.length} of {roster.length} officials shown</p></div></div>
         <div className="roster-controls"><AssignmentFilterMenu label="Status" options={[{ id: "checked_in", name: "Checked in" }, { id: "expected", name: "Not yet checked in" }]} selected={statusFilters} onChange={setStatusFilters} /><label>Sort by<select value={rosterSort} onChange={(event) => setRosterSort(event.target.value as typeof rosterSort)}><option value="first_assignment">First assignment time</option><option value="last_name">Last name</option><option value="field">Field</option></select></label><AssignmentFilterMenu label="Site" options={sites.map((site) => ({ id: site, name: site }))} selected={siteFilters} onChange={setSiteFilters} /><SavedFilterControls filterKey={`checkin:${event.id}`} value={{ statusFilters, siteFilters, rosterSort }} onApply={(saved) => { setStatusFilters(saved.statusFilters); setSiteFilters(saved.siteFilters); setRosterSort(saved.rosterSort); }} /></div>
         {visibleRoster.map(({ official, firstGame, firstAssignment, firstSite, isChecked, isCoachExpected }) => <div className={`official-row ${newArrivals.has(official.id) ? "new-arrival" : ""}`} key={official.id}><span className="avatar">{initials(official.full_name)}</span><div className="official-name"><button className="checkin-official-button" onClick={() => onSelectOfficial(official.id)}>{official.full_name}</button><span>{isCoachExpected && !firstAssignment ? `Referee Coach${firstGame ? ` · ${formatTime(firstGame.starts_at)} · ${firstSite}` : ""}` : firstGame ? [formatTime(firstGame.starts_at), firstSite, firstGame.field_name, firstGame.age_group, firstGame.gender, firstAssignment ? positionLabel(firstAssignment.position, firstAssignment.position_title) : null].filter(Boolean).join(" · ") : "No assignment details"}</span></div><div className="checkin-status-actions"><Status checked={isChecked} />{canManageCheckIns && <button className={isChecked ? "text-button undo-checkin-button" : "secondary manual-checkin-button"} disabled={manualCheckInOfficialId === official.id} onClick={() => toggleManualCheckIn(official, isChecked)}>{manualCheckInOfficialId === official.id ? "Updating…" : isChecked ? "Undo Check-In" : "Check In"}</button>}</div></div>)}
@@ -837,7 +861,7 @@ function CheckInView({ event, data, session, canManageCheckIns, onRefresh, onSel
       </article>
     </div>
     {canSelfCheckIn && <QrScanner onFound={scanForSelf} />}
-    {currentOfficial && assignedToday.has(currentOfficial.id) && checked.has(currentOfficial.id) && <p className="pilot-message staff-self-checkin">✓ You are checked in for this event day.</p>}
+    {currentOfficial && assignedToday.has(currentOfficial.id) && checked.has(currentOfficial.id) && <><p className="pilot-message staff-self-checkin">✓ {event.check_in_confirmation_message || "You are checked in for this event day."}</p>{!!event.check_in_links?.length && <div className="check-in-links">{event.check_in_links.map((link) => <a className="secondary" href={link.url} target="_blank" rel="noreferrer" key={`${link.title}-${link.url}`}>{link.title}</a>)}</div>}</>}
   </section>;
 }
 
@@ -919,6 +943,12 @@ function EventSettingsPanel({ session, organization, event, events, onChanged }:
   const [parentLeagueId, setParentLeagueId] = useState(event.parent_league_id || "");
   const [features, setFeatures] = useState<EventFeatureSettings>({ ...defaultEventFeatures, ...(event.feature_settings || {}), check_in: event.check_in_enabled !== false });
   const [guestCheckInEnabled, setGuestCheckInEnabled] = useState(Boolean(event.guest_check_in_enabled));
+  const [externalCheckInFields, setExternalCheckInFields] = useState<ExternalCheckInField[]>(event.external_check_in_fields?.length ? event.external_check_in_fields : ["last_name", "email"]);
+  const [externalOtherLabel, setExternalOtherLabel] = useState(event.external_check_in_other_label || "Other identifier");
+  const [checkInConfirmationMessage, setCheckInConfirmationMessage] = useState(event.check_in_confirmation_message || "You’re checked in. Have a great day!");
+  const [firstFailureMessage, setFirstFailureMessage] = useState(event.external_check_in_first_failure_message || "No matching referee was found in today’s schedule. Try again and confirm the information matches your Assignr account.");
+  const [secondFailureMessage, setSecondFailureMessage] = useState(event.external_check_in_second_failure_message || "Please check in in person with the Site Supervisor.");
+  const [checkInLinks, setCheckInLinks] = useState<Array<{ title: string; url: string }>>(event.check_in_links || []);
   const [documents, setDocuments] = useState<EventDocumentRecord[]>([]);
   const [documentType, setDocumentType] = useState<EventDocumentRecord["document_type"]>("rules_of_competition");
   const [title, setTitle] = useState("Rules of Competition");
@@ -927,13 +957,14 @@ function EventSettingsPanel({ session, organization, event, events, onChanged }:
   const [message, setMessage] = useState("");
   const refreshDocuments = useCallback(() => loadEventDocuments(session, event.id).then(setDocuments), [event.id, session]);
   useEffect(() => { void refreshDocuments(); }, [refreshDocuments]);
-  useEffect(() => { setName(event.name); setVenueName(event.venue_name); setStartsOn(event.starts_on); setEndsOn(event.ends_on); setTimezone(event.timezone); setEventType(event.event_type || "tournament"); setParentLeagueId(event.parent_league_id || ""); setFeatures({ ...defaultEventFeatures, ...(event.feature_settings || {}), check_in: event.check_in_enabled !== false }); setGuestCheckInEnabled(Boolean(event.guest_check_in_enabled)); }, [event]);
+  useEffect(() => { setName(event.name); setVenueName(event.venue_name); setStartsOn(event.starts_on); setEndsOn(event.ends_on); setTimezone(event.timezone); setEventType(event.event_type || "tournament"); setParentLeagueId(event.parent_league_id || ""); setFeatures({ ...defaultEventFeatures, ...(event.feature_settings || {}), check_in: event.check_in_enabled !== false }); setGuestCheckInEnabled(Boolean(event.guest_check_in_enabled)); setExternalCheckInFields(event.external_check_in_fields?.length ? event.external_check_in_fields : ["last_name", "email"]); setExternalOtherLabel(event.external_check_in_other_label || "Other identifier"); setCheckInConfirmationMessage(event.check_in_confirmation_message || "You’re checked in. Have a great day!"); setFirstFailureMessage(event.external_check_in_first_failure_message || "No matching referee was found in today’s schedule. Try again and confirm the information matches your Assignr account."); setSecondFailureMessage(event.external_check_in_second_failure_message || "Please check in in person with the Site Supervisor."); setCheckInLinks(event.check_in_links || []); }, [event]);
   const entitled = (feature: EventFeatureKey) => organization.feature_entitlements?.[feature] ?? true;
   async function saveSettings() {
     setBusy(true); setMessage("");
     try {
       const effectiveFeatures = Object.fromEntries((Object.keys(defaultEventFeatures) as EventFeatureKey[]).map((feature) => [feature, entitled(feature) && features[feature]])) as EventFeatureSettings;
-      await updateEventSettings(session, event.id, { name: name.trim(), venue_name: venueName.trim(), starts_on: startsOn, ends_on: endsOn, timezone, event_type: eventType, parent_league_id: eventType === "tournament" ? parentLeagueId || null : null, feature_settings: effectiveFeatures, guest_check_in_enabled: effectiveFeatures.check_in && guestCheckInEnabled });
+      const validLinks = checkInLinks.filter((link) => link.title.trim() && link.url.trim()).map((link) => { const url = new URL(link.url); if (!/^https?:$/.test(url.protocol)) throw new Error("Check-in document links must use HTTP or HTTPS."); return { title: link.title.trim(), url: url.toString() }; });
+      await updateEventSettings(session, event.id, { name: name.trim(), venue_name: venueName.trim(), starts_on: startsOn, ends_on: endsOn, timezone, event_type: eventType, parent_league_id: eventType === "tournament" ? parentLeagueId || null : null, feature_settings: effectiveFeatures, guest_check_in_enabled: effectiveFeatures.check_in && guestCheckInEnabled, external_check_in_fields: externalCheckInFields, external_check_in_other_label: externalOtherLabel.trim() || "Other identifier", check_in_confirmation_message: checkInConfirmationMessage.trim(), external_check_in_first_failure_message: firstFailureMessage.trim(), external_check_in_second_failure_message: secondFailureMessage.trim(), check_in_links: validLinks });
       await onChanged(); setMessage("Event settings saved and applied to authorized users.");
     }
     catch (reason) { setMessage(reason instanceof Error ? reason.message : "Unable to save event settings."); }
@@ -948,7 +979,7 @@ function EventSettingsPanel({ session, organization, event, events, onChanged }:
   }
   const leagues = events.filter((item) => item.event_type === "league" && item.id !== event.id);
   return <section className="page-section"><div className="section-title"><div><p className="eyebrow">EVENT SETTINGS</p><h1>{event.name}</h1><p>Configure this event within the features enabled for {organization.name}.</p></div></div><article className="panel event-documents-settings"><div><p className="eyebrow">GENERAL</p><h2>Event details</h2></div><div className="event-general-fields"><label>Event name<input value={name} onChange={(change) => setName(change.target.value)} /></label><label>Default venue<input value={venueName} onChange={(change) => setVenueName(change.target.value)} /></label><label>Starts<input type="date" value={startsOn} onChange={(change) => setStartsOn(change.target.value)} /></label><label>Ends<input type="date" min={startsOn} value={endsOn} onChange={(change) => setEndsOn(change.target.value)} /></label><label>Time zone<select value={timezone} onChange={(change) => setTimezone(change.target.value)}><option value="America/New_York">Eastern Time</option><option value="America/Chicago">Central Time</option><option value="America/Denver">Mountain Time</option><option value="America/Phoenix">Arizona Time</option><option value="America/Los_Angeles">Pacific Time</option><option value="America/Anchorage">Alaska Time</option><option value="Pacific/Honolulu">Hawaii Time</option></select></label><label>Event type<select value={eventType} onChange={(change) => { const type = change.target.value as EventRecord["event_type"]; setEventType(type); if (type === "league") { setParentLeagueId(""); setFeatures((current) => ({ ...current, check_in: false })); } }}><option value="tournament">Tournament</option><option value="league">League</option></select></label>{eventType === "tournament" && <label>Parent league<select value={parentLeagueId} onChange={(change) => setParentLeagueId(change.target.value)}><option value="">Standalone tournament</option>{leagues.map((league) => <option value={league.id} key={league.id}>{league.name}</option>)}</select></label>}</div><hr /><div><p className="eyebrow">EVENT FEATURES</p><h2>Enabled modules</h2><p>An event cannot enable a module that the Site Owner or organization has disabled.</p></div><div className="event-feature-grid">{(Object.keys(eventFeatureLabels) as EventFeatureKey[]).map((feature) => { const available = entitled(feature); const details = eventFeatureLabels[feature]; return <label className={`${features[feature] && available ? "selected" : ""}${available ? "" : " unavailable"}`} key={feature}><input type="checkbox" checked={available && features[feature]} disabled={!available} onChange={(change) => setFeatures((current) => ({ ...current, [feature]: change.target.checked }))} /><span><strong>{details.title}</strong><small>{available ? details.description : "Not enabled for this organization"}</small></span></label>; })}</div>
-{entitled("check_in") && features.check_in && <label className="guest-checkin-setting"><input type="checkbox" checked={guestCheckInEnabled} onChange={(change) => setGuestCheckInEnabled(change.target.checked)} /><span><strong>Enable Guest Check-In</strong><small>Officials scan the daily QR, enter their Assignr last name and email, review their schedule, and check in without an account.</small></span></label>}<button className="primary event-settings-save" disabled={busy || !name.trim() || !venueName.trim() || !startsOn || !endsOn || endsOn < startsOn} onClick={() => void saveSettings()}>{busy ? "Saving…" : "Save Event Settings"}</button>
+{entitled("check_in") && features.check_in && <section className="external-checkin-settings"><label className="guest-checkin-setting"><input type="checkbox" checked={guestCheckInEnabled} onChange={(change) => setGuestCheckInEnabled(change.target.checked)} /><span><strong>Enable External Check-In</strong><small>Officials scan the daily QR, match themselves to today’s imported schedule, review their assignments, and check in without an account.</small></span></label><div className="checkin-message-settings"><label>Check-in confirmation message<textarea value={checkInConfirmationMessage} onChange={(change) => setCheckInConfirmationMessage(change.target.value)} /></label><label>First failed external check-in message<textarea value={firstFailureMessage} onChange={(change) => setFirstFailureMessage(change.target.value)} /></label><label>Second failed external check-in message<textarea value={secondFailureMessage} onChange={(change) => setSecondFailureMessage(change.target.value)} /></label></div>{guestCheckInEnabled && <><fieldset className="external-identity-fields"><legend>Required External Check-In Information</legend>{(["last_name", "first_name", "email", "phone", "ussf_id", "date_of_birth", "other"] as ExternalCheckInField[]).map((field) => <label key={field}><input type="checkbox" checked={externalCheckInFields.includes(field)} onChange={(change) => setExternalCheckInFields((current) => change.target.checked ? [...current, field] : current.filter((item) => item !== field))} />{{ last_name: "Last name", first_name: "First name", email: "Email", phone: "Phone", ussf_id: "USSF ID #", date_of_birth: "Date of birth", other: "Other" }[field]}</label>)}</fieldset>{externalCheckInFields.includes("other") && <label>Other field label<input value={externalOtherLabel} onChange={(change) => setExternalOtherLabel(change.target.value)} /></label>}</>}<div className="check-in-link-settings"><div><strong>Check-in documents and links</strong><button className="secondary" type="button" onClick={() => setCheckInLinks((current) => [...current, { title: "", url: "" }])}>Add Link</button></div>{checkInLinks.map((link, index) => <div key={index}><input aria-label={`Check-in link ${index + 1} title`} placeholder="Rules of Competition" value={link.title} onChange={(change) => setCheckInLinks((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: change.target.value } : item))} /><input aria-label={`Check-in link ${index + 1} URL`} type="url" placeholder="https://…" value={link.url} onChange={(change) => setCheckInLinks((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, url: change.target.value } : item))} /><button className="text-button" type="button" onClick={() => setCheckInLinks((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</button></div>)}</div></section>}<button className="primary event-settings-save" disabled={busy || !name.trim() || !venueName.trim() || !startsOn || !endsOn || endsOn < startsOn || (guestCheckInEnabled && !externalCheckInFields.length)} onClick={() => void saveSettings()}>{busy ? "Saving…" : "Save Event Settings"}</button>
 {entitled("event_documents") && features.event_documents && <><hr /><div><h2>Event documents</h2><p>PDFs are stored privately and available only to authorized event participants and staff.</p></div><div className="event-document-upload"><label>Document type<select value={documentType} onChange={(change) => { const type = change.target.value as EventDocumentRecord["document_type"]; setDocumentType(type); if (type === "rules_of_competition") setTitle("Rules of Competition"); }}><option value="rules_of_competition">Rules of Competition</option><option value="other">Other event document</option></select></label><label>Display title<input value={title} onChange={(change) => setTitle(change.target.value)} /></label><label className="secondary file-button">Choose PDF<input type="file" accept="application/pdf,.pdf" onChange={(change) => setFile(change.target.files?.[0] || null)} /></label><button className="primary" disabled={busy || !file} onClick={() => void upload()}>{busy ? "Saving…" : "Upload Document"}</button></div>{file && <p className="selected-document-file">Selected: {file.name}</p>}<div className="event-document-list">{documents.map((document) => <div key={document.id}><span><strong>{document.document_type === "rules_of_competition" ? "ROC · " : ""}{document.title}</strong><small>{document.file_name}</small></span><EventDocumentLink session={session} document={document} compact /></div>)}</div></>}{message && <p className="pilot-message">{message}</p>}</article></section>;
 }
 
@@ -1355,8 +1386,8 @@ function OfficialsDirectory({
   const [ratingScope, setRatingScope] = useState<"none" | "specific" | "all">("none");
   const [ratingEventIds, setRatingEventIds] = useState<string[]>([]);
   const [protectedEventAdmin, setProtectedEventAdmin] = useState(false);
-  const [official, setOfficial] = useState({ full_name: "", email: "", secondary_email: "", date_of_birth: "", phone: "", badge_level: "", pending_org_roles: ["referee"] as MembershipRole[] });
-  const [editValues, setEditValues] = useState({ full_name: "", email: "", secondary_email: "", date_of_birth: "", phone: "", badge_level: "", pending_org_roles: ["referee"] as MembershipRole[] });
+  const [official, setOfficial] = useState({ full_name: "", email: "", secondary_email: "", date_of_birth: "", phone: "", badge_level: "", ussf_id: "", external_check_in_other: "", pending_org_roles: ["referee"] as MembershipRole[] });
+  const [editValues, setEditValues] = useState({ full_name: "", email: "", secondary_email: "", date_of_birth: "", phone: "", badge_level: "", ussf_id: "", external_check_in_other: "", pending_org_roles: ["referee"] as MembershipRole[] });
   useEffect(() => {
     if (!adding) return;
     setEventRoleSelections(["referee"]);
@@ -1449,7 +1480,7 @@ function OfficialsDirectory({
         ratingsHistoryScope: ratingScope,
         ratingsEventIds: ratingEventIds,
       });
-      setOfficial({ full_name: "", email: "", secondary_email: "", date_of_birth: "", phone: "", badge_level: "", pending_org_roles: ["referee"] });
+      setOfficial({ full_name: "", email: "", secondary_email: "", date_of_birth: "", phone: "", badge_level: "", ussf_id: "", external_check_in_other: "", pending_org_roles: ["referee"] });
       setAdding(false);
       setMessage(`Official added to this group${event ? ` with staged access for ${event.name}` : ""}. No login account or email was created.`);
       onCreated();
@@ -1547,6 +1578,8 @@ function OfficialsDirectory({
       date_of_birth: target.date_of_birth || "",
       phone: target.phone || "",
       badge_level: target.badge_level || "",
+      ussf_id: target.ussf_id || "",
+      external_check_in_other: target.external_check_in_other || "",
       pending_org_roles: target.pending_org_roles?.length ? target.pending_org_roles : [target.pending_org_role || "referee"],
     });
     setMessage("");
@@ -1710,7 +1743,7 @@ function OfficialsDirectory({
       {canManageOrganizationRoles && <label className="show-archived-ratings"><input type="checkbox" checked={showArchivedOfficials} onChange={(event) => setShowArchivedOfficials(event.target.checked)} /> Show Archived</label>}
       <SavedFilterControls filterKey="officials-directory" value={{ scope, query, sortBy, sortDirection, showArchivedOfficials }} onApply={(value) => { setScope(value.scope); setQuery(value.query); setSortBy(value.sortBy); setSortDirection(value.sortDirection); setShowArchivedOfficials(value.showArchivedOfficials); }} />
     </div>
-    {adding && <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) setAdding(false); }}><article className="panel manual-entry-form manual-entry-modal" role="dialog" aria-modal="true" aria-label="Add official"><header><h2>Add an Official</h2><button className="modal-close-button" aria-label="Close" onClick={() => setAdding(false)}>×</button></header><div className="manual-form-grid"><label>Full name<input value={official.full_name} onChange={(e) => setOfficial({ ...official, full_name: e.target.value })} /></label><label>Primary email<input type="email" value={official.email} onChange={(e) => setOfficial({ ...official, email: e.target.value })} /></label><label>Secondary email<input type="email" value={official.secondary_email} onChange={(e) => setOfficial({ ...official, secondary_email: e.target.value })} /></label><label>Date of birth<input type="date" value={official.date_of_birth} onChange={(e) => setOfficial({ ...official, date_of_birth: e.target.value })} /></label><label>Phone<input value={official.phone} onChange={(e) => setOfficial({ ...official, phone: e.target.value })} /></label><label>Badge or level<input value={official.badge_level} onChange={(e) => setOfficial({ ...official, badge_level: e.target.value })} /></label><fieldset className="role-checkboxes" disabled={!canManageOrganizationRoles}><legend>Organization roles</legend>{organizationRoleChoices.filter(canChangeOrganizationRole).map((role) => <label key={role}><input type="checkbox" checked={official.pending_org_roles.includes(role)} onChange={() => setOfficial({ ...official, pending_org_roles: toggleRole(official.pending_org_roles, role) })} />{roleNames[role]}</label>)}</fieldset>{event && <fieldset className="role-checkboxes provisional-event-role-picker"><legend>Event permissions for {event.name}</legend>{eventRoleChoices.map((role) => { const locked = !canChangeEventRole(role); return <label key={role}><input type="checkbox" checked={eventRoleSelections.includes(role)} disabled={locked} onChange={() => !locked && setEventRoleSelections((current) => current.includes(role) ? current.filter((item) => item !== role) : [...current, role])} />{roleNames[role]}{locked && <small className="role-lock">Locked</small>}</label>; })}</fieldset>}</div><button className="primary" disabled={busy || !official.full_name.trim()} onClick={addOfficial}>{busy ? "Adding…" : "Add Official"}</button></article></div>}
+    {adding && <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) setAdding(false); }}><article className="panel manual-entry-form manual-entry-modal" role="dialog" aria-modal="true" aria-label="Add official"><header><h2>Add an Official</h2><button className="modal-close-button" aria-label="Close" onClick={() => setAdding(false)}>×</button></header><div className="manual-form-grid"><label>Full name<input value={official.full_name} onChange={(e) => setOfficial({ ...official, full_name: e.target.value })} /></label><label>Primary email<input type="email" value={official.email} onChange={(e) => setOfficial({ ...official, email: e.target.value })} /></label><label>Secondary email<input type="email" value={official.secondary_email} onChange={(e) => setOfficial({ ...official, secondary_email: e.target.value })} /></label><label>Date of birth<input type="date" value={official.date_of_birth} onChange={(e) => setOfficial({ ...official, date_of_birth: e.target.value })} /></label><label>Phone<input value={official.phone} onChange={(e) => setOfficial({ ...official, phone: e.target.value })} /></label><label>Badge or level<input value={official.badge_level} onChange={(e) => setOfficial({ ...official, badge_level: e.target.value })} /></label><label>USSF ID #<input value={official.ussf_id} onChange={(e) => setOfficial({ ...official, ussf_id: e.target.value })} /></label><label>External check-in identifier<input value={official.external_check_in_other} onChange={(e) => setOfficial({ ...official, external_check_in_other: e.target.value })} /></label><fieldset className="role-checkboxes" disabled={!canManageOrganizationRoles}><legend>Group Roles</legend>{organizationRoleChoices.filter(canChangeOrganizationRole).map((role) => <label key={role}><input type="checkbox" checked={official.pending_org_roles.includes(role)} onChange={() => setOfficial({ ...official, pending_org_roles: toggleRole(official.pending_org_roles, role) })} />{roleNames[role]}</label>)}</fieldset>{event && <fieldset className="role-checkboxes provisional-event-role-picker"><legend>Event permissions for {event.name}</legend>{eventRoleChoices.map((role) => { const locked = !canChangeEventRole(role); return <label key={role}><input type="checkbox" checked={eventRoleSelections.includes(role)} disabled={locked} onChange={() => !locked && setEventRoleSelections((current) => current.includes(role) ? current.filter((item) => item !== role) : [...current, role])} />{roleNames[role]}{locked && <small className="role-lock">Locked</small>}</label>; })}</fieldset>}</div><button className="primary" disabled={busy || !official.full_name.trim()} onClick={addOfficial}>{busy ? "Adding…" : "Add Official"}</button></article></div>}
     {message && <p className="pilot-message">{message}</p>}
     {canManageOrganizationRoles && <div className="bulk-action-bar panel"><label><input type="checkbox" checked={filtered.length > 0 && filtered.filter((item) => item.source !== "site_owner_profile").every((item) => selectedOfficialIds.includes(item.id))} onChange={(event) => setSelectedOfficialIds(event.target.checked ? filtered.filter((item) => item.source !== "site_owner_profile").map((item) => item.id) : [])} /> Select All Visible</label><strong>{selectedOfficialIds.length} selected</strong><button className="secondary" disabled={busy || !selectedOfficialIds.length} onClick={() => bulkOfficials("archive")}>Archive</button>{showArchivedOfficials && <button className="secondary" disabled={busy || !selectedOfficialIds.length} onClick={() => bulkOfficials("restore")}>Restore</button>}<button className="danger-button" disabled={busy || !selectedOfficialIds.length} onClick={() => bulkOfficials("delete")}>Delete Eligible</button></div>}
     <article className="panel directory-list">
@@ -1746,6 +1779,8 @@ function OfficialsDirectory({
           <label>Date of birth<input type="date" value={editValues.date_of_birth} disabled={Boolean(editing.personal_contact_locked)} onChange={(e) => setEditValues({ ...editValues, date_of_birth: e.target.value })} /></label>
           <label>Phone<input value={editValues.phone} disabled={Boolean(editing.personal_contact_locked)} onChange={(e) => setEditValues({ ...editValues, phone: e.target.value })} /></label>
           <label>Badge or level<input value={editValues.badge_level} onChange={(e) => setEditValues({ ...editValues, badge_level: e.target.value })} /></label>
+          <label>USSF ID #<input value={editValues.ussf_id} onChange={(e) => setEditValues({ ...editValues, ussf_id: e.target.value })} /></label>
+          <label>External check-in identifier<input value={editValues.external_check_in_other} onChange={(e) => setEditValues({ ...editValues, external_check_in_other: e.target.value })} /></label>
         </div></section>
         <section className="official-edit-section"><h3>Group Roles</h3><fieldset className={`official-role-grid ${editingIsSiteOwner ? "owner-locked" : ""}`} disabled={editingIsSiteOwner || !canManageOrganizationRoles}>{displayedOrganizationRoles.map((role) => {
           const checked = editingIsSiteOwner || editValues.pending_org_roles.includes(role);
@@ -3429,17 +3464,18 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal official={official} event={event} data={data} canEdit={isAdministrativeStaff} onClose={() => setScheduleOfficialId(null)} onEdit={() => { setScheduleOfficialId(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-<footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.18.1</span></footer>
+<footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.19.0</span></footer>
   </main>;
 }
 
 export default function Home() {
-  const [guestRequest] = useState(() => {
+  const [externalCheckInRequest] = useState(() => {
     if (typeof window === "undefined") return null;
     const parameters = new URLSearchParams(window.location.search);
     const eventSlug = parameters.get("event");
     const eventDate = parameters.get("date");
-    return parameters.get("guest") === "1" && eventSlug && eventDate && /^\d{4}-\d{2}-\d{2}$/.test(eventDate) ? { eventSlug, eventDate } : null;
+    const externalRequested = parameters.get("external") === "1" || parameters.get("guest") === "1";
+    return externalRequested && eventSlug && eventDate && /^\d{4}-\d{2}-\d{2}$/.test(eventDate) ? { eventSlug, eventDate } : null;
   });
   const [session, setSession] = useState<Law18Session | null>(null);
   const [recovery, setRecovery] = useState(false);
@@ -3466,7 +3502,7 @@ export default function Home() {
   useEffect(() => {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
   }, []);
-  if (guestRequest) return <GuestCheckInPage eventSlug={guestRequest.eventSlug} eventDate={guestRequest.eventDate} onExit={() => { window.history.replaceState({}, "", "/"); window.location.reload(); }} />;
+  if (externalCheckInRequest) return <ExternalCheckInPage eventSlug={externalCheckInRequest.eventSlug} eventDate={externalCheckInRequest.eventDate} onExit={() => { window.history.replaceState({}, "", "/"); window.location.reload(); }} />;
   if (loading) return <main className="auth-page"><p className="auth-loading">Loading Dashboard</p></main>;
   if (!session || recovery) return <AuthPanel onSession={handleSession} recovery={recovery} initialMessage={authMessage} />;
   return <Dashboard session={session} onSessionExpired={handleSessionExpired} />;

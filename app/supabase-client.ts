@@ -95,6 +95,8 @@ export type EventRecord = {
   check_in_confirmation_message: string;
   external_check_in_first_failure_message: string;
   external_check_in_second_failure_message: string;
+  external_check_in_arrival_message: string;
+  external_check_in_allow_account_sign_in: boolean;
   check_in_links: Array<{ title: string; url: string }>;
   feature_settings: EventFeatureSettings;
   rating_type: "skills_eval" | "basic_eval";
@@ -221,6 +223,8 @@ export type ExternalCheckInConfig = {
   other_label: string;
   first_failure_message: string;
   second_failure_message: string;
+  arrival_message: string;
+  allow_account_sign_in: boolean;
 };
 
 export type ExternalCheckInLookup = {
@@ -856,7 +860,7 @@ export async function createEvent(
   return rows[0];
 }
 
-export async function updateEventSettings(session: Law18Session, eventId: string, values: { name: string; venue_name: string; starts_on: string; ends_on: string; timezone: string; event_type: "tournament" | "league"; parent_league_id: string | null; feature_settings: EventFeatureSettings; guest_check_in_enabled: boolean; external_check_in_fields: ExternalCheckInField[]; external_check_in_other_label: string; check_in_confirmation_message: string; external_check_in_first_failure_message: string; external_check_in_second_failure_message: string; check_in_links: Array<{ title: string; url: string }> }) {
+export async function updateEventSettings(session: Law18Session, eventId: string, values: { name: string; venue_name: string; starts_on: string; ends_on: string; timezone: string; event_type: "tournament" | "league"; parent_league_id: string | null; feature_settings: EventFeatureSettings; guest_check_in_enabled: boolean; external_check_in_fields: ExternalCheckInField[]; external_check_in_other_label: string; check_in_confirmation_message: string; external_check_in_first_failure_message: string; external_check_in_second_failure_message: string; external_check_in_arrival_message: string; external_check_in_allow_account_sign_in: boolean; check_in_links: Array<{ title: string; url: string }> }) {
   const rows = await rest<EventRecord[]>(session, `events?id=eq.${enc(eventId)}`, { method: "PATCH", body: JSON.stringify({ ...values, parent_league_id: values.event_type === "tournament" ? values.parent_league_id : null, check_in_enabled: values.feature_settings.check_in, guest_check_in_enabled: values.feature_settings.check_in && values.guest_check_in_enabled }) }, "return=representation");
   if (!rows[0]) throw new Error("The event settings could not be saved.");
   return rows[0];

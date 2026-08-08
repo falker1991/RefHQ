@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.19.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.19.1 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,10 +14,10 @@ test("Version 0.19.0 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.19\.0/);
+  assert.match(page, /Version 0\.19\.1/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.19.0");
+  assert.equal(JSON.parse(packageJson).version, "0.19.1");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -59,12 +59,13 @@ test("user-facing groups replace organization terminology and Site Owner control
 });
 
 test("external check-in supports configurable identity, messages, links, and two-stage failures", async () => {
-  const [page, client, css, migration, configurationMigration] = await Promise.all([
+  const [page, client, css, migration, configurationMigration, arrivalMigration] = await Promise.all([
     read("app/page.tsx"),
     read("app/supabase-client.ts"),
     read("app/globals.css"),
     read("supabase/migrations/202608060044_guest_check_in.sql"),
     read("supabase/migrations/202608070047_external_check_in_configuration.sql"),
+    read("supabase/migrations/202608080048_external_check_in_arrival_options.sql"),
   ]);
   assert.match(page, /function ExternalCheckInPage/);
   assert.match(page, /exactly as they appear in your Assignr account/);
@@ -72,6 +73,9 @@ test("external check-in supports configurable identity, messages, links, and two
   assert.match(page, /external=1/);
   assert.match(page, /Enable External Check-In/);
   assert.match(page, /second_failure_message/);
+  assert.match(page, /Show Account Sign-In Option/);
+  assert.match(page, /config\?\.arrival_message/);
+  assert.match(page, /config\?\.allow_account_sign_in/);
   assert.match(client, /findExternalCheckIn/);
   assert.match(client, /confirmExternalCheckIn/);
   assert.match(client, /Authorization: `Bearer \$\{config\.anonKey\}`/);
@@ -87,6 +91,8 @@ test("external check-in supports configurable identity, messages, links, and two
   assert.match(configurationMigration, /find_external_check_in/);
   assert.match(configurationMigration, /external_check_in_second_failure_message/);
   assert.match(configurationMigration, /valid_check_in_links/);
+  assert.match(arrivalMigration, /external_check_in_arrival_message/);
+  assert.match(arrivalMigration, /external_check_in_allow_account_sign_in/);
 });
 
 test("event types and private Rules of Competition documents are available throughout assigned-event views", async () => {

@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.19.1 adds a customizable External Check-In arrival message and lets events hide the account sign-in option. Version 0.19.0 added configurable identity fields, confirmation and failure messages, and check-in document links.
+Version 0.19.2 removes the persistent active group/event bar, places administrative context selectors only on tools that require them, and fixes portrait mobile navigation overlap. Version 0.19.1 added External Check-In arrival and account-login display options.
 
 Bulk lifecycle management remains available for officials, ratings, and events. Games and assignments are designed to join the same workflow when manual schedule editing is introduced.
 

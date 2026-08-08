@@ -3409,6 +3409,8 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     : isCoach
       ? [["dashboard", "Dashboard"], ...(eventFeatureEnabled(event, "check_in") && coachHasCurrentOrFutureAssignment ? [["checkin", "Check-In"] as [View, string]] : []), ["schedule", "Schedule"], ...(eventFeatureEnabled(event, "ratings") ? [["assessments", "Ratings"] as [View, string]] : [])]
       : [["dashboard", "Dashboard"], ["board", "My Assignments"], ["checkin", "Check-In"], ["assessments", "My Evals"]];
+  const contextViews: View[] = ["board", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity"];
+  const showAdministrativeContext = !isPersonalWorkspace && contextViews.includes(view);
 
   if (loading) return <main className="auth-page"><p className="auth-loading">Loading Dashboard</p></main>;
   if (dashboardLoadError) return <main className="auth-page"><section className="auth-card"><p className="eyebrow">CONNECTION ISSUE</p><h1>Unable to Load Law18Ref</h1><p>{dashboardLoadError}</p><p>Your login is still saved.</p><button className="primary" onClick={() => window.location.reload()}>Try Again</button></section></main>;
@@ -3439,12 +3441,9 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       <main className="role-help-content">{activeGroupRoles.map((role) => <section key={role}><h3>{helpByRole[role].title}</h3><ol>{helpByRole[role].items.map((item) => <li key={item}>{item}</li>)}</ol></section>)}{!activeGroupRoles.length && <EmptyState>No active role is assigned in this group.</EmptyState>}</main>
       <footer className="role-help-actions"><button className="primary" onClick={() => setHelpOpen(false)}>Close Help</button></footer>
     </section></div>}
-    {!isPersonalWorkspace && <div className="eventbar">
-      <div>{organization?.logo_url ? <img className="event-organization-logo" src={organization.logo_url} alt={`${organization.name} logo`} /> : <span className="event-mark">{organization?.name[0] || "R"}</span>}{organizations.length > 1 && <label><span>Active Group</span><select value={organization?.id || ""} onChange={(event) => switchOrganization(event.target.value)}>{organizations.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>}<label><span>{isStaff ? "Active Event" : "My Event"}</span><select value={eventId} onChange={(event) => switchEvent(event.target.value)} disabled={!events.length}><option value="">{events.length ? "Select Event" : "No Events Yet"}</option>{events.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label></div>
-      <span>{event ? formatDate(event.starts_on) : "No event imported"}</span>
-    </div>}
-    {isPersonalWorkspace && <div className="personal-header-spacer" aria-hidden="true" />}
+    <div className="personal-header-spacer" aria-hidden="true" />
     <div className="shell">
+      {showAdministrativeContext && <section className="panel workspace-context-bar" aria-label="Administrative workspace context"><div className="workspace-context-heading">{organization?.logo_url ? <img className="event-organization-logo" src={organization.logo_url} alt="" /> : <span className="event-mark">{organization?.name[0] || "R"}</span>}<div><strong>Workspace</strong><small>Select the group and event for this tool.</small></div></div><label><span>Group</span><select value={organization?.id || ""} onChange={(change) => switchOrganization(change.target.value)} disabled={organizations.length < 2}>{organizations.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label><span>Event</span><select value={eventId} onChange={(change) => switchEvent(change.target.value)} disabled={!events.length}><option value="">{events.length ? "Select Event" : "No Events Yet"}</option>{events.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>{event && <span className="workspace-context-date">{formatDate(event.starts_on)}</span>}</section>}
       {organizationActionMessage && <p className="pilot-message organization-message">{organizationActionMessage}</p>}
       {qrCheckInMessage && <p className="pilot-message qr-checkin-message">{qrCheckInMessage}</p>}
       {profile && view === "dashboard" && (isPersonalWorkspace ? <PersonalDashboard session={session} profile={profile} organizations={organizations} onNavigate={setView} /> : <DashboardHome profile={profile} event={event} data={data} events={events} adminView={isAdministrativeStaff} onNavigate={setView} />)}
@@ -3466,7 +3465,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal official={official} event={event} data={data} canEdit={isAdministrativeStaff} onClose={() => setScheduleOfficialId(null)} onEdit={() => { setScheduleOfficialId(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-<footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.19.1</span></footer>
+<footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.19.2</span></footer>
   </main>;
 }
 

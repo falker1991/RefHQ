@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.19.1 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.19.2 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,10 +14,10 @@ test("Version 0.19.1 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.19\.1/);
+  assert.match(page, /Version 0\.19\.2/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.19.1");
+  assert.equal(JSON.parse(packageJson).version, "0.19.2");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -50,7 +50,8 @@ test("user-facing groups replace organization terminology and Site Owner control
   assert.match(page, /organization_admin: "Group Admin"/);
   assert.match(page, /Enabled Group Features/);
   assert.match(page, /Law18Ref Groups/);
-  assert.match(page, /Active Group/);
+  assert.match(page, /workspace-context-bar/);
+  assert.match(page, /<span>Group<\/span>/);
   assert.match(client, /feature_entitlements\?: EventFeatureSettings/);
   assert.match(css, /\.site-owner-feature-settings/);
   assert.match(migration, /Only the Site Owner can change group feature entitlements/);
@@ -118,7 +119,7 @@ test("referees use an account-wide workspace without active organization or even
   const [page, css] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
   assert.match(page, /function PersonalDashboard/);
   assert.match(page, /function PersonalCheckInHub/);
-  assert.match(page, /isPersonalWorkspace && <div className="personal-header-spacer"/);
+  assert.match(page, /<div className="personal-header-spacer" aria-hidden="true"/);
   assert.match(page, /isPersonalWorkspace \? <PersonalDashboard/);
   assert.match(page, /isPersonalWorkspace \? <PersonalCheckInHub/);
   assert.match(page, /You have assignments in more than one event today/);
@@ -130,6 +131,16 @@ test("application header remains visible while scrolling", async () => {
   assert.match(css, /\.topbar\{position:fixed/);
   assert.match(css, /\.eventbar\{margin-top:var\(--fixed-topbar-height\)/);
   assert.match(css, /--fixed-topbar-height:120px/);
+});
+
+test("mobile header and administrative context no longer overlap a persistent event bar", async () => {
+  const [page, css] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
+  assert.doesNotMatch(page, /className="eventbar"/);
+  assert.match(page, /showAdministrativeContext/);
+  assert.match(page, /workspace-context-bar/);
+  assert.match(page, /contextViews\.includes\(view\)/);
+  assert.match(css, /grid-template-rows:58px 50px/);
+  assert.match(css, /--fixed-topbar-height:132px/);
 });
 
 test("personal calendar feeds are encrypted and appear in a unified private schedule", async () => {

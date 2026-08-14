@@ -22,7 +22,7 @@ test("server-renders the Law18Referee Management application shell", async () =>
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>Law18Referee Management — Tournament referee operations<\/title>/i);
+  assert.match(html, /<title>Tournament referee operations<\/title>/i);
   assert.match(html, /Loading Dashboard/);
   assert.doesNotMatch(html, /Your site is taking shape|codex-preview/i);
 });

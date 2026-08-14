@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.21.6 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.21.7 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,10 +14,15 @@ test("Version 0.21.6 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.21\.6/);
+  assert.match(page, /Version 0\.21\.7/);
+  assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
+  assert.match(layout, /const title = "Tournament referee operations"/);
+  assert.match(layout, /const fullTitle = "Law18Referee Management - Tournament referee operations"/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.21.6");
+  assert.match(manifest, /"name": "Law18Referee Management"/);
+  assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
+  assert.equal(JSON.parse(packageJson).version, "0.21.7");
   assert.match(viteConfig, /keep_vars: true/);
 });
 

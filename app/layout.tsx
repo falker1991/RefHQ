@@ -3,13 +3,14 @@ import "./globals.css";
 import "./admin-features.css";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const title = "Law18Referee Management — Tournament referee operations";
+  const title = "Tournament referee operations";
+  const fullTitle = "Law18Referee Management - Tournament referee operations";
   const description = "Referee check-in, coaching, ratings, and tournament operations. Provided by FalkSports.";
   return {
     title,
     description,
-    openGraph: { title, description },
-    twitter: { card: "summary", title, description },
+    openGraph: { title: fullTitle, description },
+    twitter: { card: "summary", title: fullTitle, description },
     manifest: "/manifest.webmanifest",
     icons: {
       icon: [

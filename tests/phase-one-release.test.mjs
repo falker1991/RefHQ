@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.21.8 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.21.9 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.21.8 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.21\.8/);
+  assert.match(page, /Version 0\.21\.9/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.21.8 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.21.8");
+  assert.equal(JSON.parse(packageJson).version, "0.21.9");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -941,10 +941,15 @@ test("account merge migration transfers operational records and audits the merge
 });
 
 test("account merge review supports field-by-field profile resolution", async () => {
-  const page = await read("app/page.tsx");
+  const [page, css] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
   const client = await read("app/supabase-client.ts");
   const migration = await read("supabase/migrations/202608140055_provisional_official_record_merges.sql");
   assert.match(page, /merge-profile-review/);
+  assert.match(page, /className="merge-dialog-actions"/);
+  assert.match(css, /\.confirmation-dialog\.merge-dialog\{display:flex/);
+  assert.match(css, /\.merge-dialog>\.merge-profile-review\{display:grid/);
+  assert.match(css, /max-height:300px/);
+  assert.match(css, /overflow:auto/);
   for (const field of ["full_name", "secondary_email", "date_of_birth", "phone", "badge_level"]) {
     assert.match(page, new RegExp(field));
   }

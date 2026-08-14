@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.21.1 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.21.2 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,10 +14,10 @@ test("Version 0.21.1 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.21\.1/);
+  assert.match(page, /Version 0\.21\.2/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.21.1");
+  assert.equal(JSON.parse(packageJson).version, "0.21.2");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -602,7 +602,7 @@ test("ratings game options are concise and mobile controls stay within the works
 
 test("coach-only schedules exclude operational and HQ locations", async () => {
   const page = await read("app/page.tsx");
-  assert.match(page, /coachView\s*\?\s*data\.games\.filter\(isRateableGame\)/);
+  assert.match(page, /coachView\s*\?\s*data\.games\.filter\(\(game\) => isRateableGame\(game\)/);
   assert.match(page, /toLowerCase\(\)\.includes\("hq"\)/);
   assert.match(page, /coachView=\{isCoach && !isAdministrativeStaff\}/);
 });
@@ -726,8 +726,18 @@ test("Rate Crew buttons and rating choices exclude HQ and operational games", as
   const page = await read("app/page.tsx");
   assert.match(page, /function isRateableGame/);
   assert.match(page, /!game\.operational/);
-  assert.match(page, /canRateCrew && isRateableGame\(game\)/);
+  assert.match(page, /canRateGame\(game\)/);
   assert.match(page, /eligibleGames = data\.games\.filter\(isRateableGame\)/);
+});
+
+test("schedule rating buttons follow game-level and full-event coaching scope", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /myCoachingAssignments/);
+  assert.match(page, /hasFullEventRatingAccess/);
+  assert.match(page, /assignedCoachingGameIds/);
+  assert.match(page, /hasFullEventRatingAccess \|\| assignedCoachingGameIds\.has\(game\.id\)/);
+  assert.match(page, /canRateGame\(game\)/);
+  assert.match(page, /canRateCrew=\{canAssess\}/);
 });
 
 test("all users have active-group role-aware help", async () => {

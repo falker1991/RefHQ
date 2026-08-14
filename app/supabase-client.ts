@@ -47,6 +47,9 @@ export type EventMembership = {
   ratings_history_scope: "none" | "specific" | "all";
   ratings_event_ids: string[];
   assigned_game_ids: string[];
+  assigned_dates: string[];
+  assigned_sites: string[];
+  assignment_editing_override: boolean | null;
 };
 
 export type ProvisionalEventAccess = {
@@ -59,6 +62,9 @@ export type ProvisionalEventAccess = {
   ratings_history_scope: "none" | "specific" | "all";
   ratings_event_ids: string[];
   assigned_game_ids: string[];
+  assigned_dates: string[];
+  assigned_sites: string[];
+  assignment_editing_override: boolean | null;
 };
 
 export type OrganizationRecord = {
@@ -107,6 +113,7 @@ export type EventRecord = {
   archived_at?: string | null;
   archived_by?: string | null;
   archive_reason?: string | null;
+  site_supervisor_assignment_editing_enabled: boolean;
 };
 
 export type EventDocumentRecord = {
@@ -136,6 +143,20 @@ export type GameRecord = {
   gender: string | null;
   game_type: string | null;
   operational: boolean;
+  schedule_changed_at?: string | null;
+  schedule_changed_by?: string | null;
+  schedule_change_summary?: string | null;
+};
+
+export type OfficialEventDayContext = {
+  official: Pick<OfficialRecord, "id" | "full_name" | "email" | "secondary_email" | "phone" | "date_of_birth">;
+  games: Array<{
+    game: GameRecord;
+    selected_position: AssignmentRecord["position"];
+    selected_position_title: string | null;
+    within_management_scope: boolean;
+    crew: Array<{ assignment: AssignmentRecord; official_name: string | null }>;
+  }>;
 };
 
 export type OfficialRecord = {
@@ -861,7 +882,7 @@ export async function createEvent(
   return rows[0];
 }
 
-export async function updateEventSettings(session: Law18Session, eventId: string, values: { name: string; venue_name: string; starts_on: string; ends_on: string; timezone: string; event_type: "tournament" | "league"; parent_league_id: string | null; feature_settings: EventFeatureSettings; guest_check_in_enabled: boolean; external_check_in_fields: ExternalCheckInField[]; external_check_in_other_label: string; check_in_confirmation_message: string; external_check_in_first_failure_message: string; external_check_in_second_failure_message: string; external_check_in_arrival_message: string; external_check_in_allow_account_sign_in: boolean; check_in_links: Array<{ title: string; url: string }> }) {
+export async function updateEventSettings(session: Law18Session, eventId: string, values: { name: string; venue_name: string; starts_on: string; ends_on: string; timezone: string; event_type: "tournament" | "league"; parent_league_id: string | null; feature_settings: EventFeatureSettings; guest_check_in_enabled: boolean; external_check_in_fields: ExternalCheckInField[]; external_check_in_other_label: string; check_in_confirmation_message: string; external_check_in_first_failure_message: string; external_check_in_second_failure_message: string; external_check_in_arrival_message: string; external_check_in_allow_account_sign_in: boolean; check_in_links: Array<{ title: string; url: string }>; site_supervisor_assignment_editing_enabled: boolean }) {
   const rows = await rest<EventRecord[]>(session, `events?id=eq.${enc(eventId)}`, { method: "PATCH", body: JSON.stringify({ ...values, parent_league_id: values.event_type === "tournament" ? values.parent_league_id : null, check_in_enabled: values.feature_settings.check_in, guest_check_in_enabled: values.feature_settings.check_in && values.guest_check_in_enabled }) }, "return=representation");
   if (!rows[0]) throw new Error("The event settings could not be saved.");
   return rows[0];
@@ -1897,6 +1918,31 @@ export async function createGame(
   return rows[0];
 }
 
+export async function replaceGameAssignments(
+  session: Law18Session,
+  gameId: string,
+  assignments: Array<Pick<AssignmentRecord, "official_id" | "position" | "position_title" | "source_position_title">>,
+) {
+  return rest<AssignmentRecord[]>(session, "rpc/replace_game_assignments", {
+    method: "POST",
+    body: JSON.stringify({ game_uuid: gameId, requested_assignments: assignments }),
+  });
+}
+
+export async function confirmGameScheduleChange(session: Law18Session, gameId: string) {
+  return rest<GameRecord>(session, "rpc/confirm_game_schedule_change", {
+    method: "POST",
+    body: JSON.stringify({ game_uuid: gameId }),
+  });
+}
+
+export async function loadOfficialEventDayContext(session: Law18Session, eventId: string, officialId: string, eventDate: string) {
+  return rest<OfficialEventDayContext>(session, "rpc/official_event_day_context", {
+    method: "POST",
+    body: JSON.stringify({ target_event: eventId, target_official: officialId, target_date: eventDate }),
+  });
+}
+
 export async function assignEventRole(
   session: Law18Session,
   eventId: string,
@@ -1939,9 +1985,9 @@ export async function saveProvisionalEventAccess(
   eventId: string,
   officialId: string,
   roles: Exclude<MembershipRole, "site_owner" | "organization_director" | "organization_admin">[],
-  options: { fullScheduleAccess: boolean; coachingToolsEnabled: boolean; ratingsHistoryScope: "none" | "specific" | "all"; ratingsEventIds: string[]; assignedGameIds: string[] },
+  options: { fullScheduleAccess: boolean; coachingToolsEnabled: boolean; ratingsHistoryScope: "none" | "specific" | "all"; ratingsEventIds: string[]; assignedGameIds: string[]; assignedDates?: string[]; assignedSites?: string[]; assignmentEditingOverride?: boolean | null },
 ) {
-  return rest<ProvisionalEventAccess>(session, "rpc/save_provisional_event_access", {
+  return rest<ProvisionalEventAccess>(session, "rpc/save_provisional_event_access_v2", {
     method: "POST",
     body: JSON.stringify({
       official_uuid: officialId,
@@ -1952,6 +1998,9 @@ export async function saveProvisionalEventAccess(
       requested_ratings_scope: options.ratingsHistoryScope,
       requested_ratings_events: options.ratingsEventIds,
       requested_game_ids: options.assignedGameIds,
+      requested_dates: options.assignedDates || [],
+      requested_sites: options.assignedSites || [],
+      requested_assignment_editing_override: options.assignmentEditingOverride ?? null,
     }),
   });
 }
@@ -1967,6 +2016,9 @@ export async function saveUserEventAccess(
     ratingsHistoryScope: "none" | "specific" | "all";
     ratingsEventIds: string[];
     assignedGameIds: string[];
+    assignedDates?: string[];
+    assignedSites?: string[];
+    assignmentEditingOverride?: boolean | null;
     preserveEventAdmin?: boolean;
   },
 ) {
@@ -1994,6 +2046,9 @@ export async function saveUserEventAccess(
         ratings_history_scope: options.ratingsHistoryScope,
         ratings_event_ids: options.ratingsEventIds,
         assigned_game_ids: options.fullScheduleAccess ? [] : options.assignedGameIds,
+        assigned_dates: options.fullScheduleAccess ? [] : options.assignedDates || [],
+        assigned_sites: options.fullScheduleAccess ? [] : options.assignedSites || [],
+        assignment_editing_override: options.assignmentEditingOverride ?? null,
         created_by: session.user.id,
       }))),
     },

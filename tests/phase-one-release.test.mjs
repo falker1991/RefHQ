@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.22.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.23.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.22.0 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.22\.0/);
+  assert.match(page, /Version 0\.23\.0/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.22.0 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.22.0");
+  assert.equal(JSON.parse(packageJson).version, "0.23.0");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -33,6 +33,41 @@ test("provisional coach activation waits for the linked user's public profile", 
   assert.match(migration, /assignment\.coach_official_id = official\.id/);
   assert.match(migration, /security definer/);
   assert.match(migration, /revoke execute on function public\.activate_profile_provisional_coach_assignments\(\)/);
+});
+
+test("v0.23.0 scopes Site Supervisor operations and tracks posted schedule corrections", async () => {
+  const [page, client, styles, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("app/globals.css"),
+    read("supabase/migrations/20260814170247_scoped_site_supervisor_assignment_operations.sql"),
+  ]);
+
+  for (const field of [
+    "site_supervisor_assignment_editing_enabled",
+    "assigned_dates",
+    "assigned_sites",
+    "assignment_editing_override",
+    "schedule_changed_at",
+  ]) assert.match(migration, new RegExp(field));
+  for (const routine of [
+    "site_supervisor_game_in_scope",
+    "replace_game_assignments",
+    "confirm_game_schedule_change",
+    "official_event_day_context",
+  ]) assert.match(migration, new RegExp(routine));
+  assert.match(migration, /notifications_sent/);
+  assert.match(migration, /assignment\.updated/);
+  assert.match(client, /replace_game_assignments/);
+  assert.match(client, /confirm_game_schedule_change/);
+  assert.match(client, /official_event_day_context/);
+  assert.match(page, /Apply All Matching Games/);
+  assert.match(page, /Edit Assignments/);
+  assert.match(page, /Change Confirmed/);
+  assert.match(page, /No notification was sent/);
+  assert.match(page, /Allow Site Supervisors to Edit Assignments by Default/);
+  assert.match(page, /Outside your management scope/);
+  assert.match(styles, /schedule-updated/);
 });
 
 test("beta account and owner confirmations stay inside the site without confirmation email", async () => {
@@ -705,7 +740,7 @@ test("official names open the shared full-event schedule modal", async () => {
   assert.match(page, /className="checkin-official-button"/);
   assert.match(page, /function OfficialEventScheduleModal/);
   assert.match(page, /FULL EVENT SCHEDULE/);
-  assert.match(page, /onSelectOfficial=\{setScheduleOfficialId\}/);
+  assert.match(page, /onSelectOfficial=\{selectScheduleOfficial\}/);
   assert.match(page, /Edit Official/);
   assert.match(css, /\.official-event-schedule-dialog/);
 });
@@ -761,7 +796,7 @@ test("Skills Eval uses position-specific categories and expanded written feedbac
 
 test("administrative roster supports immediate manual check-in and undo", async () => {
   const [page, client] = await Promise.all([read("app/page.tsx"), read("app/supabase-client.ts")]);
-  assert.match(page, /canManageCheckIns=\{isAdministrativeStaff\}/);
+  assert.match(page, /canManageCheckIns=\{isStaff\}/);
   assert.match(page, /toggleManualCheckIn/);
   assert.match(page, /Undo Check-In/);
   assert.match(page, /"Check In"/);

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.23.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.23.1 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.23.0 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.23\.0/);
+  assert.match(page, /Version 0\.23\.1/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.23.0 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.23.0");
+  assert.equal(JSON.parse(packageJson).version, "0.23.1");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -68,6 +68,14 @@ test("v0.23.0 scopes Site Supervisor operations and tracks posted schedule corre
   assert.match(page, /Allow Site Supervisors to Edit Assignments by Default/);
   assert.match(page, /Outside your management scope/);
   assert.match(styles, /schedule-updated/);
+});
+
+test("v0.23.1 retires the secondary email before an official merge claims it", async () => {
+  const migration = await read("supabase/migrations/20260814181120_fix_official_merge_email_collision.sql");
+  assert.match(migration, /before update of merged_into_official_id on public\.officials/);
+  assert.match(migration, /old\.merged_into_official_id is null/);
+  assert.match(migration, /merged\+' \|\| new\.id::text \|\| '@invalid\.law18ref\.local'/);
+  assert.match(migration, /revoke all on function public\.retire_merged_official_email\(\) from public, anon, authenticated/);
 });
 
 test("beta account and owner confirmations stay inside the site without confirmation email", async () => {

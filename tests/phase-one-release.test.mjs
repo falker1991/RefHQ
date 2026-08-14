@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.21.7 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.21.8 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.21.7 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.21\.7/);
+  assert.match(page, /Version 0\.21\.8/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.21.7 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.21.7");
+  assert.equal(JSON.parse(packageJson).version, "0.21.8");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -571,6 +571,18 @@ test("coaches can be assigned in bulk or from the filtered full schedule", async
   assert.match(page, /Assign Coaches by Game/);
   assert.match(page, /coach-schedule-filters/);
   assert.match(page, /Promise\.all\(newTargets/);
+});
+
+test("filtered coaching schedules support checkbox selection and one-action bulk assignment", async () => {
+  const [page, css] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
+  assert.match(page, /Select All Filtered Games/);
+  assert.match(page, /Clear Filtered Games/);
+  assert.match(page, /className="coach-game-checkbox"/);
+  assert.match(page, /assignCoachToSelectedGames/);
+  assert.match(page, /selectedGameIds\.filter\(\(target\) => !assignmentExists/);
+  assert.match(page, /existing assignment.*skipped/);
+  assert.match(css, /\.coach-bulk-selection-bar/);
+  assert.match(css, /\.coach-schedule-row\.selected/);
 });
 
 test("provisional referee coaches can be assigned before account creation", async () => {

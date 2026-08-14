@@ -2578,6 +2578,9 @@ function CoachWorkspace({
     && (!scheduleFieldsFilter.length || scheduleFieldsFilter.includes(game.field_name))
     && (!scheduleTimesFilter.length || scheduleTimesFilter.includes(formatTime(game.starts_at)))
     && `${game.home_team} ${game.away_team} ${game.division || ""} ${game.field_name}`.toLowerCase().includes(scheduleQuery.toLowerCase()));
+  const filteredScheduleGameIds = filteredScheduleGames.map((game) => game.id);
+  const allFilteredGamesSelected = filteredScheduleGameIds.length > 0
+    && filteredScheduleGameIds.every((gameId) => selectedGameIds.includes(gameId));
   function assignmentExists(targetCoachId: string, targetGameId: string | null) {
     const coach = officialById.get(targetCoachId);
     return data.coachAssignments.some((assignment) => (assignment.coach_official_id === targetCoachId || assignment.coach_id === coach?.linked_user_id)
@@ -2601,6 +2604,30 @@ function CoachWorkspace({
     } finally {
       setBusy(false);
     }
+  }
+  async function assignCoachToSelectedGames() {
+    const coach = coachCandidates.find((official) => official.id === coachId);
+    if (!coach || !selectedGameIds.length) return;
+    setBusy(true);
+    try {
+      const newTargets = selectedGameIds.filter((target) => !assignmentExists(coachId, target));
+      await Promise.all(newTargets.map((target) => createCoachAssignment(session, event.id, coach, target)));
+      const skipped = selectedGameIds.length - newTargets.length;
+      setMessage(newTargets.length
+        ? `${coach.full_name} was assigned to ${newTargets.length} selected game${newTargets.length === 1 ? "" : "s"}.${skipped ? ` ${skipped} existing assignment${skipped === 1 ? " was" : "s were"} skipped.` : ""}`
+        : `${coach.full_name} is already assigned to all selected games.`);
+      setSelectedGameIds([]);
+      onSaved();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to assign the coach to the selected games.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  function toggleFilteredGames() {
+    setSelectedGameIds((current) => allFilteredGamesSelected
+      ? current.filter((gameId) => !filteredScheduleGameIds.includes(gameId))
+      : [...new Set([...current, ...filteredScheduleGameIds])]);
   }
   async function assignScheduleGame(gameId: string) {
     const selectedCoachId = gameCoachSelections[gameId];
@@ -2636,9 +2663,10 @@ function CoachWorkspace({
     {canManage && <article className="panel coach-schedule-manager">
       <div className="panel-head"><div><p className="eyebrow">FULL SCHEDULE</p><h2>Assign Coaches by Game</h2><p>Filter the event schedule, then choose a coach for any game.</p></div></div>
       <div className="coach-schedule-filters"><AssignmentFilterMenu label="Day" options={scheduleDates.map((date) => ({ id: date, name: formatDate(date) }))} selected={scheduleDatesFilter} onChange={setScheduleDatesFilter} /><AssignmentFilterMenu label="Field" options={scheduleFields.map((field) => ({ id: field, name: field }))} selected={scheduleFieldsFilter} onChange={setScheduleFieldsFilter} /><AssignmentFilterMenu label="Time" options={scheduleTimes.map((time) => ({ id: time, name: time }))} selected={scheduleTimesFilter} onChange={setScheduleTimesFilter} /><label>Teams, age group, or division<input type="search" value={scheduleQuery} onChange={(event) => setScheduleQuery(event.target.value)} placeholder="Search schedule…" /></label><SavedFilterControls filterKey={`coaching:${event.id}`} value={{ scheduleDatesFilter, scheduleFieldsFilter, scheduleTimesFilter, scheduleQuery }} onApply={(saved) => { setScheduleDatesFilter(saved.scheduleDatesFilter); setScheduleFieldsFilter(saved.scheduleFieldsFilter); setScheduleTimesFilter(saved.scheduleTimesFilter); setScheduleQuery(saved.scheduleQuery); }} /></div>
+      <div className="coach-bulk-selection-bar"><label><input type="checkbox" checked={allFilteredGamesSelected} disabled={!filteredScheduleGames.length} onChange={toggleFilteredGames} /><span>{allFilteredGamesSelected ? "Clear Filtered Games" : `Select All Filtered Games (${filteredScheduleGames.length})`}</span></label><strong>{selectedGameIds.length} game{selectedGameIds.length === 1 ? "" : "s"} selected</strong><select aria-label="Coach for selected games" value={coachId} onChange={(event) => setCoachId(event.target.value)}><option value="">Choose coach</option>{linkedOfficials.map((official) => <option value={official.linked_user_id!} key={official.id}>{official.full_name}</option>)}</select><button className="primary" disabled={busy || !coachId || !selectedGameIds.length} onClick={assignCoachToSelectedGames}>{busy ? "Saving…" : `Assign Coach to ${selectedGameIds.length || "Selected"} Game${selectedGameIds.length === 1 ? "" : "s"}`}</button></div>
       <div className="coach-schedule-list">{filteredScheduleGames.map((game) => {
         const assigned = data.coachAssignments.filter((assignment) => assignment.game_id === game.id).map((assignment) => assignmentCoach(assignment)?.full_name).filter(Boolean);
-        return <div className="coach-schedule-row" key={game.id}><time><strong>{formatTime(game.starts_at)}</strong><small>{formatDate(game.starts_at)}</small></time><div><strong>{game.home_team} vs. {game.away_team}</strong><small>{game.field_name}{game.division ? ` · ${game.division}` : ""}</small><span>{assigned.length ? `Assigned: ${assigned.join(", ")}` : "No coach assigned"}</span></div><select aria-label={`Coach for ${game.home_team} versus ${game.away_team}`} value={gameCoachSelections[game.id] || ""} onChange={(event) => setGameCoachSelections((current) => ({ ...current, [game.id]: event.target.value }))}><option value="">Choose coach</option>{linkedOfficials.map((official) => <option value={official.linked_user_id!} key={official.id}>{official.full_name}</option>)}</select><button className="secondary" disabled={busy || !gameCoachSelections[game.id]} onClick={() => assignScheduleGame(game.id)}>Assign</button></div>;
+        return <div className={`coach-schedule-row${selectedGameIds.includes(game.id) ? " selected" : ""}`} key={game.id}><input className="coach-game-checkbox" type="checkbox" aria-label={`Select ${game.home_team} versus ${game.away_team}`} checked={selectedGameIds.includes(game.id)} onChange={(event) => setSelectedGameIds((current) => event.target.checked ? [...new Set([...current, game.id])] : current.filter((id) => id !== game.id))} /><time><strong>{formatTime(game.starts_at)}</strong><small>{formatDate(game.starts_at)}</small></time><div><strong>{game.home_team} vs. {game.away_team}</strong><small>{game.field_name}{game.division ? ` · ${game.division}` : ""}</small><span>{assigned.length ? `Assigned: ${assigned.join(", ")}` : "No coach assigned"}</span></div><select aria-label={`Coach for ${game.home_team} versus ${game.away_team}`} value={gameCoachSelections[game.id] || ""} onChange={(event) => setGameCoachSelections((current) => ({ ...current, [game.id]: event.target.value }))}><option value="">Choose coach</option>{linkedOfficials.map((official) => <option value={official.linked_user_id!} key={official.id}>{official.full_name}</option>)}</select><button className="secondary" disabled={busy || !gameCoachSelections[game.id]} onClick={() => assignScheduleGame(game.id)}>Assign</button></div>;
       })}{!filteredScheduleGames.length && <EmptyState>No games match these schedule filters.</EmptyState>}</div>
     </article>}
     <div className="coach-assignment-list">{visibleAssignments.map((assignment) => {
@@ -3554,7 +3582,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal official={official} event={event} data={data} canEdit={isAdministrativeStaff} onClose={() => setScheduleOfficialId(null)} onEdit={() => { setScheduleOfficialId(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.21.7</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.21.8</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.20.1 fixes event creation through the Data API by allowing authorized creators to read the new event returned by the same insert request. Version 0.20.0 adds a round-trip officials directory export/import workflow so group managers can fill in missing email addresses and other details on provisional officials without creating duplicates.
+Version 0.21.1 restores rating configuration and submission support, keeps rating history inside its owning group, and gives the Site Owner full coach-assignment access. Version 0.21.0 allows provisional officials with Referee Coach permission to receive full-event or game-level coaching assignments before creating an account; those assignments activate automatically when the account is linked.
 
 Bulk lifecycle management remains available for officials, ratings, and events. Games and assignments are designed to join the same workflow when manual schedule editing is introduced.
 

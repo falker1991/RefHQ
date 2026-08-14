@@ -254,6 +254,7 @@ export type CoachAssignmentRecord = {
   event_id: string;
   game_id: string | null;
   coach_id: string;
+  coach_official_id?: string | null;
   official_id: string | null;
   scope_date: string | null;
   venue_name: string | null;
@@ -929,19 +930,23 @@ export async function openEventDocument(session: Law18Session, document: EventDo
 }
 
 export async function loadEventData(session: Law18Session, eventId: string) {
-  const [games, coachAssignments, eventMembers, eventRows, documents] = await Promise.all([
+  const [games, coachAssignments, eventMembers, eventRows, documents, provisionalAccess] = await Promise.all([
     rest<GameRecord[]>(session, `games?event_id=eq.${enc(eventId)}&select=*&order=starts_at.asc`),
     rest<CoachAssignmentRecord[]>(session, `coach_assignments?event_id=eq.${enc(eventId)}&select=*`),
     rest<{ user_id: string }[]>(session, `event_memberships?event_id=eq.${enc(eventId)}&select=user_id`),
     rest<{ organization_id: string }[]>(session, `events?id=eq.${enc(eventId)}&select=organization_id`),
     loadEventDocuments(session, eventId),
+    rest<ProvisionalEventAccess[]>(session, `provisional_event_access?event_id=eq.${enc(eventId)}&select=*`),
   ]);
   const eventOrganizationId = eventRows[0]?.organization_id;
   const gameIds = games.map((game) => game.id).join(",");
   const assignments = gameIds
     ? await rest<AssignmentRecord[]>(session, `assignments?game_id=in.(${gameIds})&select=*`)
     : [];
-  const officialIds = [...new Set(assignments.map((assignment) => assignment.official_id).filter(Boolean))];
+  const officialIds = [...new Set([
+    ...assignments.map((assignment) => assignment.official_id),
+    ...coachAssignments.map((assignment) => assignment.coach_official_id),
+  ].filter((value): value is string => Boolean(value)))];
   const eventUserIds = [...new Set([
     ...eventMembers.map((membership) => membership.user_id),
     ...coachAssignments.map((assignment) => assignment.coach_id),
@@ -962,13 +967,13 @@ export async function loadEventData(session: Law18Session, eventId: string) {
   const assessments = gameIds
     ? await rest<AssessmentRecord[]>(session, `assessments?game_id=in.(${gameIds})&select=*`)
     : [];
-  return { games, assignments, officials, checkIns, assessments, coachAssignments, documents };
+  return { games, assignments, officials, checkIns, assessments, coachAssignments, documents, provisionalAccess };
 }
 
 export async function createCoachAssignment(
   session: Law18Session,
   eventId: string,
-  coachId: string,
+  coach: Pick<OfficialRecord, "id" | "linked_user_id">,
   gameId: string | null,
 ) {
   const rows = await rest<CoachAssignmentRecord[]>(session, "coach_assignments", {
@@ -976,7 +981,8 @@ export async function createCoachAssignment(
     body: JSON.stringify({
       event_id: eventId,
       game_id: gameId,
-      coach_id: coachId,
+      coach_id: coach.linked_user_id || null,
+      coach_official_id: coach.linked_user_id ? null : coach.id,
       full_schedule: !gameId,
     }),
   }, "return=representation");
@@ -994,10 +1000,10 @@ export async function loadEventCheckIns(session: Law18Session, eventId: string) 
   );
 }
 
-export async function loadAuthorizedRatingHistory(session: Law18Session): Promise<RatingHistory> {
+export async function loadAuthorizedRatingHistory(session: Law18Session, organizationId: string): Promise<RatingHistory> {
   return rest<RatingHistory>(session, "rpc/authorized_rating_history", {
     method: "POST",
-    body: "{}",
+    body: JSON.stringify({ target_organization: organizationId }),
   });
 }
 

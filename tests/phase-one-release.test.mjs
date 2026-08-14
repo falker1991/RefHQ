@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.20.1 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.21.1 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,10 +14,10 @@ test("Version 0.20.1 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.20\.1/);
+  assert.match(page, /Version 0\.21\.1/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.20.1");
+  assert.equal(JSON.parse(packageJson).version, "0.21.1");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -385,7 +385,7 @@ test("event members and assigned referee coaches load into officials and check-i
   assert.ok(client.includes("officials?organization_id=eq.${enc(eventOrganizationId)}&linked_user_id=in.(${eventUserIds.join(\",\")})"));
   assert.match(client, /new Map\(\[\.\.\.assignedOfficials, \.\.\.linkedEventOfficials\]/);
   assert.match(page, /const eventOfficialIds = new Set\(data\.officials\.map/);
-  assert.match(page, /data\.officials\.find\(\(official\) => official\.linked_user_id === assignment\.coach_id\)/);
+  assert.match(page, /official\.id === assignment\.coach_official_id \|\| official\.linked_user_id === assignment\.coach_id/);
 });
 
 test("page refresh restores the current view and active event", async () => {
@@ -517,6 +517,37 @@ test("coaches can be assigned in bulk or from the filtered full schedule", async
   assert.match(page, /Assign Coaches by Game/);
   assert.match(page, /coach-schedule-filters/);
   assert.match(page, /Promise\.all\(newTargets/);
+});
+
+test("provisional referee coaches can be assigned before account creation", async () => {
+  const [page, client, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/202608140050_provisional_referee_coach_assignments.sql"),
+  ]);
+  assert.match(client, /coach_official_id/);
+  assert.match(client, /provisional_event_access\?event_id/);
+  assert.match(page, /official\.id === assignment\.coach_official_id/);
+  assert.match(page, /Provisional/);
+  assert.match(migration, /coach_assignments_one_coach_identity/);
+  assert.match(migration, /activate_provisional_coach_assignments/);
+  assert.match(migration, /Give this provisional official Referee Coach permission/);
+});
+
+test("ratings remain group-scoped and the Site Owner can coach and submit ratings", async () => {
+  const [page, client, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/202608140051_group_scoped_ratings_and_owner_coaching.sql"),
+  ]);
+  assert.match(client, /loadAuthorizedRatingHistory\(session: Law18Session, organizationId: string\)/);
+  assert.match(client, /target_organization: organizationId/);
+  assert.match(page, /ownerCoachRecord/);
+  assert.match(page, /profile\.is_site_owner && official\.linked_user_id === profile\.id/);
+  assert.match(migration, /event\.organization_id = target_organization/);
+  assert.match(migration, /assessment\.organization_id = target_organization/);
+  assert.match(migration, /public\.is_site_owner\(\)/);
+  assert.match(migration, /enforce_assessment_group_ownership/);
 });
 
 test("top bar has an accessible page refresh button beside the account menu", async () => {

@@ -3115,13 +3115,14 @@ function SiteGroupsAdmin({ session, ownerEmail, onOpen, onUpdated }: { session: 
     try {
       const refreshed = await auth.verifyPassword(ownerEmail, password);
       const challengeId = await beginOrganizationAction(refreshed, pending.organization.id, pending.action);
-      await auth.sendOrganizationVerification(ownerEmail, challengeId);
+      const result = await completeOrganizationAction(refreshed, challengeId);
       setPending(null);
       setPassword("");
       setConfirmName("");
-      setMessage(`Verification email sent to ${ownerEmail}. Open its link within 15 minutes to ${pending.action} ${pending.organization.name}.`);
+      await refreshOrganizations();
+      setMessage(result);
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "Unable to start email verification.");
+      setMessage(reason instanceof Error ? reason.message : "Unable to complete the action.");
     } finally {
       setBusy(false);
     }
@@ -3173,8 +3174,8 @@ function SiteGroupsAdmin({ session, ownerEmail, onOpen, onUpdated }: { session: 
           : "Members will lose access and event operations will stop. All data remains stored and the group can be reactivated."}</p>
         {pending.action === "delete" && <label>Type the group name<input value={confirmName} onChange={(event) => setConfirmName(event.target.value)} /></label>}
         <label>Confirm your password<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-        <p className="verification-note">After password confirmation, Law18Ref will email you a one-time verification link. The action occurs only when you open that link.</p>
-        <div><button className="secondary" disabled={busy} onClick={() => { setPending(null); setPassword(""); setConfirmName(""); }}>Cancel</button><button className="danger-button" disabled={busy || !password} onClick={requestVerification}>{busy ? "Verifying…" : "Email verification link"}</button></div>
+        <p className="verification-note">Your password confirms this action directly during the beta phase.</p>
+        <div><button className="secondary" disabled={busy} onClick={() => { setPending(null); setPassword(""); setConfirmName(""); }}>Cancel</button><button className="danger-button" disabled={busy || !password} onClick={requestVerification}>{busy ? "Verifying…" : pending.action === "delete" ? "Permanently Delete" : "Deactivate Group"}</button></div>
       </section>
     </div>}
     {editing && <div className="confirmation-backdrop" role="presentation"><section className="confirmation-dialog organization-settings-dialog" role="dialog" aria-modal="true"><p className="eyebrow">GROUP SETTINGS</p><h2>{editing.name}</h2><label>Group name<input value={editingName} maxLength={120} onChange={(event) => setEditingName(event.target.value)} /></label><OrganizationLogoEditor session={session} organizationId={editing.id} logoUrl={editingLogoUrl} onChange={setEditingLogoUrl} onBusyChange={setBusy} onError={setMessage} /><fieldset className="site-owner-feature-settings"><legend>Enabled Group Features</legend><p>These switches are the maximum features this group can use. Disabled features cannot be enabled by Group or Event Admins.</p>{(Object.keys(eventFeatureLabels) as EventFeatureKey[]).map((feature) => <label className={editingFeatures[feature] ? "selected" : ""} key={feature}><input type="checkbox" checked={editingFeatures[feature]} onChange={(change) => setEditingFeatures((current) => ({ ...current, [feature]: change.target.checked }))} /><span><strong>{eventFeatureLabels[feature].title}</strong><small>{eventFeatureLabels[feature].description}</small></span></label>)}</fieldset><p className="verification-note">The logo appears in the active-group bar. The internal group address remains unchanged so imports and existing links continue working.</p><div><button className="secondary" onClick={() => setEditing(null)}>Cancel</button><button className="primary" disabled={busy || editingName.trim().length < 2} onClick={saveOrganizationSettings}>{busy ? "Saving…" : "Save Settings"}</button></div></section></div>}
@@ -3366,20 +3367,6 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
   }, [session.user.id, onSessionExpired]);
 
   useEffect(() => {
-    const challengeId = new URLSearchParams(window.location.search).get("organization_action");
-    if (!challengeId) return;
-    completeOrganizationAction(session, challengeId).then((result) => {
-      setOrganizationActionMessage(result);
-      setView("groups");
-      history.replaceState(null, "", window.location.pathname);
-    }).catch((reason) => {
-      setOrganizationActionMessage(reason instanceof Error ? reason.message : "Unable to complete the organization action.");
-      setView("groups");
-      history.replaceState(null, "", window.location.pathname);
-    });
-  }, [session]);
-
-  useEffect(() => {
     loadAppearanceCampaigns(session).then((campaigns) => {
       const now = Date.now();
       const active = campaigns.find((campaign) => campaign.active && new Date(campaign.starts_at).getTime() <= now && new Date(campaign.ends_at).getTime() > now);
@@ -3511,7 +3498,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
   const showAdministrativeContext = !isPersonalWorkspace && contextViews.includes(view);
 
   if (loading) return <main className="auth-page"><p className="auth-loading">Loading Dashboard</p></main>;
-  if (dashboardLoadError) return <main className="auth-page"><section className="auth-card"><p className="eyebrow">CONNECTION ISSUE</p><h1>Unable to Load Law18Ref</h1><p>{dashboardLoadError}</p><p>Your login is still saved.</p><button className="primary" onClick={() => window.location.reload()}>Try Again</button></section></main>;
+  if (dashboardLoadError) return <main className="auth-page"><section className="auth-card"><h1>Reload Law18Ref</h1><p>Please reload the page to continue.</p><button className="primary wide" onClick={() => window.location.reload()}>Reload Page</button></section></main>;
   return <main>
     <header className="topbar">
       <button className="brand" aria-label="Law18Referee Management dashboard" onClick={() => setView("dashboard")}><Mark /></button>
@@ -3563,7 +3550,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal official={official} event={event} data={data} canEdit={isAdministrativeStaff} onClose={() => setScheduleOfficialId(null)} onEdit={() => { setScheduleOfficialId(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.21.3</span></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.21.5</span></footer>
   </main>;
 }
 
@@ -3580,14 +3567,16 @@ export default function Home() {
   const [recovery, setRecovery] = useState(false);
   const [loading, setLoading] = useState(true);
   const [authMessage, setAuthMessage] = useState("");
+  const [reloadRequired, setReloadRequired] = useState(false);
   const handleSession = useCallback((nextSession: Law18Session) => {
     setRecovery(false);
     setAuthMessage("");
     setSession(nextSession);
   }, []);
   const handleSessionExpired = useCallback(() => {
-    setAuthMessage("Log back in, session expired.");
     auth.signOut();
+    setAuthMessage("");
+    setReloadRequired(true);
   }, []);
   useEffect(() => {
     const initial = auth.initialize();
@@ -3603,6 +3592,7 @@ export default function Home() {
   }, []);
   if (externalCheckInRequest) return <ExternalCheckInPage eventSlug={externalCheckInRequest.eventSlug} eventDate={externalCheckInRequest.eventDate} onExit={() => { window.history.replaceState({}, "", "/"); window.location.reload(); }} />;
   if (loading) return <main className="auth-page"><p className="auth-loading">Loading Dashboard</p></main>;
+  if (reloadRequired) return <main className="auth-page"><section className="auth-card"><h1>Reload Law18Ref</h1><p>Please reload the page to continue.</p><button className="primary wide" onClick={() => window.location.reload()}>Reload Page</button></section></main>;
   if (!session || recovery) return <AuthPanel onSession={handleSession} recovery={recovery} initialMessage={authMessage} />;
   return <Dashboard session={session} onSessionExpired={handleSessionExpired} />;
 }

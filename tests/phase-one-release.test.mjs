@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.21.3 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.21.5 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,11 +14,40 @@ test("Version 0.21.3 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.21\.3/);
+  assert.match(page, /Version 0\.21\.5/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.21.3");
+  assert.equal(JSON.parse(packageJson).version, "0.21.5");
   assert.match(viteConfig, /keep_vars: true/);
+});
+
+test("provisional coach activation waits for the linked user's public profile", async () => {
+  const migration = await read("supabase/migrations/202608140053_provisional_coach_profile_activation.sql");
+  assert.match(migration, /exists \(\s*select 1 from public\.profiles where id = new\.linked_user_id/);
+  assert.match(migration, /after insert on public\.profiles/);
+  assert.match(migration, /assignment\.coach_official_id = official\.id/);
+  assert.match(migration, /security definer/);
+  assert.match(migration, /revoke execute on function public\.activate_profile_provisional_coach_assignments\(\)/);
+});
+
+test("beta account and owner confirmations stay inside the site without confirmation email", async () => {
+  const [page, authClient, authPanel, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/auth-client.ts"),
+    read("app/auth-panel.tsx"),
+    read("supabase/migrations/202608140054_beta_password_confirmed_group_actions.sql"),
+  ]);
+  assert.doesNotMatch(authClient, /sendOrganizationVerification/);
+  assert.doesNotMatch(authClient, /email_redirect_to/);
+  assert.doesNotMatch(authPanel, /Check your email to confirm your account/);
+  assert.match(page, /Your password confirms this action directly during the beta phase/);
+  assert.match(page, /Reload Law18Ref/);
+  assert.match(page, /Please reload the page to continue/);
+  assert.match(page, />Reload Page</);
+  assert.doesNotMatch(page, /Log back in, session expired/);
+  assert.doesNotMatch(page, /Unable to Load Law18Ref/);
+  assert.match(migration, /jwt_has_recent_method\('password', interval '5 minutes'\)/);
+  assert.doesNotMatch(migration, /jwt_has_recent_method\('otp'/);
 });
 
 test("event settings respect organization feature ceilings and enforce disabled modules", async () => {
@@ -286,7 +315,7 @@ test("administrative operations show rating averages and richer attendance conte
   assert.match(css, /\.official-directory-actions/);
 });
 
-test("sessions refresh automatically and non-auth failures preserve login", async () => {
+test("sessions refresh automatically and failures use the neutral reload screen", async () => {
   const [authClient, dataClient, page] = await Promise.all([
     read("app/auth-client.ts"),
     read("app/supabase-client.ts"),
@@ -300,7 +329,7 @@ test("sessions refresh automatically and non-auth failures preserve login", asyn
   assert.match(dataClient, /if \(response\.status === 401\)/);
   assert.match(dataClient, /ensureValidSession\(activeSession, true\)/);
   assert.match(page, /if \(isSessionExpiredError\(reason\)\) onSessionExpired\(\)/);
-  assert.match(page, /Your login is still saved\./);
+  assert.match(page, /Please reload the page to continue\./);
 });
 
 test("public ratings support approval, unread referee badges, and retained deletion", async () => {
@@ -463,10 +492,12 @@ test("responsive shell and header remain contained within the viewport", async (
   assert.match(css, /\.eventbar>div\{display:grid;width:100%;grid-template-columns:35px repeat\(2,minmax\(0,1fr\)\)/);
 });
 
-test("only an expired auth session returns to login", async () => {
+test("expired authentication uses the neutral reload screen before returning to login", async () => {
   const [page, authPanel] = await Promise.all([read("app/page.tsx"), read("app/auth-panel.tsx")]);
   assert.doesNotMatch(page, /Setup needed/);
-  assert.match(page, /Log back in, session expired\./);
+  assert.doesNotMatch(page, /Log back in, session expired\./);
+  assert.match(page, /setReloadRequired\(true\)/);
+  assert.match(page, /Reload Page/);
   assert.match(page, /isSessionExpiredError\(reason\)/);
   assert.match(page, /dashboardLoadError/);
   assert.match(authPanel, /initialMessage/);
@@ -956,7 +987,7 @@ test("Join Group tokens survive account creation and are claimed after authentic
   ]);
   assert.match(authPanel, /law18ref-join-token/);
   assert.match(authPanel, /JOIN GROUP INVITATION/);
-  assert.match(authClient, /email_redirect_to: redirectTo/);
+  assert.doesNotMatch(authClient, /email_redirect_to/);
   assert.match(page, /claimOrganizationJoinLink\(session, joinToken\)/);
   assert.match(migration, /create or replace function public\.claim_organization_join_link/);
   assert.match(migration, /membership\.joined_via_link/);

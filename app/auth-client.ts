@@ -206,21 +206,13 @@ export const auth = {
     save(session);
     return session;
   },
-  async sendOrganizationVerification(email: string, challengeId: string) {
-    const redirect = `${window.location.origin}/?organization_action=${encodeURIComponent(challengeId)}`;
-    await request(`/otp?redirect_to=${encodeURIComponent(redirect)}`, {
-      method: "POST",
-      body: JSON.stringify({ email, create_user: false }),
-    });
-  },
-  async signUp(email: string, password: string, fullName: string, redirectTo = window.location.origin) {
+  async signUp(email: string, password: string, fullName: string) {
     return request("/signup", {
       method: "POST",
       body: JSON.stringify({
         email,
         password,
         data: { full_name: fullName },
-        email_redirect_to: redirectTo,
       }),
     }) as Promise<Law18Session>;
   },

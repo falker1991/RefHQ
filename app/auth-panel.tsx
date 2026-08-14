@@ -83,12 +83,9 @@ export function AuthPanel({ onSession, recovery = false, initialMessage = "" }: 
     setBusy(true);
     setMessage("");
     try {
-      const redirect = joinToken
-        ? `${window.location.origin}/?join=${encodeURIComponent(joinToken)}`
-        : window.location.origin;
-      const result = await auth.signUp(email, password, fullName, redirect);
+      const result = await auth.signUp(email, password, fullName);
       if (result.access_token) onSession(result);
-      else setMessage("Check your email to confirm your account, then sign in.");
+      else setMessage("Your account was created. Sign in to continue.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to create the account.");
     } finally {

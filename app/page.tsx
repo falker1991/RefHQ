@@ -13,6 +13,7 @@ import {
   confirmExternalCheckIn,
   claimOrganizationJoinLink,
   createCoachAssignment,
+  createOfficialsExportCsv,
   createOrganizationJoinLink,
   beginOrganizationAction,
   completeOrganizationAction,
@@ -53,6 +54,7 @@ import {
   loadMemberships,
   loadUserEventMemberships,
   logRatingExport,
+  logOfficialsExport,
   mergeOrganizationAccounts,
   markEventRatingsSeen,
   parseAssignrCsv,
@@ -1517,6 +1519,47 @@ function OfficialsDirectory({
       setBusy(false);
     }
   }
+  async function exportOfficials() {
+    const exportableOfficials = officials.filter((item) => !item.merged_into_official_id && !item.archived_at && item.identity_status !== "removed");
+    setBusy(true);
+    setMessage("");
+    try {
+      await logOfficialsExport(session, organizationId, exportableOfficials.length);
+      const csv = createOfficialsExportCsv(exportableOfficials);
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `law18ref-officials-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setMessage(`${exportableOfficials.length} officials exported. Keep the Law18Ref Official ID column unchanged when importing the file back.`);
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to export officials.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function importOfficialDetails(file: File | undefined) {
+    if (!file) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const rows = parseAssignrOfficialsCsv(await file.text());
+      if (!rows.some((row) => row.law18ref_official_id)) {
+        throw new Error("Use an officials file exported from Law18Ref to update existing records here.");
+      }
+      const result = await importOfficials(session, profile, organizationId, file.name, rows);
+      const warning = result.conflicts.length ? ` ${result.conflicts.length} rows need review.` : "";
+      setMessage(`${result.updated} officials updated.${warning}`);
+      onCreated();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to import official details.");
+    } finally {
+      setBusy(false);
+    }
+  }
   async function saveEventRole() {
     if (!managing?.linked_user_id || !event) return;
     setBusy(true);
@@ -1736,7 +1779,13 @@ function OfficialsDirectory({
     : organizationRoleChoices;
   return <section className="page-section">
     <div className="section-title"><div><p className="eyebrow">OFFICIALS</p><h1>Referee Directory</h1><p>Group officials and the active event roster.</p></div></div>
-    <div className="official-directory-actions">{canManageOrganizationRoles && <button className="primary" disabled={busy} onClick={copyJoinLink}>{busy ? "Preparing…" : "Copy Join Link"}</button>}<button className="secondary" onClick={() => setAdding(true)}>Add Official</button>{canManageOrganizationRoles && <button className="secondary" disabled={linkedAccounts.length < 2} onClick={() => setMerging(true)}>Merge Accounts</button>}</div>
+    <div className="official-directory-actions">
+      <button className="secondary" onClick={() => setAdding(true)}>Add Official</button>
+      {canManageOrganizationRoles && <label className={`secondary button-label${busy ? " disabled" : ""}`}>Import Official Details<input type="file" accept=".csv,text/csv" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; void importOfficialDetails(file); }} /></label>}
+      {canManageOrganizationRoles && <button className="secondary" disabled={busy || !officials.length} onClick={() => void exportOfficials()}>Export Officials</button>}
+      {canManageOrganizationRoles && <button className="primary" disabled={busy} onClick={copyJoinLink}>{busy ? "Preparing…" : "Copy Join Link"}</button>}
+      {canManageOrganizationRoles && <button className="secondary" disabled={linkedAccounts.length < 2} onClick={() => setMerging(true)}>Merge Accounts</button>}
+    </div>
     <div className="directory-tools">
       <div className="segmented"><button className={scope === "organization" ? "active" : ""} onClick={() => setScope("organization")}>Group</button><button className={scope === "event" ? "active" : ""} onClick={() => setScope("event")}>Active Event</button></div>
       <input className="search" type="search" placeholder="Search name, email, or badge…" value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -3465,7 +3514,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal official={official} event={event} data={data} canEdit={isAdministrativeStaff} onClose={() => setScheduleOfficialId(null)} onEdit={() => { setScheduleOfficialId(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-<footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.19.2</span></footer>
+<footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.20.0</span></footer>
   </main>;
 }
 

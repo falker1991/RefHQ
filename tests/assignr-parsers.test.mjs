@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isOperationalGame, normalizePosition, parseAssignrCsv, parseAssignrOfficialsCsv, positionAliasKey, zonedLocalDateTimeToIso } from "../app/supabase-client.ts";
+import { createOfficialsExportCsv, isOperationalGame, normalizePosition, parseAssignrCsv, parseAssignrOfficialsCsv, positionAliasKey, zonedLocalDateTimeToIso } from "../app/supabase-client.ts";
 
 test("parses an actual Assignr games export layout", () => {
   const csv = [
@@ -52,4 +52,28 @@ test("parses an actual Assignr users export layout", () => {
   assert.equal(rows[0].full_name, "Olivia Official");
   assert.equal(rows[0].primary_email, "olivia@example.com");
   assert.equal(rows[0].source_official_id, "2171650");
+});
+
+test("round trips exported Law18Ref official details with stable record IDs", () => {
+  const csv = createOfficialsExportCsv([{
+    id: "official-123",
+    organization_id: "group-1",
+    full_name: "Alex Example",
+    email: null,
+    secondary_email: "guardian@example.com",
+    phone: "555-0100",
+    date_of_birth: "2010-05-01",
+    badge_level: "Grassroots",
+    ussf_id: "USSF-42",
+    external_check_in_other: "CHECK-42",
+    source_official_id: "assignr-9",
+    identity_status: "provisional",
+    pending_org_roles: ["referee"],
+  }]);
+  const rows = parseAssignrOfficialsCsv(csv.replace(",,guardian@example.com", ",alex@example.com,guardian@example.com"));
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].law18ref_official_id, "official-123");
+  assert.equal(rows[0].primary_email, "alex@example.com");
+  assert.equal(rows[0].source_official_id, "assignr-9");
+  assert.equal(rows[0].date_of_birth, "2010-05-01");
 });

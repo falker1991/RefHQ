@@ -1034,6 +1034,19 @@ export async function logRatingExport(session: Law18Session, ratingCount: number
   });
 }
 
+export async function logOfficialsExport(session: Law18Session, organizationId: string, officialCount: number) {
+  await rest(session, "audit_log", {
+    method: "POST",
+    body: JSON.stringify({
+      organization_id: organizationId,
+      actor_id: session.user.id,
+      action: "officials.exported",
+      entity_type: "officials",
+      details: { official_count: officialCount, format: "csv" },
+    }),
+  }, "return=minimal");
+}
+
 export async function updateEventRatingSettings(
   session: Law18Session,
   eventId: string,
@@ -1127,6 +1140,7 @@ export type ImportRow = {
 };
 
 export type OfficialImportRow = {
+  law18ref_official_id: string | null;
   full_name: string;
   primary_email: string | null;
   secondary_email: string | null;
@@ -1306,6 +1320,28 @@ export function parseAssignrOfficialsCsv(text: string): OfficialImportRow[] {
   const records = csvRecords(text);
   if (records.length < 2) throw new Error("The CSV does not contain officials.");
   const headers = headerMap(records[0]);
+  if (headers.has("law18ref official id")) {
+    const required = ["law18ref official id", "full name"];
+    const missing = required.filter((name) => !headers.has(name));
+    if (missing.length) throw new Error(`This Law18Ref officials file is missing: ${missing.join(", ")}.`);
+    return records.slice(1).map((record, rowIndex) => {
+      const officialId = cell(record, headers, "law18ref official id");
+      const fullName = cell(record, headers, "full name");
+      if (!officialId || !fullName) throw new Error(`Law18Ref officials row ${rowIndex + 2} is missing its Official ID or full name.`);
+      return {
+        law18ref_official_id: officialId,
+        full_name: fullName,
+        primary_email: cell(record, headers, "primary email").toLowerCase() || null,
+        secondary_email: cell(record, headers, "secondary email").toLowerCase() || null,
+        phone: cell(record, headers, "phone") || null,
+        date_of_birth: cell(record, headers, "date of birth") || null,
+        badge_level: cell(record, headers, "badge or level") || null,
+        ussf_id: cell(record, headers, "ussf id") || null,
+        external_check_in_other: cell(record, headers, "external check-in identifier") || null,
+        source_official_id: cell(record, headers, "assignr database id") || null,
+      };
+    });
+  }
   const required = ["last name", "first name", "primary email", "assignr database id"];
   const missing = required.filter((name) => !headers.has(name));
   if (missing.length) throw new Error(`This is not an Assignr officials export. Missing: ${missing.join(", ")}.`);
@@ -1315,6 +1351,7 @@ export function parseAssignrOfficialsCsv(text: string): OfficialImportRow[] {
       const first = cell(record, headers, "first name");
       const last = cell(record, headers, "last name");
       return {
+        law18ref_official_id: null,
         full_name: `${first} ${last}`.trim(),
         primary_email: cell(record, headers, "primary email").toLowerCase() || null,
         secondary_email: cell(record, headers, "secondary email").toLowerCase() || null,
@@ -1327,6 +1364,34 @@ export function parseAssignrOfficialsCsv(text: string): OfficialImportRow[] {
       };
     })
     .filter((row) => row.full_name);
+}
+
+function csvExportCell(value: unknown) {
+  const text = value === null || value === undefined ? "" : String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+export function createOfficialsExportCsv(officials: OfficialRecord[]) {
+  const headers = [
+    "Law18Ref Official ID", "Full Name", "Primary Email", "Secondary Email", "Phone",
+    "Date of Birth", "Badge or Level", "USSF ID", "External Check-In Identifier",
+    "Assignr Database ID", "Account Status", "Group Roles",
+  ];
+  const rows = officials.map((official) => [
+    official.id,
+    official.full_name,
+    official.email || "",
+    official.secondary_email || "",
+    official.phone || "",
+    official.date_of_birth || "",
+    official.badge_level || "",
+    official.ussf_id || "",
+    official.external_check_in_other || "",
+    official.source_official_id || "",
+    official.linked_user_id ? "Linked account" : "Provisional account",
+    (official.pending_org_roles?.length ? official.pending_org_roles : [official.pending_org_role || "referee"]).join(" | "),
+  ]);
+  return [headers, ...rows].map((row) => row.map(csvExportCell).join(",")).join("\r\n");
 }
 
 export function normalizePosition(position: string): AssignmentRecord["position"] {
@@ -1408,9 +1473,14 @@ export async function importOfficials(
       email = null;
     }
     if (email) emailsInFile.add(email);
+    const directIdMatch = row.law18ref_official_id ? byId.get(row.law18ref_official_id) : undefined;
+    if (row.law18ref_official_id && !directIdMatch) {
+      conflicts.push({ name: row.full_name, email: email || "", reason: "Law18Ref Official ID was not found in this group" });
+      continue;
+    }
     const directSourceMatch = row.source_official_id ? bySource.get(row.source_official_id) : undefined;
     const nameCandidates = provisionalByName.get(normalizeOfficialName(row.full_name)) || [];
-    const sourceMatch = directSourceMatch || (nameCandidates.length === 1 ? nameCandidates[0] : undefined);
+    const sourceMatch = directIdMatch || directSourceMatch || (nameCandidates.length === 1 ? nameCandidates[0] : undefined);
     const emailMatch = email ? byEmail.get(email) : undefined;
     if (emailMatch && sourceMatch && emailMatch.id !== sourceMatch.id) {
       conflicts.push({ name: row.full_name, email: email!, reason: "Email belongs to a different existing official" });
@@ -1423,17 +1493,18 @@ export async function importOfficials(
       conflicts.push({ name: row.full_name, email: email || "", reason: "Multiple provisional officials have this name; manual identity review required" });
     }
     const match = resolvedOfficial(sourceMatch);
+    const personalDetailsLocked = Boolean(match?.linked_user_id && match.personal_contact_locked);
     const changes = {
       full_name: match?.linked_user_id ? match.full_name : row.full_name,
       source_display_name: row.full_name,
-      email,
-      secondary_email: row.secondary_email,
-      phone: row.phone,
-      date_of_birth: row.date_of_birth,
+      email: match?.linked_user_id ? match.email : email,
+      secondary_email: personalDetailsLocked ? match?.secondary_email : row.secondary_email,
+      phone: personalDetailsLocked ? match?.phone : row.phone,
+      date_of_birth: personalDetailsLocked ? match?.date_of_birth : row.date_of_birth,
       badge_level: row.badge_level,
       ussf_id: row.ussf_id,
       external_check_in_other: row.external_check_in_other,
-      source: "assignr",
+      source: row.law18ref_official_id ? (match?.source || "law18ref") : "assignr",
       source_official_id: row.source_official_id,
       updated_at: new Date().toISOString(),
     };

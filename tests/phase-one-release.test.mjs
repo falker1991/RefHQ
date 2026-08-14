@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.21.5 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.21.6 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,10 +14,10 @@ test("Version 0.21.5 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.21\.5/);
+  assert.match(page, /Version 0\.21\.6/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.21.5");
+  assert.equal(JSON.parse(packageJson).version, "0.21.6");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -48,6 +48,24 @@ test("beta account and owner confirmations stay inside the site without confirma
   assert.doesNotMatch(page, /Unable to Load Law18Ref/);
   assert.match(migration, /jwt_has_recent_method\('password', interval '5 minutes'\)/);
   assert.doesNotMatch(migration, /jwt_has_recent_method\('otp'/);
+});
+
+test("linked and provisional official records can merge with last-name ordered selectors", async () => {
+  const [page, client, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/202608140055_provisional_official_record_merges.sql"),
+  ]);
+  assert.match(page, /const mergeCandidates = officials/);
+  assert.match(page, /directoryNameSortKey\(left\.full_name\)\.localeCompare\(directoryNameSortKey\(right\.full_name\)/);
+  assert.match(page, /Linked" : "Provisional/);
+  assert.match(page, /choose that linked account as the survivor/i);
+  assert.match(client, /rpc\/merge_group_official_records_with_profile/);
+  assert.match(migration, /Choose the linked account as the surviving record/);
+  assert.match(migration, /update public\.coach_assignments set coach_id = primary_user, coach_official_id = null/);
+  assert.match(migration, /insert into public\.provisional_event_access/);
+  assert.match(migration, /official_records_merged/);
+  assert.match(migration, /revoke execute on function public\.merge_group_official_records_with_profile.*from public, anon/);
 });
 
 test("event settings respect organization feature ceilings and enforce disabled modules", async () => {
@@ -264,7 +282,7 @@ test("v0.12.0 prevents profile self-escalation and enforces the organization rol
   assert.match(page, /Group Director/);
   assert.match(page, /canChangeOrganizationRole/);
   assert.match(page, /canChangeEventRole/);
-  assert.match(client, /rpc\/secure_merge_organization_accounts/);
+  assert.match(client, /rpc\/merge_group_official_records_with_profile/);
 });
 
 test("users can lock personal contact fields without locking organization or event permissions", async () => {
@@ -908,14 +926,14 @@ test("account merge migration transfers operational records and audits the merge
 test("account merge review supports field-by-field profile resolution", async () => {
   const page = await read("app/page.tsx");
   const client = await read("app/supabase-client.ts");
-  const migration = await read("supabase/migrations/202608060046_account_merge_profile_review.sql");
+  const migration = await read("supabase/migrations/202608140055_provisional_official_record_merges.sql");
   assert.match(page, /merge-profile-review/);
   for (const field of ["full_name", "secondary_email", "date_of_birth", "phone", "badge_level"]) {
     assert.match(page, new RegExp(field));
   }
-  assert.match(client, /secure_merge_organization_accounts_with_profile/);
+  assert.match(client, /merge_group_official_records_with_profile/);
   assert.match(migration, /primary_official\.personal_contact_locked/);
-  assert.match(migration, /account_merge_profile_resolved/);
+  assert.match(migration, /field_sources/);
 });
 
 test("assignment board exposes all three Phase 1 views", async () => {

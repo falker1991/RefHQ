@@ -1435,9 +1435,10 @@ export async function mergeOrganizationAccounts(
 ) {
   return rest<{
     primary_official_id: string;
-    primary_user_id: string;
-    primary_email: string;
-  }>(session, "rpc/secure_merge_organization_accounts_with_profile", {
+    primary_user_id: string | null;
+    primary_email: string | null;
+    primary_is_linked: boolean;
+  }>(session, "rpc/merge_group_official_records_with_profile", {
     method: "POST",
     body: JSON.stringify({
       organization_uuid: organizationId,

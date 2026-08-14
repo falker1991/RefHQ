@@ -224,6 +224,24 @@ function positionLabel(position: AssignmentRecord["position"], importedTitle?: s
   }[position];
 }
 
+function crewPositionPriority(assignment: AssignmentRecord) {
+  const title = `${assignment.position_title || ""} ${assignment.source_position_title || ""}`.trim().toLowerCase();
+  const assistantTitle = title.match(/(?:^|\s)(?:ar|assistant referee|asst\.? referee)\s*#?\s*(\d+)?(?=\s|$)/);
+  if (assignment.position === "referee" || /^(center |centre )?referee$/.test(title)) return 0;
+  if (assignment.position === "assistant_referee" || assistantTitle) {
+    const ordinal = assistantTitle?.[1];
+    return 100 + (ordinal ? Number(ordinal) : 50);
+  }
+  if (assignment.position === "fourth_official" || /\b(4th|fourth) official\b/.test(title)) return 300;
+  return 400;
+}
+
+function sortGameCrew(assignments: AssignmentRecord[]) {
+  return assignments.map((assignment, sourceIndex) => ({ assignment, sourceIndex }))
+    .sort((a, b) => crewPositionPriority(a.assignment) - crewPositionPriority(b.assignment) || a.sourceIndex - b.sourceIndex)
+    .map(({ assignment }) => assignment);
+}
+
 function Status({ checked, due = false }: { checked: boolean; due?: boolean }) {
   return <span className={`status ${checked ? "checked-in" : due ? "due-soon" : ""}`}><b />{checked ? "Checked in" : due ? "Due soon" : "Expected"}</span>;
 }
@@ -290,7 +308,7 @@ function OfficialEventScheduleModal({ official, event, data, canEdit, onClose, o
       const assignment = data.assignments.find((item) => item.game_id === game.id && item.official_id === official.id);
       const selectedPosition = assignment ? positionLabel(assignment.position, assignment.position_title) : "Referee Coach";
       const completed = new Date(game.starts_at).getTime() <= completionCutoff;
-      const crew = data.assignments.filter((item) => item.game_id === game.id).map((item) => ({ assignment: item, official: data.officials.find((person) => person.id === item.official_id) }));
+      const crew = sortGameCrew(data.assignments.filter((item) => item.game_id === game.id)).map((item) => ({ assignment: item, official: data.officials.find((person) => person.id === item.official_id) }));
       return <article className={`official-event-schedule-card ${completed ? "completed" : ""}`} key={game.id}>
         <div className="official-event-game-time"><time>{formatDate(game.starts_at)}</time><strong>{formatTime(game.starts_at)}</strong><span>{game.field_name}</span></div>
         <div className="official-event-game-details"><h3>{game.home_team} vs. {game.away_team}</h3><p>{[game.venue_name || event.venue_name, game.age_group, game.gender, game.division].filter(Boolean).join(" · ")}</p><div className="official-event-crew">{crew.map(({ assignment: crewAssignment, official: crewOfficial }) => <span className={crewOfficial?.id === official.id ? "selected" : ""} key={crewAssignment.id}><b>{positionLabel(crewAssignment.position, crewAssignment.position_title)}</b><strong>{crewOfficial?.full_name || "Open"}</strong></span>)}{!crew.length && <small>No referee crew is assigned.</small>}</div></div>
@@ -301,7 +319,7 @@ function OfficialEventScheduleModal({ official, event, data, canEdit, onClose, o
 }
 
 function BoardGameTile({ game, data, officials, ratingLabel, onSelectOfficial }: { game: GameRecord; data: EventData; officials: Map<string, OfficialRecord>; ratingLabel?: (officialId: string, position: AssignmentRecord["position"]) => string; onSelectOfficial: (officialId: string) => void }) {
-  const crew = data.assignments.filter((assignment) => assignment.game_id === game.id);
+  const crew = sortGameCrew(data.assignments.filter((assignment) => assignment.game_id === game.id));
   return <article className="board-game">
     <strong>{game.home_team} <span>vs.</span> {game.away_team}</strong>
     <small>{game.division || "Tournament match"}</small>
@@ -923,7 +941,7 @@ function ScheduleView({ session, event, data, canEdit, canRateCrew, coachView, o
     {adding && <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) setAdding(false); }}><article className="panel manual-entry-form manual-entry-modal" role="dialog" aria-modal="true" aria-label="Add game manually"><header><h2>Add a game to {event.name}</h2><button className="modal-close-button" aria-label="Close" onClick={() => setAdding(false)}>×</button></header><div className="manual-form-grid"><label>Date and time<input type="datetime-local" value={game.starts_at} onChange={(e) => setGame({ ...game, starts_at: e.target.value })} /></label><label>Field<input value={game.field_name} onChange={(e) => setGame({ ...game, field_name: e.target.value })} /></label><label>Home team<input value={game.home_team} onChange={(e) => setGame({ ...game, home_team: e.target.value })} /></label><label>Away team<input value={game.away_team} onChange={(e) => setGame({ ...game, away_team: e.target.value })} /></label><label>Division or competition<input value={game.division} onChange={(e) => setGame({ ...game, division: e.target.value })} /></label></div><button className="primary" disabled={busy || !game.starts_at || !game.field_name.trim() || !game.home_team.trim() || !game.away_team.trim()} onClick={addGame}>{busy ? "Adding…" : "Add game"}</button></article></div>}
     {message && <p className="pilot-message">{message}</p>}
     <div className="schedule-groups">{Object.entries(groupedGames).map(([label, games]) => <details className="panel schedule-group" open key={label}><summary><span>{label}</span><small>{games.length} game{games.length === 1 ? "" : "s"}</small></summary><div className="schedule-list">{games.map((game) => {
-      const crew = data.assignments.filter((assignment) => assignment.game_id === game.id);
+      const crew = sortGameCrew(data.assignments.filter((assignment) => assignment.game_id === game.id));
       return <article className="schedule-card coach-schedule-card" key={game.id}><div className="timebox"><time>{formatDate(game.starts_at)}</time><strong>{formatTime(game.starts_at)}</strong><span>{game.field_name}</span></div><div className="schedule-game-details"><h2>{game.home_team} vs. {game.away_team}</h2><p>{[game.age_group, game.gender, game.division].filter(Boolean).join(" · ")}</p><div className="schedule-crew-list">{crew.map((assignment) => { const checked = data.checkIns.some((item) => item.official_id === assignment.official_id && item.event_date === game.starts_at.slice(0, 10) && item.status === "checked_in"); const official = officials.get(assignment.official_id); return <span className={checked ? "schedule-crew-checked" : ""} key={assignment.id}><b>{positionLabel(assignment.position, assignment.position_title)}</b>{official ? <button className="official-name-link" onClick={() => onSelectOfficial(official.id)}>{official.full_name}{ratingLabel?.(official.id, assignment.position)}</button> : <strong>Open</strong>}</span>; })}{!crew.length && <small>No crew assignments are visible for this game.</small>}</div></div>{canRateGame(game) && <button className="primary rate-crew-button" onClick={() => onRateCrew(game.id)}>Rate Crew</button>}</article>;
     })}</div></details>)}</div>
   </section>;
@@ -2017,7 +2035,7 @@ function AssessmentCenter({
   const historyOfficialMap = new Map(history.officials.map((official) => [official.id, official]));
   const ratingSubmitterMap = new Map((history.submitters || []).map((submitter) => [submitter.id, submitter.full_name]));
   const historyGameMap = new Map(history.games.map((game) => [game.id, game]));
-  const gameAssignments = [...new Map(data.assignments.filter((assignment) => assignment.game_id === gameId).map((assignment) => [assignment.official_id, assignment])).values()];
+  const gameAssignments = sortGameCrew([...new Map(data.assignments.filter((assignment) => assignment.game_id === gameId).map((assignment) => [assignment.official_id, assignment])).values()]);
   const eligibleGames = data.games.filter(isRateableGame).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
   const historyAssignment = (assessment: AssessmentRecord) => history.assignments.find((item) => item.game_id === assessment.game_id && item.official_id === assessment.official_id);
   const historyPosition = (assessment: AssessmentRecord) => historyAssignment(assessment)?.position_title || "Unspecified position";
@@ -2025,21 +2043,12 @@ function AssessmentCenter({
     const score = assessmentScore(assessment);
     return score === null ? "Unscored" : Number(score.toFixed(2)).toString();
   };
-  const crewPositionPriority = (assessment: AssessmentRecord) => {
-    const assignment = historyAssignment(assessment);
-    const position = assignment?.position || "";
-    const title = (assignment?.position_title || "").trim().toLowerCase();
-    if (position === "referee" || /^(center |centre )?referee$/.test(title)) return 0;
-    if (position === "assistant_referee" || /^(ar(?:\s*\d+)?|assistant referee(?:\s*\d+)?|asst\.? referee(?:\s*\d+)?)$/.test(title)) return 1;
-    if (position === "fourth_official" || /^(4th|fourth) official$/.test(title)) return 2;
-    return 3;
-  };
   const crewAssignmentOrder = (assessment: AssessmentRecord) => {
     const index = history.assignments.findIndex((assignment) => assignment.game_id === assessment.game_id && assignment.official_id === assessment.official_id);
     return index < 0 ? Number.MAX_SAFE_INTEGER : index;
   };
   const orderGameRatings = (ratings: AssessmentRecord[]) => ratings.map((assessment, index) => ({ assessment, index })).sort((a, b) => {
-    const priorityDifference = crewPositionPriority(a.assessment) - crewPositionPriority(b.assessment);
+    const priorityDifference = crewPositionPriority(historyAssignment(a.assessment) || { id: a.assessment.id, game_id: a.assessment.game_id, official_id: a.assessment.official_id, position: "other", position_title: null, source_position_title: null }) - crewPositionPriority(historyAssignment(b.assessment) || { id: b.assessment.id, game_id: b.assessment.game_id, official_id: b.assessment.official_id, position: "other", position_title: null, source_position_title: null });
     if (priorityDifference) return priorityDifference;
     const assignmentDifference = crewAssignmentOrder(a.assessment) - crewAssignmentOrder(b.assessment);
     return assignmentDifference || a.index - b.index;
@@ -2192,7 +2201,7 @@ function AssessmentCenter({
         ratedGame ? formatTime(ratedGame.starts_at) : "", ratedGame?.field_name || "",
         ratedGame?.home_team || "", ratedGame?.away_team || "", ratedGame?.age_group || "", ratedGame?.gender || "",
       ];
-      ratings.forEach((rating) => cells.push(
+      orderGameRatings(ratings).forEach((rating) => cells.push(
         historyOfficialMap.get(rating.official_id)?.full_name || "Unknown official",
         historyPosition(rating),
         rating.evaluation_type === "basic_eval" ? "Basic Eval" : "Skills Eval",
@@ -3554,7 +3563,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal official={official} event={event} data={data} canEdit={isAdministrativeStaff} onClose={() => setScheduleOfficialId(null)} onEdit={() => { setScheduleOfficialId(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.21.2</span></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><span>© 2026 Law18Ref · Version 0.21.3</span></footer>
   </main>;
 }
 

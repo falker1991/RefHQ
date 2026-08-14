@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.21.2 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.21.3 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,10 +14,10 @@ test("Version 0.21.2 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.21\.2/);
+  assert.match(page, /Version 0\.21\.3/);
   assert.match(layout, /favicon\.png/);
   assert.match(manifest, /law18ref-icon-192\.png/);
-  assert.equal(JSON.parse(packageJson).version, "0.21.2");
+  assert.equal(JSON.parse(packageJson).version, "0.21.3");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -329,7 +329,7 @@ test("ratings can be filtered and sorted by score with match crews in position o
   assert.match(page, /<option value="score">Rating Score<\/option>/);
   assert.match(page, /\["scores", "Rating Scores", filterOptions\.scores\]/);
   assert.match(page, /if \(ratingSort === "score"\)/);
-  assert.match(page, /const crewPositionPriority/);
+  assert.match(page, /function crewPositionPriority/);
   assert.match(page, /position === "assistant_referee"/);
   assert.match(page, /position === "fourth_official"/);
   assert.match(page, /orderGameRatings\(ratings\)\.map/);
@@ -738,6 +738,18 @@ test("schedule rating buttons follow game-level and full-event coaching scope", 
   assert.match(page, /hasFullEventRatingAccess \|\| assignedCoachingGameIds\.has\(game\.id\)/);
   assert.match(page, /canRateGame\(game\)/);
   assert.match(page, /canRateCrew=\{canAssess\}/);
+});
+
+test("complete game crews use referee, numbered assistant, fourth-official order everywhere", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /function crewPositionPriority/);
+  assert.match(page, /function sortGameCrew/);
+  assert.match(page, /return 100 \+ \(ordinal \? Number\(ordinal\) : 50\)/);
+  assert.match(page, /return 300/);
+  assert.ok((page.match(/sortGameCrew\(data\.assignments\.filter/g) || []).length >= 3);
+  assert.match(page, /const gameAssignments = sortGameCrew/);
+  assert.match(page, /orderGameRatings\(ratings\)\.forEach/);
+  assert.match(page, /orderGameRatings\(ratings\)\.map/);
 });
 
 test("all users have active-group role-aware help", async () => {

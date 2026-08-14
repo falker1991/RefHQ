@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.21.2 places Rate Crew on every eligible schedule game for administrators and limits coach schedule buttons to their assigned games, unless they have full-event coaching access. Version 0.21.1 restores rating configuration and submission support, keeps rating history inside its owning group, and gives the Site Owner full coach-assignment access.
+Version 0.21.3 standardizes complete crew displays as Referee, AR1, AR2, Fourth Official, then any additional positions. Version 0.21.2 places Rate Crew on every eligible schedule game for administrators and limits coach schedule buttons to their assigned games, unless they have full-event coaching access.
 
 Bulk lifecycle management remains available for officials, ratings, and events. Games and assignments are designed to join the same workflow when manual schedule editing is introduced.
 

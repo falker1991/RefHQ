@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.21.9 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.22.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.21.9 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.21\.9/);
+  assert.match(page, /Version 0\.22\.0/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.21.9 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.21.9");
+  assert.equal(JSON.parse(packageJson).version, "0.22.0");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -956,6 +956,30 @@ test("account merge review supports field-by-field profile resolution", async ()
   assert.match(client, /merge_group_official_records_with_profile/);
   assert.match(migration, /primary_official\.personal_contact_locked/);
   assert.match(migration, /field_sources/);
+});
+
+test("event schedules support reusable filters, ordered sorting, and Excel or PDF exports", async () => {
+  const [page, exporter, client, css, packageJson] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/schedule-export.ts"),
+    read("app/supabase-client.ts"),
+    read("app/globals.css"),
+    read("package.json"),
+  ]);
+  for (const filter of ["dateFilters", "fieldFilters", "siteFilters", "officialFilters", "timeFilters", "ageFilters", "genderFilters", "competitionFilters"]) assert.match(page, new RegExp(filter));
+  assert.match(page, /Date \/ Field \/ Time/);
+  assert.match(page, /Date \/ Time \/ Field/);
+  assert.match(page, /Only \{visibleGames\.length\} filtered game/);
+  assert.match(page, /All \{baseVisibleGames\.length\} game/);
+  assert.match(page, /breakBefore/);
+  assert.match(exporter, /exportScheduleExcel/);
+  assert.match(exporter, /exportSchedulePdf/);
+  assert.match(exporter, /XLSX\.utils\.aoa_to_sheet/);
+  assert.match(exporter, /autoTable\(document/);
+  assert.match(client, /schedule\.exported/);
+  assert.match(css, /\.schedule-filter-bar/);
+  const dependencies = JSON.parse(packageJson).dependencies;
+  assert.ok(dependencies.xlsx && dependencies.jspdf && dependencies["jspdf-autotable"]);
 });
 
 test("assignment board exposes all three Phase 1 views", async () => {

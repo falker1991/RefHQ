@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.21.9 makes the account-merge field selector a compact, scrollable comparison grid on desktop and mobile. Version 0.21.8 bulk-assigns a referee coach to individually selected games or every game matching the active day, field, time, and schedule-search filters.
+Version 0.22.0 adds multi-field schedule filtering and ordered sorting plus Excel/PDF exports for either all permitted games or the current filtered view. Version 0.21.9 makes the account-merge field selector a compact, scrollable comparison grid on desktop and mobile.
 
 Bulk lifecycle management remains available for officials, ratings, and events. Games and assignments are designed to join the same workflow when manual schedule editing is introduced.
 

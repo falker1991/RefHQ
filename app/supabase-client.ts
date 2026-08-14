@@ -1053,6 +1053,21 @@ export async function logOfficialsExport(session: Law18Session, organizationId: 
   }, "return=minimal");
 }
 
+export async function logScheduleExport(session: Law18Session, event: EventRecord, gameCount: number, format: "xlsx" | "pdf", scope: "all" | "filtered") {
+  await rest(session, "audit_log", {
+    method: "POST",
+    body: JSON.stringify({
+      organization_id: event.organization_id,
+      event_id: event.id,
+      actor_id: session.user.id,
+      action: "schedule.exported",
+      entity_type: "games",
+      entity_id: event.id,
+      details: { game_count: gameCount, format, scope },
+    }),
+  }, "return=minimal");
+}
+
 export async function updateEventRatingSettings(
   session: Law18Session,
   eventId: string,

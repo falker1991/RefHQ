@@ -54,6 +54,7 @@ import {
   loadMemberships,
   loadUserEventMemberships,
   logRatingExport,
+  logScheduleExport,
   logOfficialsExport,
   mergeOrganizationAccounts,
   markEventRatingsSeen,
@@ -112,6 +113,7 @@ import {
   type ProvisionalEventAccess,
   type UnifiedAssignment,
 } from "./supabase-client";
+import { exportScheduleExcel, exportSchedulePdf, type ScheduleExportRow } from "./schedule-export";
 
 type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups";
 const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups"];
@@ -448,9 +450,11 @@ function RefereeDay({
   </section>;
 }
 
-function AssignmentFilterMenu({ label, options, selected, onChange }: { label: string; options: { id: string; name: string }[]; selected: string[]; onChange: (values: string[]) => void }) {
+function AssignmentFilterMenu({ label, options, selected, onChange, searchable = false }: { label: string; options: { id: string; name: string }[]; selected: string[]; onChange: (values: string[]) => void; searchable?: boolean }) {
+  const [query, setQuery] = useState("");
   const toggle = (id: string) => onChange(selected.includes(id) ? selected.filter((value) => value !== id) : [...selected, id]);
-  return <details className="assignment-filter-menu"><summary>{label}<small>{selected.length ? `${selected.length} selected` : "All"}</small></summary><div><button type="button" className="text-button" onClick={() => onChange([])}>Select All</button>{options.map((option) => <label key={option.id}><input type="checkbox" checked={selected.includes(option.id)} onChange={() => toggle(option.id)} /><span>{option.name}</span></label>)}</div></details>;
+  const visibleOptions = searchable ? options.filter((option) => option.name.toLowerCase().includes(query.toLowerCase())) : options;
+  return <details className="assignment-filter-menu"><summary>{label}<small>{selected.length ? `${selected.length} selected` : "All"}</small></summary><div>{searchable && <input className="filter-menu-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Search ${label.toLowerCase()}…`} />}<button type="button" className="text-button" onClick={() => onChange([])}>Select All</button>{visibleOptions.map((option) => <label key={option.id}><input type="checkbox" checked={selected.includes(option.id)} onChange={() => toggle(option.id)} /><span>{option.name}</span></label>)}</div></details>;
 }
 
 function UnifiedAssignmentsView({ session, profile }: { session: Law18Session; profile: Profile }) {
@@ -887,6 +891,9 @@ function CheckInView({ event, data, session, canManageCheckIns, onRefresh, onSel
   </section>;
 }
 
+type ScheduleSortField = "date" | "field" | "time" | "site" | "age_group" | "gender" | "competition" | "home_team" | "away_team";
+const scheduleSortLabels: Record<ScheduleSortField, string> = { date: "Date", field: "Field", time: "Time", site: "Site", age_group: "Age Group", gender: "Gender", competition: "Competition", home_team: "Home Team", away_team: "Away Team" };
+
 function ScheduleView({ session, event, data, canEdit, canRateCrew, coachView, onRateCrew, onCreated, profile, ratingHistory, showRatingAverages, onSelectOfficial }: { session: Law18Session; event: EventRecord; data: EventData; canEdit: boolean; canRateCrew: boolean; coachView: boolean; onRateCrew: (gameId: string) => void; onCreated: () => void; profile: Profile; ratingHistory: { assessments: AssessmentRecord[]; games: GameRecord[]; assignments: AssignmentRecord[] }; showRatingAverages: boolean; onSelectOfficial: (officialId: string) => void }) {
   const officials = new Map(data.officials.map((official) => [official.id, official]));
   const myCoachingAssignments = data.coachAssignments.filter((assignment) => assignment.coach_id === session.user.id);
@@ -895,7 +902,20 @@ function ScheduleView({ session, event, data, canEdit, canRateCrew, coachView, o
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [sortBy, setSortBy] = useActiveFilterState<"date" | "time" | "site" | "field" | "age_group" | "gender" | "competition">(`schedule-sort:${event.id}`, "time");
+  const [sortOrder, setSortOrder] = useActiveFilterState<ScheduleSortField[]>(`schedule-sort-order:${event.id}`, ["date", "field", "time"]);
+  const [dateFilters, setDateFilters] = useActiveFilterState<string[]>(`schedule-date:${event.id}`, []);
+  const [fieldFilters, setFieldFilters] = useActiveFilterState<string[]>(`schedule-field:${event.id}`, []);
+  const [siteFilters, setSiteFilters] = useActiveFilterState<string[]>(`schedule-site:${event.id}`, []);
+  const [officialFilters, setOfficialFilters] = useActiveFilterState<string[]>(`schedule-official:${event.id}`, []);
+  const [timeFilters, setTimeFilters] = useActiveFilterState<string[]>(`schedule-time:${event.id}`, []);
+  const [ageFilters, setAgeFilters] = useActiveFilterState<string[]>(`schedule-age:${event.id}`, []);
+  const [genderFilters, setGenderFilters] = useActiveFilterState<string[]>(`schedule-gender:${event.id}`, []);
+  const [competitionFilters, setCompetitionFilters] = useActiveFilterState<string[]>(`schedule-competition:${event.id}`, []);
+  const [scheduleSearch, setScheduleSearch] = useActiveFilterState(`schedule-search:${event.id}`, "");
+  const [exporting, setExporting] = useState(false);
+  const [exportFormat, setExportFormat] = useState<"xlsx" | "pdf">("xlsx");
+  const [exportScope, setExportScope] = useState<"all" | "filtered">("filtered");
+  const [exportBusy, setExportBusy] = useState(false);
   const [game, setGame] = useState({ starts_at: "", field_name: "", home_team: "", away_team: "", division: "" });
   const rulesDocument = eventFeatureEnabled(event, "event_documents") ? data.documents.find((document) => document.document_type === "rules_of_competition") : undefined;
   const ratingLabel = showRatingAverages ? (officialId: string, position: AssignmentRecord["position"]) => administrativeRatingLabel(officialId, position, event.id, data, ratingHistory, profile.rating_average_preferences) : undefined;
@@ -915,29 +935,82 @@ function ScheduleView({ session, event, data, canEdit, canRateCrew, coachView, o
       setBusy(false);
     }
   }
-  const groupLabel = (item: GameRecord) => {
-    if (sortBy === "date") return formatDate(item.starts_at);
-    if (sortBy === "time") return formatTime(item.starts_at);
-    if (sortBy === "site") return item.venue_name || "Unspecified site";
-    if (sortBy === "field") return item.field_name || "Unspecified field";
-    if (sortBy === "age_group") return item.age_group || "Unspecified age group";
-    if (sortBy === "gender") return item.gender || "Unspecified gender";
-    return item.division || "Unspecified competition";
+  const eventDateKey = (item: GameRecord) => new Intl.DateTimeFormat("en-CA", { timeZone: event.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(item.starts_at));
+  const sortValue = (item: GameRecord, field: ScheduleSortField) => {
+    if (field === "date") return eventDateKey(item);
+    if (field === "time") return String(timeSortValue(item.starts_at)).padStart(4, "0");
+    if (field === "site") return item.venue_name || "Unspecified site";
+    if (field === "field") return item.field_name || "Unspecified field";
+    if (field === "age_group") return item.age_group || "Unspecified age group";
+    if (field === "gender") return item.gender || "Unspecified gender";
+    if (field === "competition") return item.division || "Unspecified competition";
+    if (field === "home_team") return item.home_team || "Unspecified home team";
+    return item.away_team || "Unspecified away team";
   };
-  const compareGroups = (a: GameRecord, b: GameRecord) => sortBy === "time"
-    ? timeSortValue(a.starts_at) - timeSortValue(b.starts_at)
-    : groupLabel(a).localeCompare(groupLabel(b), undefined, { numeric: true });
-  const visibleGames = coachView
+  const displaySortValue = (item: GameRecord, field: ScheduleSortField) => field === "date" ? formatDate(item.starts_at) : field === "time" ? formatTime(item.starts_at) : sortValue(item, field);
+  const compareGames = (a: GameRecord, b: GameRecord) => sortOrder.reduce((result, field) => result || sortValue(a, field).localeCompare(sortValue(b, field), undefined, { numeric: true }), 0) || a.starts_at.localeCompare(b.starts_at) || a.id.localeCompare(b.id);
+  const baseVisibleGames = coachView
     ? data.games.filter((game) => isRateableGame(game) && (hasFullEventRatingAccess || assignedCoachingGameIds.has(game.id)))
     : data.games;
+  const filterOptions = {
+    dates: [...new Set(baseVisibleGames.map(eventDateKey))].sort(),
+    fields: [...new Set(baseVisibleGames.map((item) => item.field_name || "Unspecified field"))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+    sites: [...new Set(baseVisibleGames.map((item) => item.venue_name || "Unspecified site"))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+    times: [...new Set(baseVisibleGames.map((item) => formatTime(item.starts_at)))].sort((a, b) => timeSortValue(baseVisibleGames.find((item) => formatTime(item.starts_at) === a)?.starts_at || "") - timeSortValue(baseVisibleGames.find((item) => formatTime(item.starts_at) === b)?.starts_at || "")),
+    ages: [...new Set(baseVisibleGames.map((item) => item.age_group || "Unspecified age group"))].sort(),
+    genders: [...new Set(baseVisibleGames.map((item) => item.gender || "Unspecified gender"))].sort(),
+    competitions: [...new Set(baseVisibleGames.map((item) => item.division || "Unspecified competition"))].sort(),
+  };
+  const officialGameIds = new Map<string, Set<string>>();
+  data.assignments.forEach((assignment) => officialGameIds.set(assignment.official_id, new Set([...(officialGameIds.get(assignment.official_id) || []), assignment.game_id])));
+  const visibleOfficialOptions = data.officials.filter((official) => [...(officialGameIds.get(official.id) || [])].some((gameId) => baseVisibleGames.some((game) => game.id === gameId))).sort((a, b) => (a.full_name.trim().split(/\s+/).at(-1) || a.full_name).localeCompare(b.full_name.trim().split(/\s+/).at(-1) || b.full_name) || a.full_name.localeCompare(b.full_name));
+  const filteredGames = baseVisibleGames.filter((item) =>
+    (!dateFilters.length || dateFilters.includes(eventDateKey(item)))
+    && (!fieldFilters.length || fieldFilters.includes(item.field_name || "Unspecified field"))
+    && (!siteFilters.length || siteFilters.includes(item.venue_name || "Unspecified site"))
+    && (!timeFilters.length || timeFilters.includes(formatTime(item.starts_at)))
+    && (!ageFilters.length || ageFilters.includes(item.age_group || "Unspecified age group"))
+    && (!genderFilters.length || genderFilters.includes(item.gender || "Unspecified gender"))
+    && (!competitionFilters.length || competitionFilters.includes(item.division || "Unspecified competition"))
+    && (!officialFilters.length || data.assignments.some((assignment) => assignment.game_id === item.id && officialFilters.includes(assignment.official_id)))
+    && `${item.home_team} ${item.away_team} ${item.field_name} ${item.venue_name || ""} ${item.division || ""} ${item.age_group || ""} ${item.gender || ""}`.toLowerCase().includes(scheduleSearch.trim().toLowerCase()));
+  const visibleGames = [...filteredGames].sort(compareGames);
   const canRateGame = (game: GameRecord) => canRateCrew
     && isRateableGame(game)
     && (!coachView || hasFullEventRatingAccess || assignedCoachingGameIds.has(game.id));
-  const groupedGames = [...visibleGames].sort((a, b) => compareGroups(a, b) || a.starts_at.localeCompare(b.starts_at))
-    .reduce<Record<string, GameRecord[]>>((groups, item) => ({ ...groups, [groupLabel(item)]: [...(groups[groupLabel(item)] || []), item] }), {});
-  return <section className="page-section"><div className="section-title"><div><p className="eyebrow">EVENT SCHEDULE</p><h1>Games and crews</h1><p>{visibleGames.length} imported games</p></div></div>
+  const groupedGames = visibleGames.reduce<Record<string, GameRecord[]>>((groups, item) => { const label = displaySortValue(item, sortOrder[0]); return { ...groups, [label]: [...(groups[label] || []), item] }; }, {});
+  function updateSortLevel(index: number, field: ScheduleSortField) {
+    setSortOrder((current) => { const next = [...current]; const existing = next.indexOf(field); if (existing >= 0) next[existing] = next[index]; next[index] = field; return next; });
+  }
+  function makeExportRows(games: GameRecord[]): ScheduleExportRow[] {
+    const ordered = [...games].sort(compareGames);
+    return ordered.map((item, index) => {
+      const crew = sortGameCrew(data.assignments.filter((assignment) => assignment.game_id === item.id)).map((assignment) => ({ position: positionLabel(assignment.position, assignment.position_title), name: officials.get(assignment.official_id)?.full_name || "Open" }));
+      const previous = ordered[index - 1];
+      return { id: item.id, date: formatDate(item.starts_at), time: formatTime(item.starts_at), field: item.field_name || "", site: item.venue_name || "", homeTeam: item.home_team, awayTeam: item.away_team, ageGroup: item.age_group || "", gender: item.gender || "", competition: item.division || "", gameType: item.game_type || "", crew, breakBefore: Boolean(previous && (sortValue(previous, sortOrder[0]) !== sortValue(item, sortOrder[0]) || sortValue(previous, sortOrder[1]) !== sortValue(item, sortOrder[1]))) };
+    });
+  }
+  async function exportSchedule() {
+    const games = exportScope === "filtered" ? visibleGames : baseVisibleGames;
+    if (!games.length) return;
+    setExportBusy(true);
+    try {
+      const rows = makeExportRows(games);
+      if (exportFormat === "xlsx") await exportScheduleExcel(event, rows);
+      else await exportSchedulePdf(event, rows);
+      await logScheduleExport(session, event, rows.length, exportFormat, exportScope).catch(() => undefined);
+      setExporting(false);
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to export the schedule.");
+    } finally {
+      setExportBusy(false);
+    }
+  }
+  return <section className="page-section"><div className="section-title"><div><p className="eyebrow">EVENT SCHEDULE</p><h1>Games and crews</h1><p>{visibleGames.length} of {baseVisibleGames.length} games shown</p></div></div>
     {rulesDocument && <aside className="panel event-rules-banner"><div><p className="eyebrow">EVENT DOCUMENT</p><strong>Rules of Competition</strong><span>{rulesDocument.title}</span></div><EventDocumentLink session={session} document={rulesDocument} /></aside>}
-    <div className="schedule-tools"><label>Sort and group by<select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}><option value="date">Date</option><option value="time">Time</option><option value="site">Site</option><option value="field">Field</option><option value="age_group">Age group</option><option value="gender">Gender</option><option value="competition">Competition</option></select></label>{canEdit && <button className="secondary" onClick={() => setAdding((value) => !value)}>{adding ? "Cancel" : "Add game manually"}</button>}</div>
+    <div className="schedule-toolbar panel"><div className="schedule-sort-controls"><label>Sort preset<select value={sortOrder.join("-")} onChange={(change) => setSortOrder(change.target.value === "date-time-field" ? ["date", "time", "field"] : ["date", "field", "time"])}><option value="date-field-time">Date / Field / Time</option><option value="date-time-field">Date / Time / Field</option>{![["date", "field", "time"], ["date", "time", "field"]].some((preset) => preset.join("-") === sortOrder.join("-")) && <option value={sortOrder.join("-")}>Custom</option>}</select></label>{sortOrder.map((field, index) => <label key={index}>Sort {index + 1}<select value={field} onChange={(change) => updateSortLevel(index, change.target.value as ScheduleSortField)}>{(Object.keys(scheduleSortLabels) as ScheduleSortField[]).map((option) => <option value={option} key={option}>{scheduleSortLabels[option]}</option>)}</select></label>)}</div><div className="schedule-toolbar-actions"><button className="secondary" onClick={() => setExporting(true)}>Export Schedule</button>{canEdit && <button className="secondary" onClick={() => setAdding((value) => !value)}>{adding ? "Cancel" : "Add Game Manually"}</button>}</div></div>
+    <div className="schedule-filter-bar"><AssignmentFilterMenu label="Date" options={filterOptions.dates.map((date) => ({ id: date, name: formatDate(date) }))} selected={dateFilters} onChange={setDateFilters} /><AssignmentFilterMenu label="Field" options={filterOptions.fields.map((field) => ({ id: field, name: field }))} selected={fieldFilters} onChange={setFieldFilters} /><AssignmentFilterMenu label="Site" options={filterOptions.sites.map((site) => ({ id: site, name: site }))} selected={siteFilters} onChange={setSiteFilters} /><AssignmentFilterMenu label="Official" options={visibleOfficialOptions.map((official) => ({ id: official.id, name: official.full_name }))} selected={officialFilters} onChange={setOfficialFilters} searchable /><AssignmentFilterMenu label="Time" options={filterOptions.times.map((time) => ({ id: time, name: time }))} selected={timeFilters} onChange={setTimeFilters} /><AssignmentFilterMenu label="Age Group" options={filterOptions.ages.map((age) => ({ id: age, name: age }))} selected={ageFilters} onChange={setAgeFilters} /><AssignmentFilterMenu label="Gender" options={filterOptions.genders.map((gender) => ({ id: gender, name: gender }))} selected={genderFilters} onChange={setGenderFilters} /><AssignmentFilterMenu label="Competition" options={filterOptions.competitions.map((competition) => ({ id: competition, name: competition }))} selected={competitionFilters} onChange={setCompetitionFilters} /><label className="schedule-search-filter">Teams or game details<input type="search" value={scheduleSearch} onChange={(change) => setScheduleSearch(change.target.value)} placeholder="Search schedule…" /></label><SavedFilterControls filterKey={`schedule:${event.id}`} value={{ dateFilters, fieldFilters, siteFilters, officialFilters, timeFilters, ageFilters, genderFilters, competitionFilters, scheduleSearch, sortOrder }} onApply={(saved) => { setDateFilters(saved.dateFilters); setFieldFilters(saved.fieldFilters); setSiteFilters(saved.siteFilters); setOfficialFilters(saved.officialFilters); setTimeFilters(saved.timeFilters); setAgeFilters(saved.ageFilters); setGenderFilters(saved.genderFilters); setCompetitionFilters(saved.competitionFilters); setScheduleSearch(saved.scheduleSearch); setSortOrder(saved.sortOrder); }} /></div>
+    {exporting && <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) setExporting(false); }}><section className="confirmation-dialog schedule-export-dialog" role="dialog" aria-modal="true" aria-label="Export schedule"><p className="eyebrow">SCHEDULE EXPORT</p><h2>Export {event.name}</h2><label>File format<select value={exportFormat} onChange={(change) => setExportFormat(change.target.value as typeof exportFormat)}><option value="xlsx">Excel workbook (.xlsx)</option><option value="pdf">PDF document (.pdf)</option></select></label><label>Games to include<select value={exportScope} onChange={(change) => setExportScope(change.target.value as typeof exportScope)}><option value="filtered">Only {visibleGames.length} filtered game{visibleGames.length === 1 ? "" : "s"}</option><option value="all">All {baseVisibleGames.length} game{baseVisibleGames.length === 1 ? "" : "s"} in {coachView ? "my coaching scope" : "the event"}</option></select></label><p className="import-note">Games use the selected three-level sort order. A blank separator row appears whenever {scheduleSortLabels[sortOrder[1]].toLowerCase()} changes within {scheduleSortLabels[sortOrder[0]].toLowerCase()}.</p><div><button className="secondary" disabled={exportBusy} onClick={() => setExporting(false)}>Cancel</button><button className="primary" disabled={exportBusy || !(exportScope === "filtered" ? visibleGames.length : baseVisibleGames.length)} onClick={() => void exportSchedule()}>{exportBusy ? "Preparing…" : `Download ${exportFormat.toUpperCase()}`}</button></div></section></div>}
     {adding && <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) setAdding(false); }}><article className="panel manual-entry-form manual-entry-modal" role="dialog" aria-modal="true" aria-label="Add game manually"><header><h2>Add a game to {event.name}</h2><button className="modal-close-button" aria-label="Close" onClick={() => setAdding(false)}>×</button></header><div className="manual-form-grid"><label>Date and time<input type="datetime-local" value={game.starts_at} onChange={(e) => setGame({ ...game, starts_at: e.target.value })} /></label><label>Field<input value={game.field_name} onChange={(e) => setGame({ ...game, field_name: e.target.value })} /></label><label>Home team<input value={game.home_team} onChange={(e) => setGame({ ...game, home_team: e.target.value })} /></label><label>Away team<input value={game.away_team} onChange={(e) => setGame({ ...game, away_team: e.target.value })} /></label><label>Division or competition<input value={game.division} onChange={(e) => setGame({ ...game, division: e.target.value })} /></label></div><button className="primary" disabled={busy || !game.starts_at || !game.field_name.trim() || !game.home_team.trim() || !game.away_team.trim()} onClick={addGame}>{busy ? "Adding…" : "Add game"}</button></article></div>}
     {message && <p className="pilot-message">{message}</p>}
     <div className="schedule-groups">{Object.entries(groupedGames).map(([label, games]) => <details className="panel schedule-group" open key={label}><summary><span>{label}</span><small>{games.length} game{games.length === 1 ? "" : "s"}</small></summary><div className="schedule-list">{games.map((game) => {
@@ -3260,11 +3333,11 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
   const helpByRole: Record<MembershipRole, { title: string; items: string[] }> = {
     site_owner: { title: "Site Owner Navigation", items: ["Use the group selector below the header to open the group you want to manage.", "Open Groups from your initials menu to create, open, archive, restore, rename, upload a logo, or configure features for a group.", "Open Site Appearance from your initials menu to edit, save, schedule, or restore site themes.", "Open Officials and use Copy Join Link to invite members to the active group.", "Open Activity within a group to review its audit log and event archive.", "After selecting a group and event, use the same event tabs described for Group Admins."] },
     organization_director: { title: "Group Director Navigation", items: ["Use the group and event selectors below the header to choose your working scope.", "Open Officials to appoint Group Admins and lower group roles, or open Event Access to appoint Event Admins and lower event roles.", "Use Groups, Activity, Import, Assignment Board, Schedule, Check-In, Coaching, and Ratings for complete group administration.", "Only the Site Owner can appoint or remove a Group Director."] },
-    organization_admin: { title: "Group Admin Navigation", items: ["Choose the group and active event from the selectors below the header.", "Open Groups from your initials menu to update the active group's name or logo.", "Open Officials to copy the group join link, add or edit people, review last login, set group roles, remove a member, merge accounts, or open Event Access. Use the selection boxes for bulk archive or deletion.", "Open Activity to review meaningful changes or bulk archive, restore, and delete events.", "Open Import to add officials, upload an Assignr schedule, configure automatic archiving, or archive the selected event now.", "Open Assignment Board or Schedule to review the day, Check-In to manage arrivals, and Coaching to assign coaches.", "Open Ratings to configure evaluations, filter history, switch between individual and full-game views, export a spreadsheet, or use selection boxes to archive and delete ratings. Archived-event ratings remain available here."] },
+    organization_admin: { title: "Group Admin Navigation", items: ["Choose the group and active event from the selectors below the header.", "Open Groups from your initials menu to update the active group's name or logo.", "Open Officials to copy the group join link, add or edit people, review last login, set group roles, remove a member, merge accounts, or open Event Access. Use the selection boxes for bulk archive or deletion.", "Open Activity to review meaningful changes or bulk archive, restore, and delete events.", "Open Import to add officials, upload an Assignr schedule, configure automatic archiving, or archive the selected event now.", "Open Schedule to filter games by date, field, site, official, time, age group, gender, or competition. Choose a three-level sort order, save frequently used filters, or export all or filtered games to Excel or PDF.", "Open Assignment Board to review the day, Check-In to manage arrivals, and Coaching to assign coaches.", "Open Ratings to configure evaluations, filter history, switch between individual and full-game views, export a spreadsheet, or use selection boxes to archive and delete ratings. Archived-event ratings remain available here."] },
     event_admin: { title: "Event Admin Navigation", items: ["Select an assigned event from the Active Event menu below the header.", "Open Officials, then Event Access, to add or update event staff for that event.", "Open Import for event schedule data and Event Lifecycle controls, including automatic archiving or Archive Now.", "Open Schedule for game details, Check-In for arrivals, Coaching for coach assignments, and Ratings for evaluation settings and history."] },
-    assignor: { title: "Assignor Navigation", items: ["Select the event you are working from the Active Event menu below the header.", "Open Import to upload an authorized schedule, then use Assignment Board or Schedule to review crews.", "Open Check-In to filter arrivals, manually check someone in, undo a check-in, or select an official’s name to see their daily schedule.", "Open Coaching to place coaches on games. Use Rate Crew on a schedule game, or open Ratings and choose a game, when coaching tools are enabled."] },
+    assignor: { title: "Assignor Navigation", items: ["Select the event you are working from the Active Event menu below the header.", "Open Import to upload an authorized schedule, then use Assignment Board or Schedule to review crews.", "In Schedule, filter games, arrange three sort levels, save filter setups, or export all or filtered games to Excel or PDF.", "Open Check-In to filter arrivals, manually check someone in, undo a check-in, or select an official’s name to see their daily schedule.", "Open Coaching to place coaches on games. Use Rate Crew on a schedule game, or open Ratings and choose a game, when coaching tools are enabled."] },
     site_coordinator: { title: "Site Supervisor Navigation", items: ["Select today’s event from the Active Event menu.", "Open Assignment Board or Schedule to review the games in your event scope.", "Open Check-In to monitor arrivals. Use its filters to narrow the roster, and select an official’s name to view that person’s full schedule for the day."] },
-    referee_coach: { title: "Referee Coach Navigation", items: ["Select the event you are coaching from the My Event menu.", "Open Schedule to see games and crews in your coaching scope.", "Select Rate Crew on a game to open its evaluation form, complete the crew ratings, and submit them together.", "Open Ratings to choose a game, review individual or full-game history, filter results, or export the filtered ratings. Your permitted history remains available after an event is archived.", "When Check-In appears, open it at the venue, select Scan QR Code, and scan the code displayed by event staff."] },
+    referee_coach: { title: "Referee Coach Navigation", items: ["Select the event you are coaching from the My Event menu.", "Open Schedule to see games and crews in your coaching scope. Use its filters, three-level sorting, saved filter setups, and Excel/PDF export controls when you need a focused coaching schedule.", "Select Rate Crew on a game to open its evaluation form, complete the crew ratings, and submit them together.", "Open Ratings to choose a game, review individual or full-game history, filter results, or export the filtered ratings. Your permitted history remains available after an event is archived.", "When Check-In appears, open it at the venue, select Scan QR Code, and scan the code displayed by event staff."] },
     referee: { title: "Referee Navigation", items: ["Your Dashboard lists every group and upcoming event linked to your account; referees do not need to select an active group or event.", "Open My Assignments to view one schedule containing all of your Law18Ref games and any personal external calendar feeds you have connected.", "Open your initials menu, then Account Settings, to manage account-wide personal information and private calendar feeds.", "On an assigned event day, open Check-In. Law18Ref opens the eligible event automatically or asks you to choose when you have more than one check-in that day.", "Select Scan QR Code and scan the code displayed by event staff. The scanner disappears after your check-in is recorded.", "Open My Evals to view evaluations that have been shared with you."] },
   };
   const isAdministrativeStaff = ["site_owner", "organization_director", "organization_admin", "event_admin", "assignor"].some((role) => allRoles.has(role as MembershipRole));
@@ -3582,7 +3655,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal official={official} event={event} data={data} canEdit={isAdministrativeStaff} onClose={() => setScheduleOfficialId(null)} onEdit={() => { setScheduleOfficialId(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.21.9</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.22.0</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

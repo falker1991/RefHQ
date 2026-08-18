@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.25.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.25.1 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.25.0 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.25\.0/);
+  assert.match(page, /Version 0\.25\.1/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.25.0 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.25.0");
+  assert.equal(JSON.parse(packageJson).version, "0.25.1");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1187,4 +1187,12 @@ test("v0.25.0 upgrades assignment board grouping and Site Supervisor schedules",
   assert.match(migration, /like '%hq%'/);
   assert.match(migration, /site supervisors view visible game crews/);
   assert.match(migration, /revoke all on function public\.site_supervisor_can_view_operational_game.*public, anon/);
+});
+
+test("v0.25.1 filters coaching games by venue or site", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /coaching-sites:/);
+  assert.match(page, /label="Venue \/ Site"/);
+  assert.match(page, /scheduleSitesFilter\.includes\(game\.venue_name \|\| "Unspecified site"\)/);
+  assert.match(page, /scheduleSitesFilter, scheduleFieldsFilter/);
 });

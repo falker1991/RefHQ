@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.23.1 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.23.2 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.23.1 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.23\.1/);
+  assert.match(page, /Version 0\.23\.2/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.23.1 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.23.1");
+  assert.equal(JSON.parse(packageJson).version, "0.23.2");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1026,10 +1026,17 @@ test("event schedules support reusable filters, ordered sorting, and Excel or PD
 });
 
 test("assignment board exposes all three Phase 1 views", async () => {
-  const page = await read("app/page.tsx");
+  const [page, css] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
   assert.match(page, /Time and Field Grid/);
   assert.match(page, />By Field</);
   assert.match(page, />First Assignment</);
+  assert.match(page, /className="board-day-picker"/);
+  assert.match(page, />Event Day</);
+  assert.match(page, /const visibleGames = useMemo\(\(\) => data\.games\.filter/);
+  assert.match(page, /dateKeyInTimeZone\(game\.starts_at, event\.timezone\) === boardDate/);
+  assert.match(page, /visibleGames\.find\(\(item\) => item\.field_name === field/);
+  assert.match(page, /visibleGames\.filter\(\(game\) => game\.field_name === field\)/);
+  assert.match(css, /\.board-day-picker/);
   assert.match(page, /const timeOrder = a\.game\.starts_at\.localeCompare\(b\.game\.starts_at\)/);
   assert.match(page, /const fieldOrder = a\.game\.field_name\.localeCompare\(b\.game\.field_name, undefined, \{ numeric: true, sensitivity: "base" \}\)/);
   assert.match(page, /return aLastName\.localeCompare\(bLastName/);

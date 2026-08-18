@@ -54,6 +54,17 @@ test("parses an actual Assignr users export layout", () => {
   assert.equal(rows[0].source_official_id, "2171650");
 });
 
+test("accepts Assignor Database ID as an officials identifier header alias", () => {
+  const csv = [
+    "Last Name,First Name,Primary Email,Assignor Database ID",
+    "Abajyan,Souren,abajyan73@example.com,souren abajyan",
+  ].join("\n");
+  const rows = parseAssignrOfficialsCsv(csv);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].full_name, "Souren Abajyan");
+  assert.equal(rows[0].source_official_id, "souren abajyan");
+});
+
 test("round trips exported Law18Ref official details with stable record IDs", () => {
   const csv = createOfficialsExportCsv([{
     id: "official-123",

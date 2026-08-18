@@ -1266,6 +1266,16 @@ function cell(row: string[], headers: Map<string, number>, name: string) {
   return index === undefined ? "" : (row[index] || "").trim();
 }
 
+const assignrOfficialIdHeaders = ["assignr database id", "assignor database id", "assignr id"];
+
+function cellFromAliases(row: string[], headers: Map<string, number>, names: string[]) {
+  for (const name of names) {
+    const value = cell(row, headers, name);
+    if (value) return value;
+  }
+  return "";
+}
+
 function toIsoTime(value: string) {
   const match = value.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AP]M)?$/i);
   if (!match) throw new Error(`Unrecognized start time "${value}".`);
@@ -1409,8 +1419,9 @@ export function parseAssignrOfficialsCsv(text: string): OfficialImportRow[] {
       };
     });
   }
-  const required = ["last name", "first name", "primary email", "assignr database id"];
+  const required = ["last name", "first name", "primary email"];
   const missing = required.filter((name) => !headers.has(name));
+  if (!assignrOfficialIdHeaders.some((name) => headers.has(name))) missing.push("assignr database id");
   if (missing.length) throw new Error(`This is not an Assignr officials export. Missing: ${missing.join(", ")}.`);
   return records.slice(1)
     .filter((record) => cell(record, headers, "is an official?").toUpperCase() !== "NO")
@@ -1427,7 +1438,7 @@ export function parseAssignrOfficialsCsv(text: string): OfficialImportRow[] {
         badge_level: cell(record, headers, "grade/badge level") || cell(record, headers, "ussf referee certification") || null,
         ussf_id: cell(record, headers, "ussf id") || cell(record, headers, "ussf id #") || null,
         external_check_in_other: cell(record, headers, "external check-in identifier") || null,
-        source_official_id: cell(record, headers, "assignr database id") || null,
+        source_official_id: cellFromAliases(record, headers, assignrOfficialIdHeaders) || null,
       };
     })
     .filter((row) => row.full_name);

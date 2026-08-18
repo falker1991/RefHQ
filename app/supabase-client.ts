@@ -80,6 +80,13 @@ export type OrganizationRecord = {
   feature_entitlements: EventFeatureSettings;
 };
 
+export type CrossGroupOfficialAddResult = {
+  added: number;
+  already_present: number;
+  conflicts: number;
+  conflict_names: string[];
+};
+
 export type EventFeatureKey = "assignment_board" | "check_in" | "ratings" | "coaching" | "event_documents";
 export type EventFeatureSettings = Record<EventFeatureKey, boolean>;
 
@@ -441,6 +448,24 @@ export async function loadOrganization(session: Law18Session, organizationId: st
 
 export async function loadOrganizations(session: Law18Session) {
   return rest<OrganizationRecord[]>(session, "organizations?select=*&order=name.asc");
+}
+
+export async function loadGroupsAvailableForOfficialAddition(session: Law18Session) {
+  return rest<OrganizationRecord[]>(session, "rpc/groups_available_for_official_addition", {
+    method: "POST",
+    body: "{}",
+  });
+}
+
+export async function addOfficialsToGroup(session: Law18Session, sourceOrganizationId: string, targetOrganizationId: string, officialIds: string[]) {
+  return rest<CrossGroupOfficialAddResult>(session, "rpc/add_officials_to_group", {
+    method: "POST",
+    body: JSON.stringify({
+      source_organization: sourceOrganizationId,
+      target_organization: targetOrganizationId,
+      source_official_ids: officialIds,
+    }),
+  });
 }
 
 export function positionAliasKey(value: string) {

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.23.2 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.24.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.23.2 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.23\.2/);
+  assert.match(page, /Version 0\.24\.0/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.23.2 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.23.2");
+  assert.equal(JSON.parse(packageJson).version, "0.24.0");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1140,4 +1140,27 @@ test("past-due events leave active views and organization admins can restore the
   assert.match(migration, /e\.auto_archive_at is null or e\.auto_archive_at > now\(\)/);
   assert.match(migration, /event\.automatically_archived/);
   assert.match(migration, /event\.restored/);
+});
+
+test("v0.24.0 securely copies selected officials into another managed group", async () => {
+  const [page, client, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/20260818161806_cross_group_official_copy.sql"),
+  ]);
+  assert.match(page, /Add to Another Group/);
+  assert.match(page, /canManageOfficials/);
+  assert.match(page, /No invitations or emails were sent/);
+  assert.match(page, /canManageOrganizationRoles && <><button className="secondary"/);
+  assert.match(client, /rpc\/groups_available_for_official_addition/);
+  assert.match(client, /rpc\/add_officials_to_group/);
+  assert.match(migration, /create or replace function public\.can_add_officials_to_group/);
+  assert.match(migration, /array\['organization_director','organization_admin','assignor'\]/);
+  assert.match(migration, /membership\.role in \('event_admin','assignor'\)/);
+  assert.match(migration, /permission to add officials in both groups/);
+  assert.match(migration, /'law18ref_cross_group'/);
+  assert.match(migration, /array\['referee'\]::public\.membership_role\[\]/);
+  assert.match(migration, /'invitation_sent', false/);
+  assert.match(migration, /revoke all on function public\.add_officials_to_group/);
+  assert.match(migration, /grant execute on function public\.add_officials_to_group.*authenticated/);
 });

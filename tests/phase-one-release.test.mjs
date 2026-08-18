@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.24.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.25.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.24.0 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.24\.0/);
+  assert.match(page, /Version 0\.25\.0/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.24.0 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.24.0");
+  assert.equal(JSON.parse(packageJson).version, "0.25.0");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1163,4 +1163,28 @@ test("v0.24.0 securely copies selected officials into another managed group", as
   assert.match(migration, /'invitation_sent', false/);
   assert.match(migration, /revoke all on function public\.add_officials_to_group/);
   assert.match(migration, /grant execute on function public\.add_officials_to_group.*authenticated/);
+});
+
+test("v0.25.0 upgrades assignment board grouping and Site Supervisor schedules", async () => {
+  const [page, styles, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/globals.css"),
+    read("supabase/migrations/20260818173810_site_supervisor_hq_schedule_visibility.sql"),
+  ]);
+  assert.match(page, /Today&apos;s Assignments/);
+  assert.match(page, /assignment-board-venues/);
+  assert.match(page, /Add.*Venues|label="Venues"/s);
+  assert.match(page, /firstAssignmentGroups/);
+  assert.match(page, /collapsedFirstTimes/);
+  assert.match(page, /Group Schedule By/);
+  assert.match(page, /siteSupervisorView/);
+  assert.match(page, /schedule-group-toggle/);
+  assert.doesNotMatch(page, /<details className="panel schedule-group"/);
+  assert.match(styles, /\.field-board-games\{display:flex/);
+  assert.match(styles, /\.schedule-group-toggle.*touch-action:pan-y/);
+  assert.match(migration, /site_supervisor_can_view_operational_game/);
+  assert.match(migration, /target_game\.operational/);
+  assert.match(migration, /like '%hq%'/);
+  assert.match(migration, /site supervisors view visible game crews/);
+  assert.match(migration, /revoke all on function public\.site_supervisor_can_view_operational_game.*public, anon/);
 });

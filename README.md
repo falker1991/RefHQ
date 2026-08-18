@@ -4,7 +4,7 @@ Law18Referee Management is a responsive tournament referee operations MVP provid
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
-Version 0.24.0 lets authorized staff select officials and add them to another group they manage without removing the source-group record or sending email. Version 0.23.2 added an event-day filter to every Assignment Board view. Version 0.23.1 fixed account merges when the surviving record adopts an email held by the secondary record.
+Version 0.25.0 upgrades the Assignment Board with venue filtering, horizontal field staffing cards, and collapsible first-assignment times, while giving Site Supervisors stable field/time schedule groups and view-only HQ operations visibility. Version 0.24.0 lets authorized staff select officials and add them to another group they manage without removing the source-group record or sending email.
 
 Bulk lifecycle management remains available for officials, ratings, and events. Games and assignments are designed to join the same workflow when manual schedule editing is introduced.
 

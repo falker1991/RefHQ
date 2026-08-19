@@ -303,6 +303,26 @@ function administrativeRatingLabel(officialId: string, position: AssignmentRecor
 }
 
 function OfficialEventScheduleModal({ session, official, event, data, initialDate, canEdit, siteSupervisorView, onClose, onEdit }: { session: Law18Session; official: OfficialRecord; event: EventRecord; data: EventData; initialDate?: string; canEdit: boolean; siteSupervisorView: boolean; onClose: () => void; onEdit: () => void }) {
+  useEffect(() => {
+    const scrollPosition = window.scrollY;
+    const previous = {
+      overflow: document.body.style.overflow,
+      position: document.body.style.position,
+      top: document.body.style.top,
+      width: document.body.style.width,
+    };
+    document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollPosition}px`;
+    document.body.style.width = "100%";
+    return () => {
+      document.body.style.overflow = previous.overflow;
+      document.body.style.position = previous.position;
+      document.body.style.top = previous.top;
+      document.body.style.width = previous.width;
+      window.scrollTo(0, scrollPosition);
+    };
+  }, []);
   const refereeGameIds = new Set(data.assignments.filter((assignment) => assignment.official_id === official.id).map((assignment) => assignment.game_id));
   const coachingAssignments = data.coachAssignments.filter((assignment) => assignment.coach_official_id === official.id || assignment.coach_id === official.linked_user_id);
   const coachingGameIds = new Set(coachingAssignments.filter((assignment) => !assignment.full_schedule && assignment.game_id).map((assignment) => assignment.game_id!));
@@ -3821,7 +3841,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.26.0</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.26.1</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

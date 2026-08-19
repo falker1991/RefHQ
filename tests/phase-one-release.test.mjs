@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.26.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.26.1 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.26.0 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.26\.0/);
+  assert.match(page, /Version 0\.26\.1/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.26.0 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.26.0");
+  assert.equal(JSON.parse(packageJson).version, "0.26.1");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1219,4 +1219,13 @@ test("v0.26.0 keeps authentication private and makes shared filters mobile frien
   assert.match(page, />Done\{/);
   assert.match(styles, /\.assignment-filter-menu>\.filter-menu-panel\{position:fixed/);
   assert.match(styles, /min-height:48px/);
+});
+
+test("v0.26.1 locks background scrolling while the official schedule modal scrolls", async () => {
+  const [page, styles] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
+  assert.match(page, /document\.body\.style\.position = "fixed"/);
+  assert.match(page, /window\.scrollTo\(0, scrollPosition\)/);
+  assert.match(styles, /official-event-schedule-dialog\{[^}]*height:min\(780px,calc\(100dvh - 28px\)\)/);
+  assert.match(styles, /official-event-schedule-list\{[^}]*overflow-y:auto[^}]*touch-action:pan-y/);
+  assert.match(styles, /official-event-schedule-card\{[^}]*flex:0 0 auto/);
 });

@@ -1,5 +1,9 @@
 # Law18Referee Management
 
+## v0.27.6
+
+- Suppresses browser-generated headers and footers when printing QR sheets while preserving safe internal page spacing.
+
 ## v0.27.5
 
 - Prints every event-day check-in QR as a separate, clean page with large event and date labels.

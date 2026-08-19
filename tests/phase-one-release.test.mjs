@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.27.5 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.27.6 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.27.5 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.27\.5/);
+  assert.match(page, /Version 0\.27\.6/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.27.5 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.27.5");
+  assert.equal(JSON.parse(packageJson).version, "0.27.6");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1306,5 +1306,11 @@ test("v0.27.5 prints one labeled check-in QR page for every event day", async ()
   assert.match(styles, /\.checkin-print-document\{display:none\}/);
   assert.match(styles, /\.checkin-print-page:last-child\{break-after:auto;page-break-after:auto\}/);
   assert.match(styles, /\.shell>\*:not\(\.page-section\),\.page-section>\*:not\(\.checkin-print-document\)\{display:none!important\}/);
-  assert.equal(JSON.parse(packageJson).version, "0.27.5");
+});
+
+test("v0.27.6 suppresses browser print headers and footers", async () => {
+  const [styles, packageJson] = await Promise.all([read("app/globals.css"), read("package.json")]);
+  assert.match(styles, /@page\{size:portrait;margin:0\}/);
+  assert.match(styles, /\.checkin-print-page\{display:flex!important;box-sizing:border-box;width:100%;height:100vh;padding:\.45in/);
+  assert.equal(JSON.parse(packageJson).version, "0.27.6");
 });

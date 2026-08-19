@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.25.2 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.25.3 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.25.2 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.25\.2/);
+  assert.match(page, /Version 0\.25\.3/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.25.2 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.25.2");
+  assert.equal(JSON.parse(packageJson).version, "0.25.3");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1195,4 +1195,12 @@ test("v0.25.1 filters coaching games by venue or site", async () => {
   assert.match(page, /label="Venue \/ Site"/);
   assert.match(page, /scheduleSitesFilter\.includes\(game\.venue_name \|\| "Unspecified site"\)/);
   assert.match(page, /scheduleSitesFilter, scheduleFieldsFilter/);
+});
+
+test("v0.25.3 filters the officials directory by one or more group roles", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /officials-group-roles:/);
+  assert.match(page, /label="Group Role" options=\{organizationRoleChoices/);
+  assert.match(page, /groupRoleFilters\.some\(\(role\) => officialRoles\.includes\(role\)\)/);
+  assert.match(page, /groupRoleFilters, sortBy/);
 });

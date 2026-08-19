@@ -1,5 +1,9 @@
 # Law18Referee Management
 
+## v0.27.9
+
+- Moves the collapsed Coach Access Summary above the long game-assignment schedule for immediate access.
+
 ## v0.27.8
 
 - Makes the Coaching tab's coach-access summary collapsible and collapsed by default, with the assigned-coach count visible in its header.

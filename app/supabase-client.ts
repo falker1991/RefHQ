@@ -1,4 +1,5 @@
 import { auth, type Law18Session } from "./auth-client";
+import { normalizePhoneNumber } from "./phone";
 
 const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -728,7 +729,7 @@ export async function updateOwnProfile(
   const rows = await rest<Profile[]>(
     session,
     `profiles?id=eq.${enc(session.user.id)}`,
-    { method: "PATCH", body: JSON.stringify(changes) },
+    { method: "PATCH", body: JSON.stringify({ ...changes, phone: normalizePhoneNumber(changes.phone) || null }) },
     "return=representation",
   );
   return rows[0];
@@ -1410,7 +1411,7 @@ export function parseAssignrOfficialsCsv(text: string): OfficialImportRow[] {
         full_name: fullName,
         primary_email: cell(record, headers, "primary email").toLowerCase() || null,
         secondary_email: cell(record, headers, "secondary email").toLowerCase() || null,
-        phone: cell(record, headers, "phone") || null,
+        phone: normalizePhoneNumber(cell(record, headers, "phone")) || null,
         date_of_birth: cell(record, headers, "date of birth") || null,
         badge_level: cell(record, headers, "badge or level") || null,
         ussf_id: cell(record, headers, "ussf id") || null,
@@ -1433,7 +1434,7 @@ export function parseAssignrOfficialsCsv(text: string): OfficialImportRow[] {
         full_name: `${first} ${last}`.trim(),
         primary_email: cell(record, headers, "primary email").toLowerCase() || null,
         secondary_email: cell(record, headers, "secondary email").toLowerCase() || null,
-        phone: cell(record, headers, "mobile phone") || cell(record, headers, "home phone") || null,
+        phone: normalizePhoneNumber(cell(record, headers, "mobile phone") || cell(record, headers, "home phone")) || null,
         date_of_birth: null,
         badge_level: cell(record, headers, "grade/badge level") || cell(record, headers, "ussf referee certification") || null,
         ussf_id: cell(record, headers, "ussf id") || cell(record, headers, "ussf id #") || null,
@@ -1578,7 +1579,7 @@ export async function importOfficials(
       source_display_name: row.full_name,
       email: match?.linked_user_id ? match.email : email,
       secondary_email: personalDetailsLocked ? match?.secondary_email : row.secondary_email,
-      phone: personalDetailsLocked ? match?.phone : row.phone,
+      phone: personalDetailsLocked ? match?.phone : normalizePhoneNumber(row.phone) || null,
       date_of_birth: personalDetailsLocked ? match?.date_of_birth : row.date_of_birth,
       badge_level: row.badge_level,
       ussf_id: row.ussf_id,
@@ -1841,7 +1842,7 @@ export async function createOfficial(
       email: values.email?.trim().toLowerCase() || null,
       secondary_email: values.secondary_email?.trim().toLowerCase() || null,
       date_of_birth: values.date_of_birth || null,
-      phone: values.phone?.trim() || null,
+      phone: normalizePhoneNumber(values.phone) || null,
       badge_level: values.badge_level?.trim() || null,
       ussf_id: values.ussf_id?.trim() || null,
       external_check_in_other: values.external_check_in_other?.trim() || null,
@@ -1885,7 +1886,7 @@ export async function updateOfficial(
       email,
       secondary_email: values.secondary_email?.trim().toLowerCase() || null,
       date_of_birth: values.date_of_birth || null,
-      phone: values.phone?.trim() || null,
+      phone: normalizePhoneNumber(values.phone) || null,
       badge_level: values.badge_level?.trim() || null,
       ussf_id: values.ussf_id?.trim() || null,
       external_check_in_other: values.external_check_in_other?.trim() || null,

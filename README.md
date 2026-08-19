@@ -1,5 +1,17 @@
 # Law18Referee Management
 
+## v0.27.5
+
+- Prints every event-day check-in QR as a separate, clean page with large event and date labels.
+
+## v0.27.4
+
+- Adds Detailed Roster and Attendance Grid sub-tabs to Check-In, with compact aligned official cards and consistent first-assignment-time/field ordering.
+
+## v0.27.3
+
+- Normalizes North American phone numbers to `(000) 000-0000` during imports and edits, standardizes existing stored values, and makes displayed phone numbers callable links.
+
 ## v0.27.2
 
 - Adds role-aware PDF quick guides to the Help modal for each supported active group or event role.

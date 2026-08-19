@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.27.2 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.27.5 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.27.2 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.27\.2/);
+  assert.match(page, /Version 0\.27\.5/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.27.2 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.27.2");
+  assert.equal(JSON.parse(packageJson).version, "0.27.5");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1265,5 +1265,46 @@ test("v0.27.2 exposes quick guides for the user's active roles", async () => {
   assert.match(page, /Law18Ref-Referee-Coach-Quick-Guide\.pdf/);
   assert.match(page, /target="_blank" rel="noreferrer"/);
   assert.match(styles, /Version 0\.27\.2 role-aware quick guides/);
-  assert.equal(JSON.parse(packageJson).version, "0.27.2");
+});
+
+test("v0.27.3 normalizes and links displayed phone numbers", async () => {
+  const [page, client, phone, styles, migration, packageJson] = await Promise.all([
+    read("app/page.tsx"), read("app/supabase-client.ts"), read("app/phone.ts"), read("app/globals.css"),
+    read("supabase/migrations/20260819182024_normalize_official_phone_numbers.sql"), read("package.json"),
+  ]);
+  assert.match(phone, /digits\.length !== 10/);
+  assert.match(phone, /`tel:\+1\$\{digits\}`/);
+  assert.match(page, /function PhoneLink/);
+  assert.match(page, /<PhoneLink className="checkin-phone-link"/);
+  assert.match(page, /<PhoneLink phone=\{official\.phone\} fallback="No phone imported"/);
+  assert.match(client, /normalizePhoneNumber\(cell\(record, headers, "mobile phone"\)/);
+  assert.match(styles, /Version 0\.27\.3 normalized callable phone numbers/);
+  assert.match(migration, /update public\.officials/);
+  assert.match(migration, /update public\.profiles/);
+});
+
+test("v0.27.4 adds aligned detailed and grid check-in views", async () => {
+  const [page, styles, packageJson] = await Promise.all([read("app/page.tsx"), read("app/globals.css"), read("package.json")]);
+  assert.match(page, /useState<"detailed" \| "grid">\("detailed"\)/);
+  assert.match(page, />Detailed Roster<\/button>/);
+  assert.match(page, />Attendance Grid<\/button>/);
+  assert.match(page, /const attendanceGridRoster = visibleRoster\.slice\(\)\.sort/);
+  assert.match(page, /a\.firstField\.localeCompare\(b\.firstField/);
+  assert.match(page, /className="attendance-official-grid"/);
+  assert.match(page, /onClick=\{\(\) => onSelectOfficial\(official\.id, eventDate\)\}/);
+  assert.match(styles, /grid-auto-rows:108px/);
+  assert.match(styles, /Version 0\.27\.4 compact check-in attendance grid/);
+});
+
+test("v0.27.5 prints one labeled check-in QR page for every event day", async () => {
+  const [page, styles, packageJson] = await Promise.all([read("app/page.tsx"), read("app/globals.css"), read("package.json")]);
+  assert.match(page, /const checkInUrlForDate = \(date: string\)/);
+  assert.match(page, /Print All Daily QR Codes/);
+  assert.match(page, /className="checkin-print-document"/);
+  assert.match(page, /eventDates\.map\(\(date\) => <section className="checkin-print-page"/);
+  assert.match(page, /Scan QR code for Referee Check-In/);
+  assert.match(styles, /\.checkin-print-document\{display:none\}/);
+  assert.match(styles, /\.checkin-print-page:last-child\{break-after:auto;page-break-after:auto\}/);
+  assert.match(styles, /\.shell>\*:not\(\.page-section\),\.page-section>\*:not\(\.checkin-print-document\)\{display:none!important\}/);
+  assert.equal(JSON.parse(packageJson).version, "0.27.5");
 });

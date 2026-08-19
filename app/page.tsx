@@ -120,6 +120,7 @@ import {
   type UnifiedAssignment,
 } from "./supabase-client";
 import { exportScheduleExcel, exportSchedulePdf, type ScheduleExportRow } from "./schedule-export";
+import { normalizePhoneNumber, phoneCallHref } from "./phone";
 
 type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups";
 const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups"];
@@ -180,6 +181,11 @@ function displayAppearance(campaign?: { primary_color: string | null; accent_col
 
 function initials(name: string) {
   return name.split(/\s+/).map((word) => word[0]).join("").slice(0, 2).toUpperCase();
+}
+
+function PhoneLink({ phone, fallback = "No phone listed", className }: { phone?: string | null; fallback?: string; className?: string }) {
+  if (!phone) return <span className={className}>{fallback}</span>;
+  return <a className={className ? `${className} phone-link` : "phone-link"} href={phoneCallHref(phone)}>{normalizePhoneNumber(phone)}</a>;
 }
 
 const roleNames: Record<MembershipRole, string> = {
@@ -343,7 +349,7 @@ function OfficialEventScheduleModal({ session, official, event, data, initialDat
   const completionCutoff = Date.now() - (2 * 60 * 60 * 1000);
   return <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) onClose(); }}><section className="confirmation-dialog official-event-schedule-dialog" role="dialog" aria-modal="true" aria-labelledby="official-event-schedule-title">
     <header><div><p className="eyebrow">{siteSupervisorView ? "FULL DAY SCHEDULE" : "FULL EVENT SCHEDULE"}</p><h2 id="official-event-schedule-title">{contextOfficial.full_name}</h2><p>{event.name} · {contextGames.length} assignment{contextGames.length === 1 ? "" : "s"}</p></div><div className="official-schedule-header-actions">{canEdit && <button className="secondary" onClick={onEdit}>Edit Official</button>}<button className="modal-close-button" aria-label="Close schedule" onClick={onClose}>×</button></div></header>
-    <div className="official-contact-summary"><a href={contextOfficial.phone ? `tel:${contextOfficial.phone}` : undefined}><strong>Phone</strong><span>{contextOfficial.phone || "No phone listed"}</span></a><div><strong>Primary Email</strong><span>{contextOfficial.email || "Not provided"}</span></div><div><strong>Secondary Email</strong><span>{contextOfficial.secondary_email || "Not provided"}</span></div><div><strong>Date of Birth</strong><span>{contextOfficial.date_of_birth ? formatDate(contextOfficial.date_of_birth) : "Not provided"}</span></div></div>
+    <div className="official-contact-summary"><div><strong>Phone</strong><PhoneLink phone={contextOfficial.phone} /></div><div><strong>Primary Email</strong><span>{contextOfficial.email || "Not provided"}</span></div><div><strong>Secondary Email</strong><span>{contextOfficial.secondary_email || "Not provided"}</span></div><div><strong>Date of Birth</strong><span>{contextOfficial.date_of_birth ? formatDate(contextOfficial.date_of_birth) : "Not provided"}</span></div></div>
     {siteSupervisorView && <label className="official-schedule-date">Event Date<select value={selectedDate} onChange={(change) => setSelectedDate(change.target.value)}>{availableDates.map((date) => <option value={date} key={date}>{formatDate(date)}</option>)}</select></label>}
     {contextMessage && <p className="pilot-message">{contextMessage}</p>}
     <div className="official-event-schedule-list">{contextGames.map(({ game, selected_position, selected_position_title, within_management_scope, crew }) => {
@@ -800,6 +806,7 @@ function RefereeCheckIn({ event, data, session, onCheckedIn }: { event: EventRec
 function CheckInView({ event, data, session, canManageCheckIns, onRefresh, onSelectOfficial }: { event: EventRecord; data: EventData; session: Law18Session; canManageCheckIns: boolean; onRefresh: () => Promise<void>; onSelectOfficial: (officialId: string, eventDate?: string) => void }) {
   const eventDates = [...new Set(data.games.map((game) => game.starts_at.slice(0, 10)))].sort();
   const [eventDate, setEventDate] = useState(eventDates[0] || event.starts_on);
+  const [rosterView, setRosterView] = useState<"detailed" | "grid">("detailed");
   const [statusFilters, setStatusFilters] = useActiveFilterState<string[]>(`checkin-status:${event.id}`, []);
   const [siteFilters, setSiteFilters] = useActiveFilterState<string[]>(`checkin-sites:${event.id}`, []);
   const [rosterSort, setRosterSort] = useState<"first_assignment" | "last_name" | "field">("first_assignment");
@@ -809,7 +816,8 @@ function CheckInView({ event, data, session, canManageCheckIns, onRefresh, onSel
   const [manualCheckInOfficialId, setManualCheckInOfficialId] = useState<string | null>(null);
   const refreshingRef = useRef(false);
   const previousCheckedRef = useRef<{ date: string; ids: Set<string> } | null>(null);
-  const url = `${window.location.origin}/?event=${event.check_in_slug}&date=${eventDate}${event.guest_check_in_enabled ? "&external=1" : ""}`;
+  const checkInUrlForDate = (date: string) => `${window.location.origin}/?event=${event.check_in_slug}&date=${date}${event.guest_check_in_enabled ? "&external=1" : ""}`;
+  const url = checkInUrlForDate(eventDate);
   const checked = new Set(data.checkIns.filter((item) => item.event_date === eventDate).map((item) => item.official_id));
   const assignedToday = new Set(data.assignments.filter((assignment) => data.games.some((game) => game.id === assignment.game_id && game.starts_at.startsWith(eventDate))).map((assignment) => assignment.official_id));
   const coachingOfficialIds = new Set<string>();
@@ -860,8 +868,14 @@ function CheckInView({ event, data, session, canManageCheckIns, onRefresh, onSel
     .sort((a, b) => {
       if (rosterSort === "last_name") return a.lastName.localeCompare(b.lastName) || a.official.full_name.localeCompare(b.official.full_name);
       if (rosterSort === "field") return a.firstField.localeCompare(b.firstField, undefined, { numeric: true }) || (a.firstGame?.starts_at || "").localeCompare(b.firstGame?.starts_at || "");
-      return (a.firstGame?.starts_at || "9999").localeCompare(b.firstGame?.starts_at || "9999") || a.lastName.localeCompare(b.lastName);
+      return (a.firstGame?.starts_at || "9999").localeCompare(b.firstGame?.starts_at || "9999")
+        || a.firstField.localeCompare(b.firstField, undefined, { numeric: true })
+        || a.lastName.localeCompare(b.lastName);
     });
+  const attendanceGridRoster = visibleRoster.slice().sort((a, b) =>
+    (a.firstGame?.starts_at || "9999").localeCompare(b.firstGame?.starts_at || "9999")
+    || a.firstField.localeCompare(b.firstField, undefined, { numeric: true })
+    || a.lastName.localeCompare(b.lastName));
   const refreshAttendance = useCallback(async () => {
     if (refreshingRef.current) return;
     refreshingRef.current = true;
@@ -927,17 +941,20 @@ function CheckInView({ event, data, session, canManageCheckIns, onRefresh, onSel
   }, [data.checkIns, eventDate]);
   return <section className="page-section">
     <div className="section-title"><div><p className="eyebrow">TOURNAMENT CHECK-IN</p><h1>Arrival station</h1><p>Attendance refreshes every 15 seconds while this page is visible. Last updated {lastUpdated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}.</p></div><div className="checkin-refresh-tools"><label className="day-picker">Event day<select value={eventDate} onChange={(event) => { setEventDate(event.target.value); setSiteFilters([]); }}>{eventDates.map((date) => <option value={date} key={date}>{formatDate(date)}</option>)}</select></label><button className="secondary" disabled={refreshing} onClick={() => refreshAttendance()}>{refreshing ? "Refreshing…" : "Refresh Now"}</button></div></div>
-    <div className="checkin-grid">
-      <article className="panel qr-panel print-qr"><div className="qr"><QRCodeSVG value={url} size={210} /></div><h2>{event.name}</h2><strong>{formatDate(eventDate)}</strong><small>{event.guest_check_in_enabled ? "External Check-In · Account not required" : "Law18Ref account sign-in required"}</small><p>{url}</p><button className="secondary print-button" onClick={() => window.print()}>Print daily QR</button></article>
+    <div className={`checkin-grid ${rosterView === "grid" ? "attendance-grid-active" : ""}`}>
+      <article className="panel qr-panel print-qr"><div className="qr"><QRCodeSVG value={url} size={210} /></div><h2>{event.name}</h2><strong>{formatDate(eventDate)}</strong><small>{event.guest_check_in_enabled ? "External Check-In · Account not required" : "Law18Ref account sign-in required"}</small><p>{url}</p><button className="secondary print-button" onClick={() => window.print()}>Print All Daily QR Codes</button></article>
       <article className="panel roster-panel"><div className="panel-head"><div><p className="eyebrow">LIVE ROSTER</p><h2>{checked.size} checked in</h2><p>{visibleRoster.length} of {roster.length} officials shown</p></div></div>
-        <div className="roster-controls"><AssignmentFilterMenu label="Status" options={[{ id: "checked_in", name: "Checked in" }, { id: "expected", name: "Not yet checked in" }]} selected={statusFilters} onChange={setStatusFilters} /><label>Sort by<select value={rosterSort} onChange={(event) => setRosterSort(event.target.value as typeof rosterSort)}><option value="first_assignment">First assignment time</option><option value="last_name">Last name</option><option value="field">Field</option></select></label><AssignmentFilterMenu label="Site" options={sites.map((site) => ({ id: site, name: site }))} selected={siteFilters} onChange={setSiteFilters} /><SavedFilterControls filterKey={`checkin:${event.id}`} value={{ statusFilters, siteFilters, rosterSort }} onApply={(saved) => { setStatusFilters(saved.statusFilters); setSiteFilters(saved.siteFilters); setRosterSort(saved.rosterSort); }} /></div>
-        {visibleRoster.map(({ official, firstGame, firstAssignment, firstSite, isChecked, isCoachExpected }) => <div className={`official-row ${newArrivals.has(official.id) ? "new-arrival" : ""}`} key={official.id}><span className="avatar">{initials(official.full_name)}</span><div className="official-name"><button className="checkin-official-button" onClick={() => onSelectOfficial(official.id, eventDate)}>{official.full_name}</button><a className="checkin-phone-link" href={official.phone ? `tel:${official.phone}` : undefined}>{official.phone || "No phone listed"}</a><span>{isCoachExpected && !firstAssignment ? `Referee Coach${firstGame ? ` · ${formatTime(firstGame.starts_at)} · ${firstSite}` : ""}` : firstGame ? [formatTime(firstGame.starts_at), firstSite, firstGame.field_name, firstGame.age_group, firstGame.gender, firstAssignment ? positionLabel(firstAssignment.position, firstAssignment.position_title) : null].filter(Boolean).join(" · ") : "No assignment details"}</span></div><div className="checkin-status-actions"><Status checked={isChecked} />{canManageCheckIns && <button className={isChecked ? "text-button undo-checkin-button" : "secondary manual-checkin-button"} disabled={manualCheckInOfficialId === official.id} onClick={() => toggleManualCheckIn(official, isChecked)}>{manualCheckInOfficialId === official.id ? "Updating…" : isChecked ? "Undo Check-In" : "Check In"}</button>}</div></div>)}
+        <div className="checkin-view-tabs" role="tablist" aria-label="Check-in roster view"><button role="tab" aria-selected={rosterView === "detailed"} className={rosterView === "detailed" ? "active" : ""} onClick={() => setRosterView("detailed")}>Detailed Roster</button><button role="tab" aria-selected={rosterView === "grid"} className={rosterView === "grid" ? "active" : ""} onClick={() => setRosterView("grid")}>Attendance Grid</button></div>
+        <div className="roster-controls"><AssignmentFilterMenu label="Status" options={[{ id: "checked_in", name: "Checked in" }, { id: "expected", name: "Not yet checked in" }]} selected={statusFilters} onChange={setStatusFilters} />{rosterView === "detailed" && <label>Sort by<select value={rosterSort} onChange={(event) => setRosterSort(event.target.value as typeof rosterSort)}><option value="first_assignment">First assignment time, then field</option><option value="last_name">Last name</option><option value="field">Field</option></select></label>}<AssignmentFilterMenu label="Site" options={sites.map((site) => ({ id: site, name: site }))} selected={siteFilters} onChange={setSiteFilters} /><SavedFilterControls filterKey={`checkin:${event.id}`} value={{ statusFilters, siteFilters, rosterSort }} onApply={(saved) => { setStatusFilters(saved.statusFilters || []); setSiteFilters(saved.siteFilters || []); setRosterSort(saved.rosterSort || "first_assignment"); }} /></div>
+        {rosterView === "detailed" && visibleRoster.map(({ official, firstGame, firstAssignment, firstSite, isChecked, isCoachExpected }) => <div className={`official-row ${newArrivals.has(official.id) ? "new-arrival" : ""}`} key={official.id}><span className="avatar">{initials(official.full_name)}</span><div className="official-name"><button className="checkin-official-button" onClick={() => onSelectOfficial(official.id, eventDate)}>{official.full_name}</button><PhoneLink className="checkin-phone-link" phone={official.phone} /><span>{isCoachExpected && !firstAssignment ? `Referee Coach${firstGame ? ` · ${formatTime(firstGame.starts_at)} · ${firstSite}` : ""}` : firstGame ? [formatTime(firstGame.starts_at), firstSite, firstGame.field_name, firstGame.age_group, firstGame.gender, firstAssignment ? positionLabel(firstAssignment.position, firstAssignment.position_title) : null].filter(Boolean).join(" · ") : "No assignment details"}</span></div><div className="checkin-status-actions"><Status checked={isChecked} />{canManageCheckIns && <button className={isChecked ? "text-button undo-checkin-button" : "secondary manual-checkin-button"} disabled={manualCheckInOfficialId === official.id} onClick={() => toggleManualCheckIn(official, isChecked)}>{manualCheckInOfficialId === official.id ? "Updating…" : isChecked ? "Undo Check-In" : "Check In"}</button>}</div></div>)}
+        {rosterView === "grid" && <div className="attendance-official-grid">{attendanceGridRoster.map(({ official, firstGame, firstField, isChecked }) => <button className={`attendance-official-card ${isChecked ? "checked-in" : "expected"} ${newArrivals.has(official.id) ? "new-arrival" : ""}`} onClick={() => onSelectOfficial(official.id, eventDate)} key={official.id}><span className="avatar">{initials(official.full_name)}</span><strong title={official.full_name}>{official.full_name}</strong><small>{firstGame ? `${formatTime(firstGame.starts_at)} · ${firstField}` : "No game details"}</small><span className="attendance-card-status">{isChecked ? "✓ Checked in" : "Expected"}</span></button>)}</div>}
         {!roster.length && <EmptyState>No officials are assigned on this date.</EmptyState>}
         {roster.length > 0 && !visibleRoster.length && <EmptyState>No officials match these filters.</EmptyState>}
       </article>
     </div>
     {canSelfCheckIn && <QrScanner onFound={scanForSelf} />}
     {currentOfficial && assignedToday.has(currentOfficial.id) && checked.has(currentOfficial.id) && <><p className="pilot-message staff-self-checkin">✓ {event.check_in_confirmation_message || "You are checked in for this event day."}</p>{!!event.check_in_links?.length && <div className="check-in-links">{event.check_in_links.map((link) => <a className="secondary" href={link.url} target="_blank" rel="noreferrer" key={`${link.title}-${link.url}`}>{link.title}</a>)}</div>}</>}
+    <div className="checkin-print-document" aria-hidden="true">{eventDates.map((date) => <section className="checkin-print-page" key={date}><QRCodeSVG value={checkInUrlForDate(date)} size={430} /><div className="checkin-print-caption"><h1>Scan QR code for Referee Check-In</h1><h2>{event.name}</h2><p>{formatDate(date)}</p></div></section>)}</div>
   </section>;
 }
 
@@ -2091,7 +2108,7 @@ function OfficialsDirectory({
           : listedRoles;
         return <div className={`directory-row ${official.archived_at ? "archived-rating" : ""}`} key={official.id}>
         <div className="official-name-cell">{canManageOfficials && official.source !== "site_owner_profile" && <input className="bulk-row-check" type="checkbox" aria-label={`Select ${official.full_name}`} checked={selectedOfficialIds.includes(official.id)} onChange={(event) => setSelectedOfficialIds((current) => event.target.checked ? [...current, official.id] : current.filter((id) => id !== official.id))} />}<span className="avatar">{initials(official.full_name)}</span><div><button className="official-name-link directory-official-name" onClick={() => beginEdit(official)}>{official.full_name}</button><small>{official.badge_level || "Badge not supplied"}</small></div></div>
-        <div className="directory-contact"><span>{official.email || "Email required"}</span><small>{official.phone || "No phone imported"}</small></div>
+        <div className="directory-contact"><span>{official.email || "Email required"}</span><PhoneLink phone={official.phone} fallback="No phone imported" /></div>
         <span className={`identity-pill ${official.linked_user_id ? "linked" : ""}`}>{official.linked_user_id ? "Account linked" : "Provisional"}</span>
         <span className="directory-roles">{roles.map((role) => <span className="role-badge" key={role}>{roleNames[role]}</span>)}</span>
         <span className="directory-average directory-rating-score">{officialAverage(official.id)?.toFixed(2) || "—"}</span>
@@ -2150,7 +2167,7 @@ function OfficialsDirectory({
       ] as const;
       return <div className="merge-profile-review"><header><span>Information</span><span>Primary Account</span><span>Duplicate Account</span></header><div className="merge-primary-email"><strong>Primary email and login</strong><span>{primary.email || "Not provided"}</span><small>Kept with the primary login</small></div>{primary.personal_contact_locked && <p className="import-note">The primary user locked their personal contact information. Contact fields must remain from that account; badge or level can still be selected.</p>}{fields.map(([key, label, primaryValue, secondaryValue]) => {
         const contactLocked = Boolean(primary.personal_contact_locked) && key !== "badge_level";
-        return <fieldset key={key}><legend>{label}</legend><label className={mergeFieldSources[key] === "primary" ? "selected" : ""}><input type="radio" name={`merge-${key}`} checked={mergeFieldSources[key] === "primary"} onChange={() => setMergeFieldSources((current) => ({ ...current, [key]: "primary" }))} /><span>{primaryValue || "Not provided"}</span></label><label className={mergeFieldSources[key] === "secondary" ? "selected" : ""}><input type="radio" name={`merge-${key}`} disabled={contactLocked} checked={mergeFieldSources[key] === "secondary"} onChange={() => setMergeFieldSources((current) => ({ ...current, [key]: "secondary" }))} /><span>{secondaryValue || "Not provided"}</span></label></fieldset>;
+        return <fieldset key={key}><legend>{label}</legend><label className={mergeFieldSources[key] === "primary" ? "selected" : ""}><input type="radio" name={`merge-${key}`} checked={mergeFieldSources[key] === "primary"} onChange={() => setMergeFieldSources((current) => ({ ...current, [key]: "primary" }))} />{key === "phone" ? <PhoneLink phone={primaryValue} fallback="Not provided" /> : <span>{primaryValue || "Not provided"}</span>}</label><label className={mergeFieldSources[key] === "secondary" ? "selected" : ""}><input type="radio" name={`merge-${key}`} disabled={contactLocked} checked={mergeFieldSources[key] === "secondary"} onChange={() => setMergeFieldSources((current) => ({ ...current, [key]: "secondary" }))} />{key === "phone" ? <PhoneLink phone={secondaryValue} fallback="Not provided" /> : <span>{secondaryValue || "Not provided"}</span>}</label></fieldset>;
       })}</div>;
     })()}<p className="import-note">The duplicate record remains as a hidden import alias so future Assignr schedules continue matching correctly. If both records have logins, the duplicate login loses access to this group.</p><label>Type MERGE to confirm<input value={mergeConfirmation} onChange={(event) => setMergeConfirmation(event.target.value.toUpperCase())} /></label><div className="merge-dialog-actions"><button className="secondary" disabled={busy} onClick={() => { setMerging(false); setMergeConfirmation(""); }}>Cancel</button><button className="danger-button" disabled={busy || !primaryMergeId || !secondaryMergeId || primaryMergeId === secondaryMergeId || mergeConfirmation !== "MERGE"} onClick={mergeAccounts}>{busy ? "Merging…" : "Merge Records"}</button></div></section></div>}
   </section>;
@@ -3193,7 +3210,7 @@ function AccountSettings({
       const updated = await updateOwnProfile(session, {
         full_name: fullName.trim(),
         preferred_name: preferredName.trim() || null,
-        phone: phone.trim() || null,
+        phone: normalizePhoneNumber(phone) || null,
         date_of_birth: dateOfBirth || null,
         secondary_email: secondaryEmail.trim().toLowerCase() || null,
         personal_contact_locked: personalContactLocked,
@@ -3873,7 +3890,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.27.2</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.27.5</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

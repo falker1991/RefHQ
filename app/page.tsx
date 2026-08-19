@@ -849,6 +849,9 @@ function CheckInView({ event, data, session, canManageCheckIns, onRefresh, onSel
       .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
     const firstGame = games[0];
     const firstAssignment = firstGame ? data.assignments.find((assignment) => assignment.game_id === firstGame.id && assignment.official_id === official.id) : undefined;
+    const coachIsFirstAssignment = coachingOfficialIds.has(official.id) && !firstAssignment;
+    const firstTimeFields = firstGame ? [...new Set(games.filter((game) => game.starts_at === firstGame.starts_at).map((game) => game.field_name).filter(Boolean))] : [];
+    const displayedFirstField = coachIsFirstAssignment && firstTimeFields.length !== 1 ? "" : firstTimeFields[0] || firstGame?.field_name || "";
     return {
       official,
       games,
@@ -856,6 +859,8 @@ function CheckInView({ event, data, session, canManageCheckIns, onRefresh, onSel
       firstAssignment,
       firstSite: firstGame?.venue_name || firstGame?.field_name || "Unspecified site",
       firstField: firstGame?.field_name || "Unspecified field",
+      displayedFirstField,
+      firstFieldSortKey: displayedFirstField || "\uffff",
       lastName: official.full_name.trim().split(/\s+/).at(-1) || official.full_name,
       isChecked: checked.has(official.id),
       isCoachExpected: coachingOfficialIds.has(official.id),
@@ -869,12 +874,12 @@ function CheckInView({ event, data, session, canManageCheckIns, onRefresh, onSel
       if (rosterSort === "last_name") return a.lastName.localeCompare(b.lastName) || a.official.full_name.localeCompare(b.official.full_name);
       if (rosterSort === "field") return a.firstField.localeCompare(b.firstField, undefined, { numeric: true }) || (a.firstGame?.starts_at || "").localeCompare(b.firstGame?.starts_at || "");
       return (a.firstGame?.starts_at || "9999").localeCompare(b.firstGame?.starts_at || "9999")
-        || a.firstField.localeCompare(b.firstField, undefined, { numeric: true })
+        || a.firstFieldSortKey.localeCompare(b.firstFieldSortKey, undefined, { numeric: true })
         || a.lastName.localeCompare(b.lastName);
     });
   const attendanceGridRoster = visibleRoster.slice().sort((a, b) =>
     (a.firstGame?.starts_at || "9999").localeCompare(b.firstGame?.starts_at || "9999")
-    || a.firstField.localeCompare(b.firstField, undefined, { numeric: true })
+    || a.firstFieldSortKey.localeCompare(b.firstFieldSortKey, undefined, { numeric: true })
     || a.lastName.localeCompare(b.lastName));
   const refreshAttendance = useCallback(async () => {
     if (refreshingRef.current) return;
@@ -946,8 +951,8 @@ function CheckInView({ event, data, session, canManageCheckIns, onRefresh, onSel
       <article className="panel roster-panel"><div className="panel-head"><div><p className="eyebrow">LIVE ROSTER</p><h2>{checked.size} checked in</h2><p>{visibleRoster.length} of {roster.length} officials shown</p></div></div>
         <div className="checkin-view-tabs" role="tablist" aria-label="Check-in roster view"><button role="tab" aria-selected={rosterView === "detailed"} className={rosterView === "detailed" ? "active" : ""} onClick={() => setRosterView("detailed")}>Detailed Roster</button><button role="tab" aria-selected={rosterView === "grid"} className={rosterView === "grid" ? "active" : ""} onClick={() => setRosterView("grid")}>Attendance Grid</button></div>
         <div className="roster-controls"><AssignmentFilterMenu label="Status" options={[{ id: "checked_in", name: "Checked in" }, { id: "expected", name: "Not yet checked in" }]} selected={statusFilters} onChange={setStatusFilters} />{rosterView === "detailed" && <label>Sort by<select value={rosterSort} onChange={(event) => setRosterSort(event.target.value as typeof rosterSort)}><option value="first_assignment">First assignment time, then field</option><option value="last_name">Last name</option><option value="field">Field</option></select></label>}<AssignmentFilterMenu label="Site" options={sites.map((site) => ({ id: site, name: site }))} selected={siteFilters} onChange={setSiteFilters} /><SavedFilterControls filterKey={`checkin:${event.id}`} value={{ statusFilters, siteFilters, rosterSort }} onApply={(saved) => { setStatusFilters(saved.statusFilters || []); setSiteFilters(saved.siteFilters || []); setRosterSort(saved.rosterSort || "first_assignment"); }} /></div>
-        {rosterView === "detailed" && visibleRoster.map(({ official, firstGame, firstAssignment, firstSite, isChecked, isCoachExpected }) => <div className={`official-row ${newArrivals.has(official.id) ? "new-arrival" : ""}`} key={official.id}><span className="avatar">{initials(official.full_name)}</span><div className="official-name"><button className="checkin-official-button" onClick={() => onSelectOfficial(official.id, eventDate)}>{official.full_name}</button><PhoneLink className="checkin-phone-link" phone={official.phone} /><span>{isCoachExpected && !firstAssignment ? `Referee Coach${firstGame ? ` · ${formatTime(firstGame.starts_at)} · ${firstSite}` : ""}` : firstGame ? [formatTime(firstGame.starts_at), firstSite, firstGame.field_name, firstGame.age_group, firstGame.gender, firstAssignment ? positionLabel(firstAssignment.position, firstAssignment.position_title) : null].filter(Boolean).join(" · ") : "No assignment details"}</span></div><div className="checkin-status-actions"><Status checked={isChecked} />{canManageCheckIns && <button className={isChecked ? "text-button undo-checkin-button" : "secondary manual-checkin-button"} disabled={manualCheckInOfficialId === official.id} onClick={() => toggleManualCheckIn(official, isChecked)}>{manualCheckInOfficialId === official.id ? "Updating…" : isChecked ? "Undo Check-In" : "Check In"}</button>}</div></div>)}
-        {rosterView === "grid" && <div className="attendance-official-grid">{attendanceGridRoster.map(({ official, firstGame, firstField, isChecked }) => <button className={`attendance-official-card ${isChecked ? "checked-in" : "expected"} ${newArrivals.has(official.id) ? "new-arrival" : ""}`} onClick={() => onSelectOfficial(official.id, eventDate)} key={official.id}><span className="avatar">{initials(official.full_name)}</span><strong title={official.full_name}>{official.full_name}</strong><small>{firstGame ? `${formatTime(firstGame.starts_at)} · ${firstField}` : "No game details"}</small><span className="attendance-card-status">{isChecked ? "✓ Checked in" : "Expected"}</span></button>)}</div>}
+        {rosterView === "detailed" && visibleRoster.map(({ official, firstGame, firstAssignment, firstSite, displayedFirstField, isChecked, isCoachExpected }) => <div className={`official-row ${newArrivals.has(official.id) ? "new-arrival" : ""}`} key={official.id}><span className="avatar">{initials(official.full_name)}</span><div className="official-name"><button className="checkin-official-button" onClick={() => onSelectOfficial(official.id, eventDate)}>{official.full_name}</button><PhoneLink className="checkin-phone-link" phone={official.phone} /><span>{isCoachExpected && !firstAssignment ? ["Referee Coach", firstGame ? formatTime(firstGame.starts_at) : null, displayedFirstField || null].filter(Boolean).join(" · ") : firstGame ? [formatTime(firstGame.starts_at), firstSite, firstGame.field_name, firstGame.age_group, firstGame.gender, firstAssignment ? positionLabel(firstAssignment.position, firstAssignment.position_title) : null].filter(Boolean).join(" · ") : "No assignment details"}</span></div><div className="checkin-status-actions"><Status checked={isChecked} />{canManageCheckIns && <button className={isChecked ? "text-button undo-checkin-button" : "secondary manual-checkin-button"} disabled={manualCheckInOfficialId === official.id} onClick={() => toggleManualCheckIn(official, isChecked)}>{manualCheckInOfficialId === official.id ? "Updating…" : isChecked ? "Undo Check-In" : "Check In"}</button>}</div></div>)}
+        {rosterView === "grid" && <div className="attendance-official-grid">{attendanceGridRoster.map(({ official, firstGame, displayedFirstField, isChecked }) => <button className={`attendance-official-card ${isChecked ? "checked-in" : "expected"} ${newArrivals.has(official.id) ? "new-arrival" : ""}`} onClick={() => onSelectOfficial(official.id, eventDate)} key={official.id}><span className="avatar">{initials(official.full_name)}</span><strong title={official.full_name}>{official.full_name}</strong><small>{firstGame ? [formatTime(firstGame.starts_at), displayedFirstField || null].filter(Boolean).join(" · ") : "No game details"}</small><span className="attendance-card-status">{isChecked ? "✓ Checked in" : "Expected"}</span></button>)}</div>}
         {!roster.length && <EmptyState>No officials are assigned on this date.</EmptyState>}
         {roster.length > 0 && !visibleRoster.length && <EmptyState>No officials match these filters.</EmptyState>}
       </article>
@@ -3890,7 +3895,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.27.6</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.27.7</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

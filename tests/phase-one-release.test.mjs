@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.27.6 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.27.7 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.27.6 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.27\.6/);
+  assert.match(page, /Version 0\.27\.7/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.27.6 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.27.6");
+  assert.equal(JSON.parse(packageJson).version, "0.27.7");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1312,5 +1312,14 @@ test("v0.27.6 suppresses browser print headers and footers", async () => {
   const [styles, packageJson] = await Promise.all([read("app/globals.css"), read("package.json")]);
   assert.match(styles, /@page\{size:portrait;margin:0\}/);
   assert.match(styles, /\.checkin-print-page\{display:flex!important;box-sizing:border-box;width:100%;height:100vh;padding:\.45in/);
-  assert.equal(JSON.parse(packageJson).version, "0.27.6");
+});
+
+test("v0.27.7 only shows a coach field when their earliest time has one field", async () => {
+  const [page, packageJson] = await Promise.all([read("app/page.tsx"), read("package.json")]);
+  assert.match(page, /const coachIsFirstAssignment = coachingOfficialIds\.has\(official\.id\) && !firstAssignment/);
+  assert.match(page, /const firstTimeFields = firstGame \? \[\.\.\.new Set\(games\.filter\(\(game\) => game\.starts_at === firstGame\.starts_at\)/);
+  assert.match(page, /const displayedFirstField = coachIsFirstAssignment && firstTimeFields\.length !== 1 \? ""/);
+  assert.match(page, /firstFieldSortKey: displayedFirstField \|\| "\\uffff"/);
+  assert.match(page, /\["Referee Coach", firstGame \? formatTime\(firstGame\.starts_at\) : null, displayedFirstField \|\| null\]/);
+  assert.equal(JSON.parse(packageJson).version, "0.27.7");
 });

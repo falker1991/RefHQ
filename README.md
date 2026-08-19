@@ -1,5 +1,9 @@
 # Law18Referee Management
 
+## v0.27.7
+
+- Omits a misleading first field from Check-In when a referee coach covers multiple fields at their earliest coaching time.
+
 ## v0.27.6
 
 - Suppresses browser-generated headers and footers when printing QR sheets while preserving safe internal page spacing.

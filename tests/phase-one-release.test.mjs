@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.27.9 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.27.10 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.27.9 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.27\.9/);
+  assert.match(page, /Version 0\.27\.10/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.27.9 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.27.9");
+  assert.equal(JSON.parse(packageJson).version, "0.27.10");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1336,8 +1336,19 @@ test("v0.27.8 makes the coach access list collapsible by default", async () => {
 test("v0.27.9 places coach access before the full game schedule", async () => {
   const [page, packageJson] = await Promise.all([read("app/page.tsx"), read("package.json")]);
   const accessSummary = page.indexOf('<details className="panel coach-access-list-section">');
-  const fullSchedule = page.indexOf('<article className="panel coach-schedule-manager">');
+  const fullSchedule = page.indexOf('<details className="panel coach-schedule-manager">');
   assert.ok(accessSummary >= 0);
   assert.ok(fullSchedule > accessSummary);
-  assert.equal(JSON.parse(packageJson).version, "0.27.9");
+});
+
+test("v0.27.10 collapses each coach and the full game schedule", async () => {
+  const [page, styles, packageJson] = await Promise.all([read("app/page.tsx"), read("app/globals.css"), read("package.json")]);
+  assert.match(page, /return <details className="panel coach-access-card"/);
+  assert.match(page, /<summary><span className="official-name-cell"/);
+  assert.match(page, /<details className="panel coach-schedule-manager">/);
+  assert.doesNotMatch(page, /<details className="panel coach-schedule-manager" open>/);
+  assert.match(page, /className="coach-schedule-manager-body"/);
+  assert.match(styles, /Version 0\.27\.10 nested coach and schedule disclosure controls/);
+  assert.match(styles, /\.coach-access-card\[open\]>summary>b:after,\.coach-schedule-manager\[open\]>summary>b:after\{content:"−"\}/);
+  assert.equal(JSON.parse(packageJson).version, "0.27.10");
 });

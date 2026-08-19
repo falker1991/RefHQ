@@ -1,5 +1,9 @@
 # Law18Referee Management
 
+## v0.27.10
+
+- Makes each coach's assigned games collapsible within Coach Access Summary and makes the full game-assignment schedule collapsible by default.
+
 ## v0.27.9
 
 - Moves the collapsed Coach Access Summary above the long game-assignment schedule for immediate access.

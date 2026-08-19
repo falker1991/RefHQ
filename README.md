@@ -1,5 +1,9 @@
 # Law18Referee Management
 
+## v0.27.2
+
+- Adds role-aware PDF quick guides to the Help modal for each supported active group or event role.
+
 ## v0.27.1
 
 - Consolidates the Coaching tab's access summary into one card per referee coach, with all assigned game access listed inside that card.

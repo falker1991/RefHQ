@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.27.1 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.27.2 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.27.1 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.27\.1/);
+  assert.match(page, /Version 0\.27\.2/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.27.1 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.27.1");
+  assert.equal(JSON.parse(packageJson).version, "0.27.2");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1242,15 +1242,28 @@ test("v0.27.0 separates schedule date, filters, and sorting controls", async () 
 });
 
 test("v0.27.1 consolidates coaching access into one card per coach", async () => {
-  const [page, styles, packageJson] = await Promise.all([
+  const [page, styles] = await Promise.all([
     read("app/page.tsx"),
     read("app/globals.css"),
-    read("package.json"),
   ]);
   assert.match(page, /const coachAccessGroups = \[\.\.\.visibleAssignments\.reduce/);
   assert.match(page, /coachAccessGroups\.map\(\(\{ coach, assignments \}\)/);
   assert.match(page, /className="panel coach-access-card"/);
   assert.match(page, /Full event schedule access/);
   assert.match(styles, /Version 0\.27\.1 consolidated coaching-access cards/);
-  assert.equal(JSON.parse(packageJson).version, "0.27.1");
+});
+
+test("v0.27.2 exposes quick guides for the user's active roles", async () => {
+  const [page, styles, packageJson] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/globals.css"),
+    read("package.json"),
+  ]);
+  assert.match(page, /const quickGuidesByRole: Partial<Record<MembershipRole/);
+  assert.match(page, /const activeQuickGuides = \[\.\.\.new Map\(activeGroupRoles/);
+  assert.match(page, /className="role-quick-guides"/);
+  assert.match(page, /Law18Ref-Referee-Coach-Quick-Guide\.pdf/);
+  assert.match(page, /target="_blank" rel="noreferrer"/);
+  assert.match(styles, /Version 0\.27\.2 role-aware quick guides/);
+  assert.equal(JSON.parse(packageJson).version, "0.27.2");
 });

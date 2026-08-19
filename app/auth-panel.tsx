@@ -13,7 +13,7 @@ export function AuthPanel({ onSession, recovery = false, initialMessage = "" }: 
   const [joinToken, setJoinToken] = useState("");
   const [mode, setMode] = useState<"login" | "signup" | "recovery">(recovery ? "recovery" : "login");
   const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("falkref91@gmail.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState(initialMessage);
@@ -108,10 +108,10 @@ export function AuthPanel({ onSession, recovery = false, initialMessage = "" }: 
               ? joinToken ? "Create your account to join the group connected to this invitation." : "Use the same email address your assignor imported from Assignr."
               : joinToken ? "Sign in to join the group connected to this invitation." : "Access tournament check-in, schedules, coaching, and ratings."}
         </p>
-        <form onSubmit={mode === "recovery" ? updatePassword : mode === "signup" ? createAccount : signIn}>
+        <form autoComplete={mode === "login" ? "on" : "off"} onSubmit={mode === "recovery" ? updatePassword : mode === "signup" ? createAccount : signIn}>
           {mode === "signup" && <label>Full name<input value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" required /></label>}
           {mode !== "recovery" && (
-            <label>Email address<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required /></label>
+            <label>Email address<input type="email" name={mode === "login" ? "username" : "law18ref-new-account-email"} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete={mode === "login" ? "username" : "off"} required /></label>
           )}
           <label>{mode === "recovery" ? "New password" : "Password"}<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "recovery" ? "new-password" : "current-password"} minLength={8} required /></label>
           {mode === "recovery" && (

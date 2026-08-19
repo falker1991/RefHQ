@@ -1,5 +1,9 @@
 # Law18Referee Management
 
+## v0.27.1
+
+- Consolidates the Coaching tab's access summary into one card per referee coach, with all assigned game access listed inside that card.
+
 Law18Referee Management is a responsive tournament referee operations MVP provided by FalkSports. It complements Assignr with QR check-in, live attendance, coach assignments, structured assessments, and development history.
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.

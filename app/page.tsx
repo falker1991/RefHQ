@@ -2823,6 +2823,15 @@ function CoachWorkspace({
     ? officialById.get(assignment.coach_official_id)
     : assignment.coach_id ? officialByUser.get(assignment.coach_id) : undefined;
   const gameById = new Map(data.games.map((game) => [game.id, game]));
+  const coachAccessGroups = [...visibleAssignments.reduce((groups, assignment) => {
+    const coach = assignmentCoach(assignment);
+    const coachKey = coach?.id || assignment.coach_official_id || assignment.coach_id || `assignment-${assignment.id}`;
+    const existing = groups.get(coachKey);
+    if (existing) existing.assignments.push(assignment);
+    else groups.set(coachKey, { coach, assignments: [assignment] });
+    return groups;
+  }, new Map<string, { coach?: OfficialRecord; assignments: CoachAssignmentRecord[] }>()).values()]
+    .sort((left, right) => (left.coach?.full_name || "Linked coach account").localeCompare(right.coach?.full_name || "Linked coach account"));
   const scheduleGames = data.games.filter((game) => !game.operational).sort((a, b) => a.starts_at.localeCompare(b.starts_at) || a.field_name.localeCompare(b.field_name, undefined, { numeric: true }));
   const scheduleDates = [...new Set(scheduleGames.map((game) => game.starts_at.slice(0, 10)))];
   const scheduleSites = [...new Set(scheduleGames.map((game) => game.venue_name || "Unspecified site"))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
@@ -2925,11 +2934,20 @@ function CoachWorkspace({
         return <div className={`coach-schedule-row${selectedGameIds.includes(game.id) ? " selected" : ""}`} key={game.id}><input className="coach-game-checkbox" type="checkbox" aria-label={`Select ${game.home_team} versus ${game.away_team}`} checked={selectedGameIds.includes(game.id)} onChange={(event) => setSelectedGameIds((current) => event.target.checked ? [...new Set([...current, game.id])] : current.filter((id) => id !== game.id))} /><time><strong>{formatTime(game.starts_at)}</strong><small>{formatDate(game.starts_at)}</small></time><div><strong>{game.home_team} vs. {game.away_team}</strong><small>{game.field_name}{game.division ? ` · ${game.division}` : ""}</small><span>{assigned.length ? `Assigned: ${assigned.join(", ")}` : "No coach assigned"}</span></div><select aria-label={`Coach for ${game.home_team} versus ${game.away_team}`} value={gameCoachSelections[game.id] || ""} onChange={(event) => setGameCoachSelections((current) => ({ ...current, [game.id]: event.target.value }))}><option value="">Choose coach</option>{linkedOfficials.map((official) => <option value={official.linked_user_id!} key={official.id}>{official.full_name}</option>)}</select><button className="secondary" disabled={busy || !gameCoachSelections[game.id]} onClick={() => assignScheduleGame(game.id)}>Assign</button></div>;
       })}{!filteredScheduleGames.length && <EmptyState>No games match these schedule filters.</EmptyState>}</div>
     </article>}
-    <div className="coach-assignment-list">{visibleAssignments.map((assignment) => {
-      const coach = assignmentCoach(assignment);
-      const game = assignment.game_id ? gameById.get(assignment.game_id) : null;
-      return <article className="panel coach-scope-card" key={assignment.id}><div className="official-name-cell"><span className="avatar">{initials(coach?.full_name || "Coach")}</span><div><strong>{coach?.full_name || "Linked coach account"}</strong><small>{assignment.full_schedule ? "Full event schedule" : game ? `${formatDate(game.starts_at)} · ${formatTime(game.starts_at)} · ${game.field_name}` : "Selected game"}</small></div></div>{game && <p>{game.home_team} vs. {game.away_team}</p>}{canManage && <button className="text-button" disabled={busy} onClick={() => removeAssignment(assignment.id)}>Remove</button>}</article>;
-    })}{!visibleAssignments.length && <EmptyState>{canManage ? "No referee coaches have been assigned yet." : "No coaching schedule is assigned to your account."}</EmptyState>}</div>
+    <div className="coach-assignment-list">{coachAccessGroups.map(({ coach, assignments }) => {
+      const hasFullSchedule = assignments.some((assignment) => assignment.full_schedule);
+      const gameAssignments = assignments
+        .filter((assignment) => assignment.game_id)
+        .map((assignment) => ({ assignment, game: gameById.get(assignment.game_id!) }))
+        .sort((left, right) => (left.game?.starts_at || "").localeCompare(right.game?.starts_at || "") || (left.game?.field_name || "").localeCompare(right.game?.field_name || "", undefined, { numeric: true }));
+      return <article className="panel coach-access-card" key={coach?.id || assignments[0].id}>
+        <header className="official-name-cell"><span className="avatar">{initials(coach?.full_name || "Coach")}</span><div><strong>{coach?.full_name || "Linked coach account"}</strong><small>{hasFullSchedule ? "Full event schedule access" : `${gameAssignments.length} assigned game${gameAssignments.length === 1 ? "" : "s"}`}</small></div></header>
+        <div className="coach-access-summary">
+          {hasFullSchedule && <div className="coach-access-row"><div><strong>Full Event Schedule</strong><small>Access to every game in this event</small></div>{canManage && assignments.filter((assignment) => assignment.full_schedule).map((assignment) => <button className="text-button" disabled={busy} onClick={() => removeAssignment(assignment.id)} key={assignment.id}>Remove</button>)}</div>}
+          {!hasFullSchedule && gameAssignments.map(({ assignment, game }) => <div className="coach-access-row" key={assignment.id}><div><strong>{game ? `${formatDate(game.starts_at)} · ${formatTime(game.starts_at)} · ${game.field_name}` : "Selected game"}</strong>{game && <small>{game.home_team} vs. {game.away_team}</small>}</div>{canManage && <button className="text-button" disabled={busy} onClick={() => removeAssignment(assignment.id)}>Remove</button>}</div>)}
+        </div>
+      </article>;
+    })}{!coachAccessGroups.length && <EmptyState>{canManage ? "No referee coaches have been assigned yet." : "No coaching schedule is assigned to your account."}</EmptyState>}</div>
   </section>;
 }
 
@@ -3843,7 +3861,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.27.0</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.27.1</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

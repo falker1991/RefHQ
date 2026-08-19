@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.27.7 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.27.8 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.27.7 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.27\.7/);
+  assert.match(page, /Version 0\.27\.8/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.27.7 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.27.7");
+  assert.equal(JSON.parse(packageJson).version, "0.27.8");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1321,5 +1321,15 @@ test("v0.27.7 only shows a coach field when their earliest time has one field", 
   assert.match(page, /const displayedFirstField = coachIsFirstAssignment && firstTimeFields\.length !== 1 \? ""/);
   assert.match(page, /firstFieldSortKey: displayedFirstField \|\| "\\uffff"/);
   assert.match(page, /\["Referee Coach", firstGame \? formatTime\(firstGame\.starts_at\) : null, displayedFirstField \|\| null\]/);
-  assert.equal(JSON.parse(packageJson).version, "0.27.7");
+});
+
+test("v0.27.8 makes the coach access list collapsible by default", async () => {
+  const [page, styles, packageJson] = await Promise.all([read("app/page.tsx"), read("app/globals.css"), read("package.json")]);
+  assert.match(page, /<details className="panel coach-access-list-section"><summary>/);
+  assert.doesNotMatch(page, /<details className="panel coach-access-list-section" open>/);
+  assert.match(page, /Coach Access Summary/);
+  assert.match(page, /coachAccessGroups\.length} assigned coach/);
+  assert.match(styles, /Version 0\.27\.8 collapsible coach access summary/);
+  assert.match(styles, /\.coach-access-list-section\[open\]>summary b:after\{content:"−"\}/);
+  assert.equal(JSON.parse(packageJson).version, "0.27.8");
 });

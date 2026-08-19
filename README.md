@@ -1,5 +1,9 @@
 # Law18Referee Management
 
+## v0.27.8
+
+- Makes the Coaching tab's coach-access summary collapsible and collapsed by default, with the assigned-coach count visible in its header.
+
 ## v0.27.7
 
 - Omits a misleading first field from Check-In when a referee coach covers multiple fields at their earliest coaching time.

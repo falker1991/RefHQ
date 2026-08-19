@@ -2956,7 +2956,7 @@ function CoachWorkspace({
         return <div className={`coach-schedule-row${selectedGameIds.includes(game.id) ? " selected" : ""}`} key={game.id}><input className="coach-game-checkbox" type="checkbox" aria-label={`Select ${game.home_team} versus ${game.away_team}`} checked={selectedGameIds.includes(game.id)} onChange={(event) => setSelectedGameIds((current) => event.target.checked ? [...new Set([...current, game.id])] : current.filter((id) => id !== game.id))} /><time><strong>{formatTime(game.starts_at)}</strong><small>{formatDate(game.starts_at)}</small></time><div><strong>{game.home_team} vs. {game.away_team}</strong><small>{game.field_name}{game.division ? ` · ${game.division}` : ""}</small><span>{assigned.length ? `Assigned: ${assigned.join(", ")}` : "No coach assigned"}</span></div><select aria-label={`Coach for ${game.home_team} versus ${game.away_team}`} value={gameCoachSelections[game.id] || ""} onChange={(event) => setGameCoachSelections((current) => ({ ...current, [game.id]: event.target.value }))}><option value="">Choose coach</option>{linkedOfficials.map((official) => <option value={official.linked_user_id!} key={official.id}>{official.full_name}</option>)}</select><button className="secondary" disabled={busy || !gameCoachSelections[game.id]} onClick={() => assignScheduleGame(game.id)}>Assign</button></div>;
       })}{!filteredScheduleGames.length && <EmptyState>No games match these schedule filters.</EmptyState>}</div>
     </article>}
-    <div className="coach-assignment-list">{coachAccessGroups.map(({ coach, assignments }) => {
+    <details className="panel coach-access-list-section"><summary><span><strong>Coach Access Summary</strong><small>{coachAccessGroups.length} assigned coach{coachAccessGroups.length === 1 ? "" : "es"}</small></span><b aria-hidden="true" /></summary><div className="coach-assignment-list">{coachAccessGroups.map(({ coach, assignments }) => {
       const hasFullSchedule = assignments.some((assignment) => assignment.full_schedule);
       const gameAssignments = assignments
         .filter((assignment) => assignment.game_id)
@@ -2969,7 +2969,7 @@ function CoachWorkspace({
           {!hasFullSchedule && gameAssignments.map(({ assignment, game }) => <div className="coach-access-row" key={assignment.id}><div><strong>{game ? `${formatDate(game.starts_at)} · ${formatTime(game.starts_at)} · ${game.field_name}` : "Selected game"}</strong>{game && <small>{game.home_team} vs. {game.away_team}</small>}</div>{canManage && <button className="text-button" disabled={busy} onClick={() => removeAssignment(assignment.id)}>Remove</button>}</div>)}
         </div>
       </article>;
-    })}{!coachAccessGroups.length && <EmptyState>{canManage ? "No referee coaches have been assigned yet." : "No coaching schedule is assigned to your account."}</EmptyState>}</div>
+    })}{!coachAccessGroups.length && <EmptyState>{canManage ? "No referee coaches have been assigned yet." : "No coaching schedule is assigned to your account."}</EmptyState>}</div></details>
   </section>;
 }
 
@@ -3895,7 +3895,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.27.7</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.27.8</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

@@ -1,5 +1,15 @@
 # Law18Referee Management
 
+Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
+
+## v0.27.12
+
+- Aligns Referee, AR, and Fourth Official columns consistently across games in the desktop Schedule view.
+
+## v0.27.11
+
+- Redesigns Schedule assignment editing as a contained, stacked crew list with Position and Official aligned on every row.
+
 ## v0.27.10
 
 - Makes each coach's assigned games collapsible within Coach Access Summary and makes the full game-assignment schedule collapsible by default.

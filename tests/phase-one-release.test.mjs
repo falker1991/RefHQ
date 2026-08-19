@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.27.10 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.27.12 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.27.10 uses the dashboard loading label, favicon metadata, and pr
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.27\.10/);
+  assert.match(page, /Version 0\.27\.12/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.27.10 uses the dashboard loading label, favicon metadata, and pr
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.27.10");
+  assert.equal(JSON.parse(packageJson).version, "0.27.12");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1350,5 +1350,24 @@ test("v0.27.10 collapses each coach and the full game schedule", async () => {
   assert.match(page, /className="coach-schedule-manager-body"/);
   assert.match(styles, /Version 0\.27\.10 nested coach and schedule disclosure controls/);
   assert.match(styles, /\.coach-access-card\[open\]>summary>b:after,\.coach-schedule-manager\[open\]>summary>b:after\{content:"−"\}/);
-  assert.equal(JSON.parse(packageJson).version, "0.27.10");
+});
+
+test("v0.27.11 contains and aligns schedule assignment editing", async () => {
+  const [page, styles, packageJson] = await Promise.all([read("app/page.tsx"), read("app/globals.css"), read("package.json")]);
+  assert.match(page, /className="assignment-position-field">Position<select/);
+  assert.match(page, /className="assignment-official-field">Official<select/);
+  assert.match(page, /className="assignment-display-title">Display title \(optional\)/);
+  assert.match(page, /className="text-button assignment-remove-button"/);
+  assert.match(styles, /Version 0\.27\.11 contained assignment editor crew rows/);
+  assert.match(styles, /max-width:calc\(100vw - 24px\);overflow-x:hidden/);
+  assert.match(styles, /\.assignment-display-title\{grid-column:2\/4\}/);
+  assert.match(styles, /@media\(max-width:390px\)\{\.assignment-editor-row\{grid-template-columns:1fr\}/);
+});
+
+test("v0.27.12 aligns schedule crew positions across games", async () => {
+  const [styles, packageJson] = await Promise.all([read("app/globals.css"), read("package.json")]);
+  assert.match(styles, /Version 0\.27\.12 keeps crew positions aligned between schedule games/);
+  assert.match(styles, /grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  assert.match(styles, /@media\(min-width:701px\) and \(max-width:900px\).*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.equal(JSON.parse(packageJson).version, "0.27.12");
 });

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.29.2 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.29.3 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.29.2 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.29\.2/);
+  assert.match(page, /Version 0\.29\.3/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.29.2 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.29.2");
+  assert.equal(JSON.parse(packageJson).version, "0.29.3");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1249,6 +1249,12 @@ test("v0.29.2 imports nonblank assignment contact details into the officials dir
   assert.match(page, /Nonblank email addresses and phone numbers in this assignments export will also update matching officials/);
 });
 
+test("v0.29.3 prefers an unambiguous name when assignment emails are shared", async () => {
+  const client = await read("app/supabase-client.ts");
+  assert.match(client, /const matched = \(nameMatches\.length === 1 \? nameMatches\[0\] : undefined\) \|\| emailMatch/);
+  assert.match(client, /const officialId = \(nameMatches\.length === 1 \? nameMatches\[0\]\.id : undefined\) \|\| emailMatch/);
+});
+
 test("v0.27.0 separates schedule date, filters, and sorting controls", async () => {
   const [page, styles] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
   assert.match(page, /className="section-title schedule-section-title"/);
@@ -1432,5 +1438,5 @@ test("v0.28.1 keeps schedule crew columns aligned without range-query support", 
   assert.match(styles, /\.schedule-crew-list>span\{box-sizing:border-box;flex:0 0 calc\(\(100% - 21px\)\/4\)\}/);
   assert.match(styles, /@media\(max-width:900px\)\{\.schedule-crew-list>span\{flex-basis:calc\(\(100% - 7px\)\/2\)\}\}/);
   assert.match(styles, /@media\(max-width:700px\)\{\.schedule-crew-list>span\{flex-basis:100%\}\}/);
-  assert.equal(JSON.parse(packageJson).version, "0.29.2");
+  assert.equal(JSON.parse(packageJson).version, "0.29.3");
 });

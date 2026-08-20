@@ -2,6 +2,10 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.29.3
+
+- Corrects Assignr contact and assignment matching when two officials share an email address. An unambiguous official name now takes precedence over email so each person's contact details and game assignments remain on the correct directory record.
+
 ## v0.29.2
 
 - Uses nonblank email addresses and mobile phone numbers from Assignr Assignments exports to create or update Officials Directory records during a schedule import. Existing contact data is preserved when an imported cell is blank, personal contact locks remain enforced, and duplicate primary emails are not reassigned.

@@ -1811,7 +1811,10 @@ export async function importTournament(
   contactsByName.forEach((contact, key) => {
     const nameMatches = byName.get(key) || [];
     const emailMatch = contact.email ? byEmail.get(contact.email) : undefined;
-    const matched = emailMatch || (nameMatches.length === 1 ? nameMatches[0] : undefined);
+    // A primary email can legitimately be shared (for example, by siblings).
+    // Prefer an unambiguous imported display-name match so contact details and
+    // assignments are never moved onto the other person's record.
+    const matched = (nameMatches.length === 1 ? nameMatches[0] : undefined) || emailMatch;
     if (!matched) {
       const emailAvailable = contact.email && !claimedEmails.has(contact.email);
       newOfficials.push({
@@ -1899,9 +1902,9 @@ export async function importTournament(
   };
   const assignmentPayload = assignmentRows.map((row) => {
     const gameId = gameByExternalId.get(row.external_id)?.id;
-    const emailMatch = row.official_email ? officialByEmail.get(row.official_email)?.id : undefined;
     const nameMatches = officialByName.get(normalizeOfficialName(row.official_name)) || [];
-    const officialId = emailMatch || (nameMatches.length === 1 ? nameMatches[0].id : undefined);
+    const emailMatch = row.official_email ? officialByEmail.get(row.official_email)?.id : undefined;
+    const officialId = (nameMatches.length === 1 ? nameMatches[0].id : undefined) || emailMatch;
     if (!gameId || !officialId) throw new Error(`Unable to match assignment for game ${row.external_id}.`);
     return {
       game_id: gameId,

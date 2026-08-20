@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.27.12 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.27.14 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.27.12 uses the dashboard loading label, favicon metadata, and pr
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.27\.12/);
+  assert.match(page, /Version 0\.27\.14/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.27.12 uses the dashboard loading label, favicon metadata, and pr
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.27.12");
+  assert.equal(JSON.parse(packageJson).version, "0.27.14");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1369,5 +1369,23 @@ test("v0.27.12 aligns schedule crew positions across games", async () => {
   assert.match(styles, /Version 0\.27\.12 keeps crew positions aligned between schedule games/);
   assert.match(styles, /grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
   assert.match(styles, /@media\(min-width:701px\) and \(max-width:900px\).*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
-  assert.equal(JSON.parse(packageJson).version, "0.27.12");
+});
+
+test("v0.27.13 scans QR codes without requiring BarcodeDetector", async () => {
+  const [page, packageJson] = await Promise.all([read("app/page.tsx"), read("package.json")]);
+  assert.match(page, /import jsQR from "jsqr"/);
+  assert.match(page, /const detector = Detector \? new Detector/);
+  assert.match(page, /rawValue = jsQR\(frame\.data, frame\.width, frame\.height/);
+  assert.doesNotMatch(page, /!\("BarcodeDetector" in window\)/);
+});
+
+test("v0.27.14 collapses staff QR controls and keeps referee check-in scanner-only", async () => {
+  const [page, styles, packageJson] = await Promise.all([read("app/page.tsx"), read("app/globals.css"), read("package.json")]);
+  assert.match(page, /<details className="panel qr-panel qr-panel-disclosure print-qr">/);
+  assert.doesNotMatch(page, /<details className="panel qr-panel qr-panel-disclosure print-qr" open/);
+  assert.match(page, /isStaff \? <CheckInView[\s\S]*?<RefereeCheckIn/);
+  assert.match(page, /\{!isCheckedIn && <QrScanner onFound=\{scanned\} \/>\}/);
+  assert.doesNotMatch(page.match(/function RefereeCheckIn[\s\S]*?function CheckInView/)?.[0] || "", /QRCodeSVG/);
+  assert.match(styles, /Version 0\.27\.14 collapsible staff-only check-in QR card/);
+  assert.equal(JSON.parse(packageJson).version, "0.27.14");
 });

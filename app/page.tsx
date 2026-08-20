@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
+import jsQR from "jsqr";
 import { QRCodeSVG } from "qrcode.react";
 import { AuthPanel } from "./auth-panel";
 import { auth, isSessionExpiredError, type Law18Session } from "./auth-client";
@@ -659,40 +660,64 @@ function PersonalCheckInHub({ session, events }: { session: Law18Session; events
 function QrScanner({ onFound }: { onFound: (rawValue: string) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const scanTimerRef = useRef<number | null>(null);
   const [scanning, setScanning] = useState(false);
   const [message, setMessage] = useState("");
 
   async function start() {
-    if (!navigator.mediaDevices?.getUserMedia || !("BarcodeDetector" in window)) {
-      setMessage("This browser cannot open the in-app scanner. Try the latest version of your mobile browser.");
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setMessage("This browser cannot access the camera. Open Law18Ref in Safari or Chrome and try again.");
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      setMessage("");
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
       streamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
       setScanning(true);
-      const Detector = (window as unknown as { BarcodeDetector: new (options: { formats: string[] }) => { detect: (source: HTMLVideoElement) => Promise<{ rawValue: string }[]> } }).BarcodeDetector;
-      const detector = new Detector({ formats: ["qr_code"] });
+      const Detector = (window as unknown as { BarcodeDetector?: new (options: { formats: string[] }) => { detect: (source: HTMLVideoElement) => Promise<{ rawValue: string }[]> } }).BarcodeDetector;
+      const detector = Detector ? new Detector({ formats: ["qr_code"] }) : null;
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d", { willReadFrequently: true });
       const scan = async () => {
         if (!streamRef.current || !videoRef.current) return;
-        const codes = await detector.detect(videoRef.current).catch(() => []);
-        if (codes.length) {
+        const video = videoRef.current;
+        let rawValue = "";
+        if (detector) {
+          const codes = await detector.detect(video).catch(() => []);
+          rawValue = codes[0]?.rawValue || "";
+        } else if (context && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth && video.videoHeight) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const frame = context.getImageData(0, 0, canvas.width, canvas.height);
+          rawValue = jsQR(frame.data, frame.width, frame.height, { inversionAttempts: "dontInvert" })?.data || "";
+        }
+        if (rawValue) {
           streamRef.current.getTracks().forEach((track) => track.stop());
           streamRef.current = null;
           setScanning(false);
-          onFound(codes[0].rawValue);
+          onFound(rawValue);
           return;
         }
-        window.setTimeout(scan, 350);
+        scanTimerRef.current = window.setTimeout(scan, detector ? 350 : 180);
       };
-      window.setTimeout(scan, 600);
-    } catch {
-      setMessage("Camera access was not available. Allow camera permission and try again.");
+      scanTimerRef.current = window.setTimeout(scan, 600);
+    } catch (reason) {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      setScanning(false);
+      setMessage(reason instanceof DOMException && reason.name === "NotAllowedError" ? "Camera access is blocked. Allow camera access for Law18Ref in your browser settings, then try again." : "The camera could not be opened. Close other apps using the camera and try again.");
     }
   }
 
-  useEffect(() => () => streamRef.current?.getTracks().forEach((track) => track.stop()), []);
+  useEffect(() => () => {
+    if (scanTimerRef.current !== null) window.clearTimeout(scanTimerRef.current);
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
   return <section className="panel scanner-card" id="scan">
     <div><p className="eyebrow">EVENT QR</p><h2>Scan at referee headquarters</h2><p>Use Law18Referee Management or your phone’s Camera app.</p></div>
     <video ref={videoRef} autoPlay muted playsInline className={scanning ? "scanner-video active" : "scanner-video"} />
@@ -947,7 +972,7 @@ function CheckInView({ event, data, session, canManageCheckIns, onRefresh, onSel
   return <section className="page-section">
     <div className="section-title"><div><p className="eyebrow">TOURNAMENT CHECK-IN</p><h1>Arrival station</h1><p>Attendance refreshes every 15 seconds while this page is visible. Last updated {lastUpdated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}.</p></div><div className="checkin-refresh-tools"><label className="day-picker">Event day<select value={eventDate} onChange={(event) => { setEventDate(event.target.value); setSiteFilters([]); }}>{eventDates.map((date) => <option value={date} key={date}>{formatDate(date)}</option>)}</select></label><button className="secondary" disabled={refreshing} onClick={() => refreshAttendance()}>{refreshing ? "Refreshing…" : "Refresh Now"}</button></div></div>
     <div className={`checkin-grid ${rosterView === "grid" ? "attendance-grid-active" : ""}`}>
-      <article className="panel qr-panel print-qr"><div className="qr"><QRCodeSVG value={url} size={210} /></div><h2>{event.name}</h2><strong>{formatDate(eventDate)}</strong><small>{event.guest_check_in_enabled ? "External Check-In · Account not required" : "Law18Ref account sign-in required"}</small><p>{url}</p><button className="secondary print-button" onClick={() => window.print()}>Print All Daily QR Codes</button></article>
+      <details className="panel qr-panel qr-panel-disclosure print-qr"><summary><span><span className="eyebrow">ON-SITE CHECK-IN</span><strong>Check-In QR Code</strong><small>{formatDate(eventDate)}</small></span><b>Show QR Code</b></summary><div className="qr-panel-content"><div className="qr"><QRCodeSVG value={url} size={210} /></div><h2>{event.name}</h2><strong>{formatDate(eventDate)}</strong><small>{event.guest_check_in_enabled ? "External Check-In · Account not required" : "Law18Ref account sign-in required"}</small><p>{url}</p><button className="secondary print-button" onClick={() => window.print()}>Print All Daily QR Codes</button></div></details>
       <article className="panel roster-panel"><div className="panel-head"><div><p className="eyebrow">LIVE ROSTER</p><h2>{checked.size} checked in</h2><p>{visibleRoster.length} of {roster.length} officials shown</p></div></div>
         <div className="checkin-view-tabs" role="tablist" aria-label="Check-in roster view"><button role="tab" aria-selected={rosterView === "detailed"} className={rosterView === "detailed" ? "active" : ""} onClick={() => setRosterView("detailed")}>Detailed Roster</button><button role="tab" aria-selected={rosterView === "grid"} className={rosterView === "grid" ? "active" : ""} onClick={() => setRosterView("grid")}>Attendance Grid</button></div>
         <div className="roster-controls"><AssignmentFilterMenu label="Status" options={[{ id: "checked_in", name: "Checked in" }, { id: "expected", name: "Not yet checked in" }]} selected={statusFilters} onChange={setStatusFilters} />{rosterView === "detailed" && <label>Sort by<select value={rosterSort} onChange={(event) => setRosterSort(event.target.value as typeof rosterSort)}><option value="first_assignment">First assignment time, then field</option><option value="last_name">Last name</option><option value="field">Field</option></select></label>}<AssignmentFilterMenu label="Site" options={sites.map((site) => ({ id: site, name: site }))} selected={siteFilters} onChange={setSiteFilters} /><SavedFilterControls filterKey={`checkin:${event.id}`} value={{ statusFilters, siteFilters, rosterSort }} onApply={(saved) => { setStatusFilters(saved.statusFilters || []); setSiteFilters(saved.siteFilters || []); setRosterSort(saved.rosterSort || "first_assignment"); }} /></div>
@@ -3895,7 +3920,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.27.12</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.27.14</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

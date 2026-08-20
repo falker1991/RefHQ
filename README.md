@@ -2,6 +2,14 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.27.14
+
+- Makes the administrative check-in QR card collapsible and collapsed by default while keeping QR generation and printing out of referee-only and coach-only views.
+
+## v0.27.13
+
+- Adds an in-app QR decoder fallback for mobile browsers, including iPhone Safari, that do not expose the native BarcodeDetector API.
+
 ## v0.27.12
 
 - Aligns Referee, AR, and Fourth Official columns consistently across games in the desktop Schedule view.

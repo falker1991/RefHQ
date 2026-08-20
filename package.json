@@ -1,6 +1,6 @@
 {
   "name": "law18referee-management",
-  "version": "0.27.12",
+  "version": "0.27.14",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -17,6 +17,7 @@
     "drizzle-orm": "0.45.2",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
+    "jsqr": "^1.4.0",
     "next": "16.2.6",
     "qrcode.react": "4.2.0",
     "react": "19.2.6",

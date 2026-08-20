@@ -2,6 +2,11 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.30.2
+
+- Adds live first-name or last-name search to both administrative Check-In roster views.
+- Shows each recorded check-in's time and source in the Detailed Roster, distinguishing manual, External Check-In, and Law18Ref account check-ins.
+
 ## v0.30.1
 
 - Adds an event-level External Check-In completion mode. Events can retain the existing schedule-review confirmation step or check an official in immediately after their required identity details match.

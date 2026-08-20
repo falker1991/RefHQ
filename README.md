@@ -2,6 +2,12 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.31.3
+
+- Fixes Site Supervisor schedules displaying assigned crew positions as Unassigned.
+- Adds narrowly scoped official-name visibility for crews on games the supervisor is already permitted to view.
+- Does not expose the full group officials directory or crews outside the supervisor's assigned event scope.
+
 ## v0.31.2
 
 - Adds a prominent full-width schedule link immediately below the welcome area on every dashboard.

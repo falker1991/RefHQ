@@ -2,6 +2,13 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.31.0
+
+- Moves primary page navigation from the fixed header into a right-side tray opened by the user badge.
+- Combines role-aware page links, account identity, roles, account settings, groups, appearance controls, and sign-out in one scrollable responsive tray.
+- Keeps Help, Refresh, and Notifications immediately available in the compact fixed header.
+- Supports closing the tray with its close button, the Escape key, a navigation choice, or a click outside the tray.
+
 ## v0.30.5
 
 - Expands Help according to the active role hierarchy. Users see navigation instructions and available PDF quick guides for their own active roles and every subordinate role they oversee.

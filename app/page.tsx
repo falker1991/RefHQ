@@ -3615,8 +3615,15 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       if (!(event.target as Element).closest?.(".account-menu")) setAccountOpen(false);
       if (!(event.target as Element).closest?.(".notification-menu")) setNotificationsOpen(false);
     };
+    const closeAccountTray = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAccountOpen(false);
+    };
     document.addEventListener("pointerdown", closeDropdowns);
-    return () => document.removeEventListener("pointerdown", closeDropdowns);
+    document.addEventListener("keydown", closeAccountTray);
+    return () => {
+      document.removeEventListener("pointerdown", closeDropdowns);
+      document.removeEventListener("keydown", closeAccountTray);
+    };
   }, []);
   const allRoles = new Set<MembershipRole>([
     ...(profile?.is_site_owner ? ["site_owner" as MembershipRole] : []),
@@ -3965,7 +3972,6 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
   return <main>
     <header className="topbar">
       <button className="brand" aria-label="Law18Referee Management dashboard" onClick={() => void openView("dashboard")}><Mark /></button>
-      <nav>{nav.map(([id, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => void openView(id)}>{label}{id === "assessments" && unreadPublicRatingCount > 0 && <span className="nav-notification-badge" aria-label={`${unreadPublicRatingCount} unread public ratings`}>{unreadPublicRatingCount > 99 ? "99+" : unreadPublicRatingCount}</span>}</button>)}</nav>
       <div className="topbar-account-actions">
         <button className="help-button" aria-label="Open role help" title="Help and how-to" onClick={() => setHelpOpen(true)}>?</button>
         <button className="page-refresh-button" aria-label="Refresh page" title="Refresh page" onClick={refreshCurrentPage}>↻</button>
@@ -3974,16 +3980,20 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
           {notificationsOpen && <div className="notification-popover"><header><strong>Notifications</strong></header>{notifications.map((item) => <article className={item.read_at ? "" : "unread"} key={item.id}><strong>{item.title}</strong><p>{item.message}</p><time>{new Intl.DateTimeFormat([], { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at))}</time></article>)}{!notifications.length && <p className="notification-empty">No notifications.</p>}</div>}
         </div>
         <div className="account-menu">
-          <button className="avatar account-avatar" aria-label="Open account menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((open) => !open)}>{initials(profile?.full_name || session.user.email || "RH")}</button>
-          {accountOpen && <div className="account-popover">
-            <div className="account-identity"><strong>{profile?.full_name}</strong><span>{profile?.email}</span></div>
+          <button className="avatar account-avatar" aria-label="Open navigation and account menu" aria-expanded={accountOpen} aria-controls="account-navigation-tray" onClick={() => setAccountOpen((open) => !open)}>{initials(profile?.full_name || session.user.email || "RH")}</button>
+          {accountOpen && <div className="account-tray-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setAccountOpen(false); }}><aside className="account-popover account-tray" id="account-navigation-tray" aria-label="Navigation and account menu">
+            <header className="account-tray-header"><div className="account-identity"><strong>{profile?.full_name}</strong><span>{profile?.email}</span></div><button className="account-tray-close" aria-label="Close navigation menu" onClick={() => setAccountOpen(false)}>×</button></header>
             <div className="account-roles">{[...allRoles].map((role) => <span key={role}>{roleNames[role]}</span>)}</div>
-            <button onClick={() => { setView("my_assignments"); setAccountOpen(false); }}><span>☷</span><div><strong>My assignments</strong><small>Unified personal schedule</small></div></button>
-            <button onClick={() => { setView("account"); setAccountOpen(false); }}><span>⚙</span><div><strong>Account settings</strong><small>Personal information</small></div></button>
-            <button onClick={() => { setView("groups"); setAccountOpen(false); }}><span>♙</span><div><strong>Groups</strong><small>Group Membership</small></div></button>
-            {allRoles.has("site_owner") && <button onClick={() => { setView("appearance"); setAccountOpen(false); }}><span>◐</span><div><strong>Site appearance</strong><small>Theme and schedule</small></div></button>}
-            <button className="signout-menu" onClick={() => auth.signOut()}><span>↪</span><div><strong>Sign out</strong></div></button>
-          </div>}
+            <nav className="account-tray-navigation" aria-label="Main navigation">{nav.map(([id, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => { void openView(id); setAccountOpen(false); }}><span>{label}</span>{id === "assessments" && unreadPublicRatingCount > 0 && <b className="nav-notification-badge" aria-label={`${unreadPublicRatingCount} unread public ratings`}>{unreadPublicRatingCount > 99 ? "99+" : unreadPublicRatingCount}</b>}</button>)}</nav>
+            <div className="account-tray-account-actions">
+              <p>Account</p>
+              <button onClick={() => { setView("my_assignments"); setAccountOpen(false); }}><span>☷</span><div><strong>My Assignments</strong><small>Unified personal schedule</small></div></button>
+              <button onClick={() => { setView("account"); setAccountOpen(false); }}><span>⚙</span><div><strong>Account Settings</strong><small>Personal information</small></div></button>
+              <button onClick={() => { setView("groups"); setAccountOpen(false); }}><span>♙</span><div><strong>Groups</strong><small>Group membership</small></div></button>
+              {allRoles.has("site_owner") && <button onClick={() => { setView("appearance"); setAccountOpen(false); }}><span>◐</span><div><strong>Site Appearance</strong><small>Theme and schedule</small></div></button>}
+              <button className="signout-menu" onClick={() => auth.signOut()}><span>↪</span><div><strong>Sign Out</strong></div></button>
+            </div>
+          </aside></div>}
         </div>
       </div>
     </header>
@@ -4017,7 +4027,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.30.5</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.31.0</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

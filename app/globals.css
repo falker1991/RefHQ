@@ -203,8 +203,13 @@ input,select,textarea{max-width:100%}
 .schedule-crew-list>span.schedule-crew-checked{border-color:#6ab889;background:#e8f6ed;box-shadow:inset 3px 0 var(--green)}
 
 /* Version 0.27.12 keeps crew positions aligned between schedule games. */
+.schedule-crew-list>span{box-sizing:border-box;flex:0 0 calc((100% - 21px)/4)}
 @media(min-width:901px){.schedule-crew-list{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:stretch}.schedule-crew-list>span{min-width:0;width:100%;overflow:hidden}.schedule-crew-list .official-name-link,.schedule-crew-list strong{min-width:0;overflow-wrap:anywhere}}
 @media(min-width:701px) and (max-width:900px){.schedule-crew-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.schedule-crew-list>span{min-width:0;width:100%}}
+
+/* Version 0.28.1 provides aligned fallback columns when range media queries are unsupported. */
+@media(max-width:900px){.schedule-crew-list>span{flex-basis:calc((100% - 7px)/2)}}
+@media(max-width:700px){.schedule-crew-list>span{flex-basis:100%}}
 
 /* Version 0.27.14 collapsible staff-only check-in QR card. */
 .qr-panel-disclosure{padding:0;overflow:hidden;text-align:left}.qr-panel-disclosure>summary{display:flex;min-height:92px;align-items:center;justify-content:space-between;gap:18px;padding:22px 24px;cursor:pointer;list-style:none}.qr-panel-disclosure>summary::-webkit-details-marker{display:none}.qr-panel-disclosure>summary>span{display:flex;min-width:0;flex-direction:column;gap:5px}.qr-panel-disclosure>summary>span>strong{font:800 18px Inter,Arial,Helvetica,sans-serif}.qr-panel-disclosure>summary>span>small{color:var(--muted);font-size:11px}.qr-panel-disclosure>summary>b{color:var(--green);font-size:12px;white-space:nowrap}.qr-panel-disclosure>summary>b:after{content:" +"}.qr-panel-disclosure[open]>summary{border-bottom:1px solid var(--line)}.qr-panel-disclosure[open]>summary>b{font-size:0}.qr-panel-disclosure[open]>summary>b:before{content:"Hide QR Code";font-size:12px}.qr-panel-disclosure[open]>summary>b:after{content:" −";font-size:12px}.qr-panel-content{padding:28px 32px 32px;text-align:center}.checkin-grid:has(.qr-panel-disclosure:not([open])){grid-template-columns:minmax(260px,.45fr) minmax(0,1.55fr)}

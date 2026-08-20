@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.28.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.28.1 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.28.0 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.28\.0/);
+  assert.match(page, /Version 0\.28\.1/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.28.0 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.28.0");
+  assert.equal(JSON.parse(packageJson).version, "0.28.1");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1405,5 +1405,13 @@ test("v0.28.0 records throttled visible activity without audit noise", async () 
   assert.match(migration, /last_login_at < now\(\) - interval '30 seconds'/);
   assert.match(migration, /revoke all on function public\.record_current_activity\(\) from public/);
   assert.match(migration, /grant execute on function public\.record_current_activity\(\) to authenticated/);
-  assert.equal(JSON.parse(packageJson).version, "0.28.0");
+});
+
+test("v0.28.1 keeps schedule crew columns aligned without range-query support", async () => {
+  const [styles, packageJson] = await Promise.all([read("app/globals.css"), read("package.json")]);
+  assert.match(styles, /Version 0\.28\.1 provides aligned fallback columns/);
+  assert.match(styles, /\.schedule-crew-list>span\{box-sizing:border-box;flex:0 0 calc\(\(100% - 21px\)\/4\)\}/);
+  assert.match(styles, /@media\(max-width:900px\)\{\.schedule-crew-list>span\{flex-basis:calc\(\(100% - 7px\)\/2\)\}\}/);
+  assert.match(styles, /@media\(max-width:700px\)\{\.schedule-crew-list>span\{flex-basis:100%\}\}/);
+  assert.equal(JSON.parse(packageJson).version, "0.28.1");
 });

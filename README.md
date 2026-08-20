@@ -2,6 +2,10 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.28.1
+
+- Keeps Schedule crew cards in fixed Referee, AR1, AR2, and Fourth Official columns even in browsers that do not apply modern range-style media queries.
+
 ## v0.28.0
 
 - Replaces Last Login in the Officials directory with Last Active, refreshed when a linked user opens Law18Ref, navigates its tabs, returns to the visible app, or continues an active session.

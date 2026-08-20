@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.29.5 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.30.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.29.5 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.29\.5/);
+  assert.match(page, /Version 0\.30\.0/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.29.5 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.29.5");
+  assert.equal(JSON.parse(packageJson).version, "0.30.0");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1291,6 +1291,22 @@ test("v0.29.5 completes schedule imports with isolated contact warnings and reci
   assert.match(migration, /revoke all on function public\.report_import_warnings\(\) from authenticated/);
 });
 
+test("v0.30.0 removes implicit privileged RPC access while preserving external check-in", async () => {
+  const migration = await read("supabase/migrations/20260820154444_security_definer_access_hardening.sql");
+  assert.match(migration, /where n\.nspname = 'public' and p\.prosecdef/);
+  assert.match(migration, /revoke execute on function %s from public, anon/);
+  assert.match(migration, /grant execute on function public\.get_external_check_in_config\(text, date\) to anon, authenticated/);
+  assert.match(migration, /grant execute on function public\.find_external_check_in\(text, date, jsonb\) to anon, authenticated/);
+  assert.match(migration, /grant execute on function public\.confirm_guest_check_in\(uuid\) to anon, authenticated/);
+  assert.match(migration, /join pg_trigger t on t\.tgfoid = p\.oid/);
+  assert.match(migration, /revoke execute on function %s from public, anon, authenticated/);
+  assert.match(migration, /revoke execute on function public\.rls_auto_enable\(\) from authenticated/);
+  assert.match(migration, /no direct guest check-in session access/);
+  assert.match(migration, /no direct organization challenge access/);
+  assert.match(migration, /no direct personal calendar feed access/);
+  assert.match(migration, /revoke all on table public\.personal_calendar_feeds from anon, authenticated/);
+});
+
 test("v0.27.0 separates schedule date, filters, and sorting controls", async () => {
   const [page, styles] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
   assert.match(page, /className="section-title schedule-section-title"/);
@@ -1474,5 +1490,5 @@ test("v0.28.1 keeps schedule crew columns aligned without range-query support", 
   assert.match(styles, /\.schedule-crew-list>span\{box-sizing:border-box;flex:0 0 calc\(\(100% - 21px\)\/4\)\}/);
   assert.match(styles, /@media\(max-width:900px\)\{\.schedule-crew-list>span\{flex-basis:calc\(\(100% - 7px\)\/2\)\}\}/);
   assert.match(styles, /@media\(max-width:700px\)\{\.schedule-crew-list>span\{flex-basis:100%\}\}/);
-  assert.equal(JSON.parse(packageJson).version, "0.29.5");
+  assert.equal(JSON.parse(packageJson).version, "0.30.0");
 });

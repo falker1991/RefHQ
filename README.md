@@ -2,6 +2,12 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.30.0
+
+- Removes implicit anonymous execution from every elevated public database function. Anonymous access is restored only for the three RPCs required by External Check-In; authenticated application endpoints keep their existing explicit grants.
+- Prevents direct client access to internal guest-check-in sessions, organization confirmation challenges, and encrypted personal calendar feeds with explicit deny-all RLS policies and revoked table grants.
+- Removes direct client execution from trigger functions and internal security helpers while preserving database-triggered behavior and legacy authenticated RLS helpers.
+
 ## v0.29.5
 
 - Schedule imports now skip only a conflicting contact field instead of stopping the batch. All assignments and valid contact updates continue, the import result identifies each skipped value and its existing owner, and the Import Job is retained as completed with warnings.

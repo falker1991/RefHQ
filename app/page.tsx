@@ -338,8 +338,12 @@ function OfficialEventScheduleModal({ session, official, event, data, initialDat
     .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
   const availableDates = [...new Set(localGames.map((game) => new Intl.DateTimeFormat("en-CA", { timeZone: event.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(game.starts_at))))].sort();
   const [selectedDate, setSelectedDate] = useState(initialDate && availableDates.includes(initialDate) ? initialDate : availableDates[0] || event.starts_on);
+  const scheduleListRef = useRef<HTMLDivElement>(null);
   const [dayContext, setDayContext] = useState<OfficialEventDayContext | null>(null);
   const [contextMessage, setContextMessage] = useState("");
+  useEffect(() => {
+    scheduleListRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [official.id, selectedDate]);
   useEffect(() => {
     if (!siteSupervisorView) return;
     setContextMessage("");
@@ -353,7 +357,7 @@ function OfficialEventScheduleModal({ session, official, event, data, initialDat
     <div className="official-contact-summary"><div><strong>Phone</strong><PhoneLink phone={contextOfficial.phone} /></div><div><strong>Primary Email</strong><span>{contextOfficial.email || "Not provided"}</span></div><div><strong>Secondary Email</strong><span>{contextOfficial.secondary_email || "Not provided"}</span></div><div><strong>Date of Birth</strong><span>{contextOfficial.date_of_birth ? formatDate(contextOfficial.date_of_birth) : "Not provided"}</span></div></div>
     {siteSupervisorView && <label className="official-schedule-date">Event Date<select value={selectedDate} onChange={(change) => setSelectedDate(change.target.value)}>{availableDates.map((date) => <option value={date} key={date}>{formatDate(date)}</option>)}</select></label>}
     {contextMessage && <p className="pilot-message">{contextMessage}</p>}
-    <div className="official-event-schedule-list">{contextGames.map(({ game, selected_position, selected_position_title, within_management_scope, crew }) => {
+    <div className="official-event-schedule-list" ref={scheduleListRef}>{contextGames.map(({ game, selected_position, selected_position_title, within_management_scope, crew }) => {
       const selectedPosition = positionLabel(selected_position, selected_position_title);
       const completed = new Date(game.starts_at).getTime() <= completionCutoff;
       return <article className={`official-event-schedule-card ${completed ? "completed" : ""} ${within_management_scope ? "" : "outside-supervisor-scope"}`} key={game.id}>
@@ -1558,6 +1562,7 @@ function ImportView({
         <label>Default venue<input value={details.venue} disabled={Boolean(destinationEvent)} onChange={(event) => setDetails({ ...details, venue: event.target.value })} /></label>
         <div className="date-fields"><label>Starts<input type="date" value={details.startsOn} onChange={(event) => setDetails({ ...details, startsOn: event.target.value })} /></label><label>Ends<input type="date" value={details.endsOn} onChange={(event) => setDetails({ ...details, endsOn: event.target.value })} /></label></div>
         {destinationEvent && <p className="import-note">Games with new Assignr IDs will be added. Matching game IDs and their imported referee crews will be updated. Existing check-ins and other event days stay in place.</p>}
+        {rows.some((row) => row.official_email || row.official_phone) && <p className="import-note">Nonblank email addresses and phone numbers in this assignments export will also update matching officials in the Officials directory.</p>}
         {message && <p className="pilot-message">{message}</p>}
         <button className="primary wide" disabled={busy || !rows.length} onClick={confirmImport}>{busy ? "Importing…" : destinationEvent ? "Add schedule to event" : "Create event"}</button>
         </>}
@@ -3937,7 +3942,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.29.0</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.29.2</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

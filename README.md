@@ -2,6 +2,14 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.29.2
+
+- Uses nonblank email addresses and mobile phone numbers from Assignr Assignments exports to create or update Officials Directory records during a schedule import. Existing contact data is preserved when an imported cell is blank, personal contact locks remain enforced, and duplicate primary emails are not reassigned.
+
+## v0.29.1
+
+- Keeps every tall modal within the viewport with an accessible top edge and contained scrolling, and always opens an official's event schedule at the beginning of the schedule list.
+
 ## v0.29.0
 
 - Added automatic support for Assignr Assignments exports where each official appears on a separate row. Repeated rows are grouped into one game using the Assignr Database ID, assigned crew details are preserved, and games with entirely open crews are still created.

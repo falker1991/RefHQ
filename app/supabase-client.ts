@@ -1211,6 +1211,7 @@ export type ImportRow = {
   game_type: string;
   official_name: string;
   official_email: string | null;
+  official_phone: string | null;
   position: string;
 };
 
@@ -1379,6 +1380,7 @@ export function parseAssignrCsv(text: string): ImportRow[] {
           game_type: cell(record, headers, "game type"),
           official_name: displayName(name),
           official_email: null,
+          official_phone: null,
           position: position || "Official",
         });
       }
@@ -1399,6 +1401,7 @@ export function parseAssignrCsv(text: string): ImportRow[] {
           game_type: cell(record, headers, "game type"),
           official_name: "",
           official_email: null,
+          official_phone: null,
           position: "",
         });
       }
@@ -1436,6 +1439,7 @@ export function parseAssignrCsv(text: string): ImportRow[] {
         game_type: cell(record, headers, "game type"),
         official_name: name ? displayName(name) : "",
         official_email: cell(record, headers, "email address").trim().toLowerCase() || null,
+        official_phone: normalizePhoneNumber(cell(record, headers, "mobile phone")) || null,
         position: cell(record, headers, "position"),
       });
     });
@@ -1454,6 +1458,7 @@ export function parseAssignrCsv(text: string): ImportRow[] {
     }
     row.start_time = toIsoTime(row.start_time);
     row.official_email = row.official_email?.trim().toLowerCase() || null;
+    row.official_phone = normalizePhoneNumber(row.official_phone) || null;
     return row;
   });
 }
@@ -1775,28 +1780,73 @@ export async function importTournament(
 
   const assignmentRows = rows.filter((row) => row.official_name.trim());
   const existingOfficials = await loadOrganizationOfficials(session, organizationId, true);
+  const existingOfficialsById = new Map(existingOfficials.map((official) => [official.id, official]));
+  const resolveExistingOfficial = (official: OfficialRecord) => official.merged_into_official_id
+    ? existingOfficialsById.get(official.merged_into_official_id) || official
+    : official;
   const byName = new Map<string, OfficialRecord[]>();
   existingOfficials.forEach((official) => {
     const key = normalizeOfficialName(official.source_display_name || official.full_name);
-    byName.set(key, [...(byName.get(key) || []), official]);
+    const resolved = resolveExistingOfficial(official);
+    const matches = byName.get(key) || [];
+    if (!matches.some((item) => item.id === resolved.id)) byName.set(key, [...matches, resolved]);
   });
-  const existingEmails = new Set(existingOfficials.map((official) => official.email?.trim().toLowerCase()).filter(Boolean));
-  const newNames = [...new Set(assignmentRows.map((row) => normalizeOfficialName(row.official_name)))]
-    .filter((key) => (byName.get(key)?.length || 0) === 0)
-    .filter((key) => !assignmentRows.some((row) => normalizeOfficialName(row.official_name) === key && row.official_email && existingEmails.has(row.official_email)));
-  if (newNames.length) {
-    const displayByName = new Map(assignmentRows.map((row) => [normalizeOfficialName(row.official_name), row.official_name]));
+  const byEmail = new Map(existingOfficials.filter((official) => official.email).map((official) => [
+    official.email!.trim().toLowerCase(),
+    resolveExistingOfficial(official),
+  ]));
+  const contactsByName = new Map<string, { fullName: string; email: string | null; phone: string | null }>();
+  assignmentRows.forEach((row) => {
+    const key = normalizeOfficialName(row.official_name);
+    const current = contactsByName.get(key);
+    contactsByName.set(key, {
+      fullName: row.official_name,
+      email: current?.email || row.official_email?.trim().toLowerCase() || null,
+      phone: current?.phone || normalizePhoneNumber(row.official_phone) || null,
+    });
+  });
+  const newOfficials: Record<string, unknown>[] = [];
+  const contactUpdates: Array<{ id: string; changes: Record<string, unknown> }> = [];
+  const claimedEmails = new Map([...byEmail].map(([email, official]) => [email, official.id]));
+  contactsByName.forEach((contact, key) => {
+    const nameMatches = byName.get(key) || [];
+    const emailMatch = contact.email ? byEmail.get(contact.email) : undefined;
+    const matched = emailMatch || (nameMatches.length === 1 ? nameMatches[0] : undefined);
+    if (!matched) {
+      const emailAvailable = contact.email && !claimedEmails.has(contact.email);
+      newOfficials.push({
+        organization_id: organizationId,
+        full_name: contact.fullName,
+        email: emailAvailable ? contact.email : null,
+        phone: contact.phone,
+        source: "assignr_assignments",
+        source_official_id: key,
+        source_display_name: contact.fullName,
+        identity_status: "provisional",
+      });
+      if (emailAvailable) claimedEmails.set(contact.email!, key);
+      return;
+    }
+    if (matched.personal_contact_locked) return;
+    const changes: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (contact.email && (!claimedEmails.has(contact.email) || claimedEmails.get(contact.email) === matched.id)) {
+      changes.email = contact.email;
+      claimedEmails.set(contact.email, matched.id);
+    }
+    if (contact.phone) changes.phone = contact.phone;
+    if (!matched.linked_user_id) changes.source_display_name = contact.fullName;
+    if (Object.keys(changes).length > 1) contactUpdates.push({ id: matched.id, changes });
+  });
+  if (newOfficials.length) {
     await rest(session, "officials", {
       method: "POST",
-      body: JSON.stringify(newNames.map((key) => ({
-        organization_id: organizationId,
-        full_name: displayByName.get(key),
-        email: null,
-        source: "assignr_schedule_name",
-        source_official_id: key,
-        source_display_name: displayByName.get(key),
-        identity_status: "provisional",
-      }))),
+      body: JSON.stringify(newOfficials),
+    }, "return=minimal");
+  }
+  for (const update of contactUpdates) {
+    await rest(session, `officials?id=eq.${enc(update.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(update.changes),
     }, "return=minimal");
   }
   const officials = await loadOrganizationOfficials(session, organizationId, true);

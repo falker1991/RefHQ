@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.30.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.30.1 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.30.0 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.30\.0/);
+  assert.match(page, /Version 0\.30\.1/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.30.0 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.30.0");
+  assert.equal(JSON.parse(packageJson).version, "0.30.1");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1307,6 +1307,27 @@ test("v0.30.0 removes implicit privileged RPC access while preserving external c
   assert.match(migration, /revoke all on table public\.personal_calendar_feeds from anon, authenticated/);
 });
 
+test("v0.30.1 supports review-first or immediate External Check-In", async () => {
+  const [page, client, styles, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("app/globals.css"),
+    read("supabase/migrations/20260820160315_external_check_in_completion_mode.sql"),
+  ]);
+  assert.match(client, /external_check_in_confirmation_required: boolean/);
+  assert.match(client, /confirmation_required: boolean/);
+  assert.match(page, /Review and Confirm/);
+  assert.match(page, /Check In Immediately/);
+  assert.match(page, /!result\.confirmation_required && result\.checked_in/);
+  assert.match(page, /config\?\.confirmation_required === false \? "Check In" : "Show My Schedule"/);
+  assert.match(page, /guest-checkin-complete[\s\S]*Your schedule for today[\s\S]*guest-schedule-list/);
+  assert.match(styles, /external-checkin-completion-mode/);
+  assert.match(migration, /external_check_in_confirmation_required boolean not null default true/);
+  assert.match(migration, /if not selected_event\.external_check_in_confirmation_required then[\s\S]*perform public\.confirm_guest_check_in\(lookup_token\)/);
+  assert.match(migration, /'confirmation_required', selected_event\.external_check_in_confirmation_required/);
+  assert.match(migration, /revoke all on function public\.find_external_check_in\(text, date, jsonb\) from public/);
+});
+
 test("v0.27.0 separates schedule date, filters, and sorting controls", async () => {
   const [page, styles] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
   assert.match(page, /className="section-title schedule-section-title"/);
@@ -1490,5 +1511,5 @@ test("v0.28.1 keeps schedule crew columns aligned without range-query support", 
   assert.match(styles, /\.schedule-crew-list>span\{box-sizing:border-box;flex:0 0 calc\(\(100% - 21px\)\/4\)\}/);
   assert.match(styles, /@media\(max-width:900px\)\{\.schedule-crew-list>span\{flex-basis:calc\(\(100% - 7px\)\/2\)\}\}/);
   assert.match(styles, /@media\(max-width:700px\)\{\.schedule-crew-list>span\{flex-basis:100%\}\}/);
-  assert.equal(JSON.parse(packageJson).version, "0.30.0");
+  assert.equal(JSON.parse(packageJson).version, "0.30.1");
 });

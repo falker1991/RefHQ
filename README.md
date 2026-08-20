@@ -2,6 +2,11 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.30.1
+
+- Adds an event-level External Check-In completion mode. Events can retain the existing schedule-review confirmation step or check an official in immediately after their required identity details match.
+- Immediate-mode attendance is recorded by the database before the success screen appears. The success screen then shows the configured confirmation message, event links, and the official’s full schedule for that day.
+
 ## v0.30.0
 
 - Removes implicit anonymous execution from every elevated public database function. Anonymous access is restored only for the three RPCs required by External Check-In; authenticated application endpoints keep their existing explicit grants.

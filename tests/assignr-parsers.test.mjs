@@ -17,6 +17,32 @@ test("parses an actual Assignr games export layout", () => {
   assert.equal(rows[0].age_group, "U14");
 });
 
+test("parses the row-per-official Assignr assignments export layout", () => {
+  const csv = [
+    "Game ID,Date,Start Time,Venue,Sub-Venue,Age Group,League,Gender,Game Type,Home Team,Away Team,Position,Official,Email Address,Assignr Database ID",
+    '1111212,2026-08-21,8:00 AM,Morningside Farm,Field #11,U13,ECNL RL Girls,Girls,Regional League,Home FC,Away FC,Referee,"Damas, Harold",harold@example.com,27961499',
+    '1111212,2026-08-21,8:00 AM,Morningside Farm,Field #11,U13,ECNL RL Girls,Girls,Regional League,Home FC,Away FC,Asst. Referee,"Briones, Mathew",mathew@example.com,27961499',
+    '1111212,2026-08-21,8:00 AM,Morningside Farm,Field #11,U13,ECNL RL Girls,Girls,Regional League,Home FC,Away FC,Asst. Referee,"Candido, Sebastian",sebastian@example.com,27961499',
+  ].join("\n");
+  const rows = parseAssignrCsv(csv);
+  assert.equal(rows.length, 3);
+  assert.deepEqual([...new Set(rows.map((row) => row.external_id))], ["27961499"]);
+  assert.equal(rows[0].official_name, "Harold Damas");
+  assert.equal(rows[1].position, "Asst. Referee");
+  assert.equal(rows[2].official_email, "sebastian@example.com");
+});
+
+test("retains an unstaffed game from an Assignr assignments export", () => {
+  const csv = [
+    "Game ID,Date,Start Time,Venue,Sub-Venue,Home Team,Away Team,Position,Official,Assignr Database ID",
+    "open-1,2026-08-22,10:00 AM,Main Complex,Field 2,Home FC,Away FC,Referee,,game-db-1",
+  ].join("\n");
+  const rows = parseAssignrCsv(csv);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].external_id, "game-db-1");
+  assert.equal(rows[0].official_name, "");
+});
+
 test("preserves Assignr assignment role categories", () => {
   assert.equal(normalizePosition("Referee"), "referee");
   assert.equal(normalizePosition("Asst. Referee"), "assistant_referee");

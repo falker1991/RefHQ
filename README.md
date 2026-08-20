@@ -2,6 +2,11 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.29.0
+
+- Added automatic support for Assignr Assignments exports where each official appears on a separate row. Repeated rows are grouped into one game using the Assignr Database ID, assigned crew details are preserved, and games with entirely open crews are still created.
+- Refreshes the active group's Officials Directory immediately after a schedule import so newly created provisional officials appear without reloading the app.
+
 ## v0.28.1
 
 - Keeps Schedule crew cards in fixed Referee, AR1, AR2, and Fourth Official columns even in browsers that do not apply modern range-style media queries.

@@ -1366,8 +1366,9 @@ function ImportView({
         startsOn: selectedEvent.starts_on,
         endsOn: selectedEvent.ends_on,
       });
+      const assignedRowCount = rows.filter((row) => row.official_name.trim()).length;
       setMessage(rows.length
-        ? `${rows.length} assignment rows will be added to ${selectedEvent.name}.`
+        ? `${games} games with ${assignedRowCount} staffed positions will be added to ${selectedEvent.name}.`
         : `The next CSV will be added to ${selectedEvent.name}.`);
     } else if (rows.length) {
       const dates = rows.map((row) => row.date).sort();
@@ -1377,7 +1378,7 @@ function ImportView({
         startsOn: dates[0],
         endsOn: dates[dates.length - 1],
       });
-      setMessage(`${rows.length} assignment rows are ready to create a new event.`);
+      setMessage(`${new Set(rows.map((row) => row.external_id)).size} games are ready to create a new event.`);
     }
   }
 
@@ -1417,8 +1418,8 @@ function ImportView({
             endsOn: dates[dates.length - 1],
           });
       setMessage(destinationEvent
-        ? `${parsed.length} assignment rows are ready to add to ${destinationEvent.name}.`
-        : `${parsed.length} assignment rows are ready to create a new event.`);
+        ? `${new Set(parsed.map((row) => row.external_id)).size} games with ${parsed.filter((row) => row.official_name.trim()).length} staffed positions are ready to add to ${destinationEvent.name}.`
+        : `${new Set(parsed.map((row) => row.external_id)).size} games with ${parsed.filter((row) => row.official_name.trim()).length} staffed positions are ready to create a new event.`);
     } catch (error) {
       setRows([]);
       setMessage(error instanceof Error ? error.message : "Unable to read that CSV.");
@@ -1515,7 +1516,7 @@ function ImportView({
   }
 
   const games = new Set(rows.map((row) => row.external_id)).size;
-  const referees = new Set(rows.map((row) => row.official_email)).size;
+  const referees = new Set(rows.filter((row) => row.official_name.trim()).map((row) => row.official_name.trim().toLowerCase())).size;
   return <section className="page-section">
     <div className="section-title"><div><p className="eyebrow">EVENTS & ASSIGNR BRIDGE</p><h1>Import center</h1><p>Create an empty event, import the official directory separately, or add one or more schedule days.</p></div>{canCreateEvent && <button className="primary" onClick={() => setCreatingEvent((value) => !value)}>{creatingEvent ? "Cancel" : "Create New Event"}</button>}</div>
     {creatingEvent && <article className="panel manual-entry-form empty-event-form">
@@ -1538,8 +1539,8 @@ function ImportView({
     </div>
     <div className="import-grid">
       <article className={`panel import-card ${draggingFile ? "dragging" : ""}`} onDragEnter={enterDropZone} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }} onDragLeave={leaveDropZone} onDrop={dropFile}>
-        <span className="upload-icon">{draggingFile ? "↓" : "↑"}</span><h2>{draggingFile ? "Drop CSV to upload" : fileName || `Drag an Assignr ${mode === "schedule" ? "games" : "users"} CSV here`}</h2>
-        <p>{mode === "schedule" ? "Uses Assignr’s Games export with Position 1 / Official 1 crew columns." : "Uses Assignr’s Users export. Imported officials remain provisional until they create and verify their account."}</p>
+        <span className="upload-icon">{draggingFile ? "↓" : "↑"}</span><h2>{draggingFile ? "Drop CSV to upload" : fileName || `Drag an Assignr ${mode === "schedule" ? "games or assignments" : "users"} CSV here`}</h2>
+        <p>{mode === "schedule" ? "Uses either Assignr’s Games export with crew columns or its Assignments export with one official per row." : "Uses Assignr’s Users export. Imported officials remain provisional until they create and verify their account."}</p>
         <span className="drop-or">or</span><label className="primary file-button">Browse Files<input type="file" accept=".csv,text/csv" onChange={(event) => readFile(event.target.files?.[0])} /></label>
         {mode === "schedule" && <a className="text-button sample-link" href="/assignr-schedule.csv" download>Download sample CSV</a>}
       </article>
@@ -1562,7 +1563,7 @@ function ImportView({
         </>}
       </article>
     </div>
-    {mode === "schedule" && rows.length > 0 && <div className="panel preview-table"><table><thead><tr><th>Game</th><th>Date/time</th><th>Field</th><th>Official</th><th>Position</th></tr></thead><tbody>{rows.slice(0, 12).map((row, index) => <tr key={`${row.external_id}-${row.official_name}-${index}`}><td>{row.home_team} vs. {row.away_team}</td><td>{row.date} {row.start_time}</td><td>{row.field}</td><td>{row.official_name}<small>{row.official_email || "Matched from officials directory"}</small></td><td>{row.position}</td></tr>)}</tbody></table>{rows.length > 12 && <p>Showing 12 of {rows.length} assignment rows.</p>}</div>}
+    {mode === "schedule" && rows.length > 0 && <div className="panel preview-table"><table><thead><tr><th>Game</th><th>Date/time</th><th>Field</th><th>Official</th><th>Position</th></tr></thead><tbody>{rows.slice(0, 12).map((row, index) => <tr key={`${row.external_id}-${row.official_name}-${index}`}><td>{row.home_team} vs. {row.away_team}</td><td>{row.date} {row.start_time}</td><td>{row.field}</td><td>{row.official_name || "Open position"}<small>{row.official_name ? row.official_email || "Matched from officials directory" : "No official assigned"}</small></td><td>{row.position || "Open"}</td></tr>)}</tbody></table>{rows.length > 12 && <p>Showing 12 of {rows.length} imported crew rows.</p>}</div>}
     {mode === "schedule" && canConfigureAliases && <article className="panel position-alias-settings"><div><p className="eyebrow">POSITION TITLES</p><h2>Import display names</h2><p>One replacement per line, such as <code>Asst. Referee = AR</code>. Event settings override organization settings.</p></div><label>Applies to<select value={aliasScope} onChange={(event) => setAliasScope(event.target.value as "organization" | "event")}><option value="organization">{organization.name}</option><option value="event" disabled={!destinationEvent}>Selected event</option></select></label><label>Aliases<textarea value={aliasText} onChange={(event) => setAliasText(event.target.value)} placeholder={"Asst. Referee = AR\nRef Coord = Referee Coach"} /></label><button className="secondary" disabled={busy || (aliasScope === "event" && !destinationEvent)} onClick={saveAliases}>Save position titles</button></article>}
     {mode === "officials" && officialRows.length > 0 && <div className="panel preview-table"><table><thead><tr><th>Official</th><th>Primary email</th><th>Secondary email</th><th>Assignr ID</th><th>Badge</th></tr></thead><tbody>{officialRows.slice(0, 12).map((row, index) => <tr key={`${row.source_official_id}-${index}`}><td>{row.full_name}</td><td>{row.primary_email || "Missing"}</td><td>{row.secondary_email || "—"}</td><td>{row.source_official_id || "—"}</td><td>{row.badge_level || "—"}</td></tr>)}</tbody></table>{officialRows.length > 12 && <p>Showing 12 of {officialRows.length} officials.</p>}{officialResult?.conflicts.length ? <div className="import-conflicts"><strong>Needs review</strong>{officialResult.conflicts.slice(0, 10).map((conflict) => <p key={`${conflict.name}-${conflict.email}`}>{conflict.name}: {conflict.reason}</p>)}</div> : null}</div>}
   </section>;
@@ -3812,6 +3813,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     const nextEvents = await loadEvents(session);
     setAllEvents(nextEvents);
     setEvents(nextEvents.filter((item) => item.organization_id === organization?.id));
+    if (organization?.id) setOrganizationOfficials(await loadOrganizationOfficials(session, organization.id));
     await switchEvent(newEvent.id);
   }
 
@@ -3935,7 +3937,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.28.1</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.29.0</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

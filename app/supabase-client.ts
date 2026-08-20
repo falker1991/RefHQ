@@ -1,5 +1,5 @@
-import { auth, type Law18Session } from "./auth-client";
-import { normalizePhoneNumber } from "./phone";
+import { auth, type Law18Session } from "./auth-client.ts";
+import { normalizePhoneNumber } from "./phone.ts";
 
 const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -1360,6 +1360,7 @@ export function parseAssignrCsv(text: string): ImportRow[] {
       const startTime = cell(record, headers, "start time");
       if (!gameId && !date && !startTime) return; // Assignr may include a totals/footer row.
       if (!externalId || !date || !startTime) throw new Error(`Assignr row ${rowIndex + 2} is missing its game ID, date, or start time.`);
+      const rowCountBeforeGame = rows.length;
       for (let slot = 1; slot <= 12; slot += 1) {
         const name = cell(record, headers, `official ${slot}`);
         const position = cell(record, headers, `position ${slot}`);
@@ -1381,8 +1382,64 @@ export function parseAssignrCsv(text: string): ImportRow[] {
           position: position || "Official",
         });
       }
+      // Keep an entirely unstaffed game in the import. This empty official is
+      // a game-only marker and is never written as an assignment.
+      if (rows.length === rowCountBeforeGame) {
+        rows.push({
+          external_id: externalId,
+          date,
+          start_time: toIsoTime(startTime),
+          venue: cell(record, headers, "venue"),
+          field: cell(record, headers, "sub-venue") || cell(record, headers, "venue"),
+          home_team: cell(record, headers, "home team") || "TBD",
+          away_team: cell(record, headers, "away team") || "TBD",
+          division: [cell(record, headers, "age group"), cell(record, headers, "league")].filter(Boolean).join(" · "),
+          age_group: cell(record, headers, "age group"),
+          gender: cell(record, headers, "gender"),
+          game_type: cell(record, headers, "game type"),
+          official_name: "",
+          official_email: null,
+          position: "",
+        });
+      }
     });
-    if (!rows.length) throw new Error("No assigned officials were found in this Assignr schedule.");
+    if (!rows.length) throw new Error("No games were found in this Assignr schedule.");
+    return rows;
+  }
+
+  // Assignr assignments export: one crew position per row, with the game
+  // details repeated. importTournament groups these by the game identifier.
+  if (headers.has("game id") && headers.has("position") && headers.has("official")) {
+    const required = ["game id", "date", "start time", "venue", "sub-venue", "home team", "away team", "position", "official"];
+    const missing = required.filter((name) => !headers.has(name));
+    if (missing.length) throw new Error(`This Assignr assignments export is missing: ${missing.join(", ")}.`);
+    const rows: ImportRow[] = [];
+    records.slice(1).forEach((record, rowIndex) => {
+      const gameId = cell(record, headers, "game id");
+      const externalId = cell(record, headers, "assignr database id") || gameId;
+      const date = cell(record, headers, "date");
+      const startTime = cell(record, headers, "start time");
+      if (!gameId && !date && !startTime) return;
+      if (!externalId || !date || !startTime) throw new Error(`Assignr row ${rowIndex + 2} is missing its game ID, date, or start time.`);
+      const name = cell(record, headers, "official");
+      rows.push({
+        external_id: externalId,
+        date,
+        start_time: toIsoTime(startTime),
+        venue: cell(record, headers, "venue"),
+        field: cell(record, headers, "sub-venue") || cell(record, headers, "venue"),
+        home_team: cell(record, headers, "home team") || "TBD",
+        away_team: cell(record, headers, "away team") || "TBD",
+        division: [cell(record, headers, "age group"), cell(record, headers, "league")].filter(Boolean).join(" · "),
+        age_group: cell(record, headers, "age group"),
+        gender: cell(record, headers, "gender"),
+        game_type: cell(record, headers, "game type"),
+        official_name: name ? displayName(name) : "",
+        official_email: cell(record, headers, "email address").trim().toLowerCase() || null,
+        position: cell(record, headers, "position"),
+      });
+    });
+    if (!rows.length) throw new Error("No games were found in this Assignr assignments export.");
     return rows;
   }
 
@@ -1716,16 +1773,19 @@ export async function importTournament(
     event = events[0];
   }
 
+  const assignmentRows = rows.filter((row) => row.official_name.trim());
   const existingOfficials = await loadOrganizationOfficials(session, organizationId, true);
   const byName = new Map<string, OfficialRecord[]>();
   existingOfficials.forEach((official) => {
     const key = normalizeOfficialName(official.source_display_name || official.full_name);
     byName.set(key, [...(byName.get(key) || []), official]);
   });
-  const newNames = [...new Set(rows.map((row) => normalizeOfficialName(row.official_name)))]
-    .filter((key) => (byName.get(key)?.length || 0) === 0);
+  const existingEmails = new Set(existingOfficials.map((official) => official.email?.trim().toLowerCase()).filter(Boolean));
+  const newNames = [...new Set(assignmentRows.map((row) => normalizeOfficialName(row.official_name)))]
+    .filter((key) => (byName.get(key)?.length || 0) === 0)
+    .filter((key) => !assignmentRows.some((row) => normalizeOfficialName(row.official_name) === key && row.official_email && existingEmails.has(row.official_email)));
   if (newNames.length) {
-    const displayByName = new Map(rows.map((row) => [normalizeOfficialName(row.official_name), row.official_name]));
+    const displayByName = new Map(assignmentRows.map((row) => [normalizeOfficialName(row.official_name), row.official_name]));
     await rest(session, "officials", {
       method: "POST",
       body: JSON.stringify(newNames.map((key) => ({
@@ -1787,7 +1847,7 @@ export async function importTournament(
     ...(organizationRows[0]?.position_title_aliases || {}),
     ...(event.position_title_aliases || {}),
   };
-  const assignmentPayload = rows.map((row) => {
+  const assignmentPayload = assignmentRows.map((row) => {
     const gameId = gameByExternalId.get(row.external_id)?.id;
     const emailMatch = row.official_email ? officialByEmail.get(row.official_email)?.id : undefined;
     const nameMatches = officialByName.get(normalizeOfficialName(row.official_name)) || [];
@@ -1803,7 +1863,7 @@ export async function importTournament(
     };
   });
   if (details.eventId) {
-    const importedGameIds = [...new Set(assignmentPayload.map((assignment) => assignment.game_id))];
+    const importedGameIds = [...new Set(rows.map((row) => gameByExternalId.get(row.external_id)?.id).filter((id): id is string => Boolean(id)))];
     await Promise.all(importedGameIds.map((gameId) => rest(
       session,
       `assignments?game_id=eq.${enc(gameId)}`,
@@ -1811,12 +1871,14 @@ export async function importTournament(
       "return=minimal",
     )));
   }
-  await rest(
-    session,
-    "assignments?on_conflict=game_id,official_id,position",
-    { method: "POST", body: JSON.stringify(assignmentPayload) },
-    "resolution=merge-duplicates,return=minimal",
-  );
+  if (assignmentPayload.length) {
+    await rest(
+      session,
+      "assignments?on_conflict=game_id,official_id,position",
+      { method: "POST", body: JSON.stringify(assignmentPayload) },
+      "resolution=merge-duplicates,return=minimal",
+    );
+  }
   await rest(
     session,
     "import_jobs",

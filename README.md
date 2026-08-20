@@ -2,6 +2,16 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.30.4
+
+- Opens Referee Coach schedules on one date by default: the current event date, or the event's first game date when it has not started.
+- Uses Field / Time / Date as the coach schedule's initial sort and starts every field group collapsed.
+
+## v0.30.3
+
+- Ensures Site Supervisors can read the crews for operational and REF HQ schedule records within their assigned dates and sites even when assignment editing is disabled.
+- Shows a prominent Clear All Filters control in Schedule whenever date or advanced filters are active, preventing collapsed filters from silently hiding HQ or other games.
+
 ## v0.30.2
 
 - Adds live first-name or last-name search to both administrative Check-In roster views.

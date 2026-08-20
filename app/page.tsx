@@ -1021,11 +1021,14 @@ function ScheduleView({ session, event, data, availableOfficials, canEdit, canEd
   const myCoachingAssignments = data.coachAssignments.filter((assignment) => assignment.coach_id === session.user.id);
   const hasFullEventRatingAccess = myCoachingAssignments.some((assignment) => assignment.full_schedule);
   const assignedCoachingGameIds = new Set(myCoachingAssignments.map((assignment) => assignment.game_id).filter((gameId): gameId is string => Boolean(gameId)));
+  const scheduleEventDates = [...new Set(data.games.map((game) => dateKeyInTimeZone(game.starts_at, event.timezone)))].sort();
+  const eventToday = dateKeyInTimeZone(new Date().toISOString(), event.timezone);
+  const defaultCoachDate = eventToday < (scheduleEventDates[0] || event.starts_on) ? scheduleEventDates[0] || event.starts_on : eventToday;
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [sortOrder, setSortOrder] = useActiveFilterState<ScheduleSortField[]>(`schedule-sort-order:${event.id}`, ["date", "field", "time"]);
-  const [dateFilters, setDateFilters] = useActiveFilterState<string[]>(`schedule-date:${event.id}`, []);
+  const [sortOrder, setSortOrder] = useActiveFilterState<ScheduleSortField[]>(`schedule-sort-order:${event.id}`, coachView ? ["field", "time", "date"] : ["date", "field", "time"]);
+  const [dateFilters, setDateFilters] = useActiveFilterState<string[]>(`schedule-date:${event.id}`, coachView ? [defaultCoachDate] : []);
   const [fieldFilters, setFieldFilters] = useActiveFilterState<string[]>(`schedule-field:${event.id}`, []);
   const [siteFilters, setSiteFilters] = useActiveFilterState<string[]>(`schedule-site:${event.id}`, []);
   const [officialFilters, setOfficialFilters] = useActiveFilterState<string[]>(`schedule-official:${event.id}`, []);
@@ -1036,6 +1039,7 @@ function ScheduleView({ session, event, data, availableOfficials, canEdit, canEd
   const [scheduleSearch, setScheduleSearch] = useActiveFilterState(`schedule-search:${event.id}`, "");
   const [supervisorGroupMode, setSupervisorGroupMode] = useActiveFilterState<"field" | "time">(`supervisor-schedule-group:${event.id}`, "field");
   const [collapsedScheduleGroups, setCollapsedScheduleGroups] = useState<Set<string>>(new Set());
+  const coachGroupsInitialized = useRef(false);
   const [exporting, setExporting] = useState(false);
   const [exportFormat, setExportFormat] = useState<"xlsx" | "pdf">("xlsx");
   const [exportScope, setExportScope] = useState<"all" | "filtered">("filtered");
@@ -1102,6 +1106,11 @@ function ScheduleView({ session, event, data, availableOfficials, canEdit, canEd
     && `${item.home_team} ${item.away_team} ${item.field_name} ${item.venue_name || ""} ${item.division || ""} ${item.age_group || ""} ${item.gender || ""}`.toLowerCase().includes(scheduleSearch.trim().toLowerCase()));
   const visibleGames = [...filteredGames].sort(compareGames);
   const additionalFilterCount = fieldFilters.length + siteFilters.length + officialFilters.length + timeFilters.length + ageFilters.length + genderFilters.length + competitionFilters.length + (scheduleSearch.trim() ? 1 : 0);
+  const totalFilterCount = dateFilters.length + additionalFilterCount;
+  const clearScheduleFilters = () => {
+    setDateFilters([]); setFieldFilters([]); setSiteFilters([]); setOfficialFilters([]); setTimeFilters([]);
+    setAgeFilters([]); setGenderFilters([]); setCompetitionFilters([]); setScheduleSearch("");
+  };
   const canRateGame = (game: GameRecord) => canRateCrew
     && isRateableGame(game)
     && (!coachView || hasFullEventRatingAccess || assignedCoachingGameIds.has(game.id));
@@ -1112,6 +1121,11 @@ function ScheduleView({ session, event, data, availableOfficials, canEdit, canEd
     const label = siteSupervisorView ? `${formatDate(item.starts_at)} · ${value}` : value;
     return { ...groups, [key]: { label, games: [...(groups[key]?.games || []), item] } };
   }, {});
+  useEffect(() => {
+    if (!coachView || coachGroupsInitialized.current) return;
+    setCollapsedScheduleGroups(new Set(Object.keys(groupedGames)));
+    coachGroupsInitialized.current = true;
+  }, [coachView, groupedGames]);
   function updateSortLevel(index: number, field: ScheduleSortField) {
     setSortOrder((current) => { const next = [...current]; const existing = next.indexOf(field); if (existing >= 0) next[existing] = next[index]; next[index] = field; return next; });
   }
@@ -1165,7 +1179,7 @@ function ScheduleView({ session, event, data, availableOfficials, canEdit, canEd
     catch (reason) { setMessage(reason instanceof Error ? reason.message : "Unable to confirm this schedule change."); }
     finally { setBusy(false); }
   }
-  return <section className="page-section"><div className="section-title schedule-section-title"><div><p className="eyebrow">EVENT SCHEDULE</p><h1>Games and crews</h1><p>{visibleGames.length} of {baseVisibleGames.length} games shown</p></div><div className="schedule-heading-date"><AssignmentFilterMenu label="Date" options={filterOptions.dates.map((date) => ({ id: date, name: formatDate(date) }))} selected={dateFilters} onChange={setDateFilters} /></div></div>
+  return <section className="page-section"><div className="section-title schedule-section-title"><div><p className="eyebrow">EVENT SCHEDULE</p><h1>Games and crews</h1><p>{visibleGames.length} of {baseVisibleGames.length} games shown</p>{totalFilterCount > 0 && <button className="text-button schedule-clear-filters" type="button" onClick={clearScheduleFilters}>Clear All Filters · {totalFilterCount} active</button>}</div><div className="schedule-heading-date"><AssignmentFilterMenu label="Date" options={filterOptions.dates.map((date) => ({ id: date, name: formatDate(date) }))} selected={dateFilters} onChange={setDateFilters} /></div></div>
     {rulesDocument && <aside className="panel event-rules-banner"><div><p className="eyebrow">EVENT DOCUMENT</p><strong>Rules of Competition</strong><span>{rulesDocument.title}</span></div><EventDocumentLink session={session} document={rulesDocument} /></aside>}
     <div className="schedule-primary-actions"><button className="secondary" onClick={() => setExporting(true)}>Export Schedule</button>{canEdit && <button className="secondary" onClick={() => setAdding((value) => !value)}>{adding ? "Cancel" : "Add Game Manually"}</button>}</div>
     <details className="panel schedule-control-card schedule-sort-card"><summary><span><strong>Sort Schedule</strong><small>{sortOrder.map((field) => scheduleSortLabels[field]).join(" / ")}</small></span><b>+</b></summary><div className="schedule-toolbar"><div className="schedule-sort-controls">{siteSupervisorView && <label>Group Schedule By<select value={supervisorGroupMode} onChange={(change) => { setSupervisorGroupMode(change.target.value as typeof supervisorGroupMode); setCollapsedScheduleGroups(new Set()); }}><option value="field">Field</option><option value="time">Time</option></select></label>}<label>Sort preset<select value={sortOrder.join("-")} onChange={(change) => setSortOrder(change.target.value === "date-time-field" ? ["date", "time", "field"] : ["date", "field", "time"])}><option value="date-field-time">Date / Field / Time</option><option value="date-time-field">Date / Time / Field</option>{![["date", "field", "time"], ["date", "time", "field"]].some((preset) => preset.join("-") === sortOrder.join("-")) && <option value={sortOrder.join("-")}>Custom</option>}</select></label>{sortOrder.map((field, index) => <label key={index}>Sort {index + 1}<select value={field} onChange={(change) => updateSortLevel(index, change.target.value as ScheduleSortField)}>{(Object.keys(scheduleSortLabels) as ScheduleSortField[]).map((option) => <option value={option} key={option}>{scheduleSortLabels[option]}</option>)}</select></label>)}</div></div></details>
@@ -3990,7 +4004,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.30.2</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.30.4</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

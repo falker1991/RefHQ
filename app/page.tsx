@@ -630,6 +630,7 @@ function PersonalDashboard({ session, profile, organizations, onNavigate }: { se
   return <section className="page-section personal-dashboard">
     <div className="welcome"><div><p className="eyebrow">MY DASHBOARD</p><h1>Welcome, {profile.full_name.split(" ")[0]}.</h1><p>Your groups, events, assignments, and account tools in one place.</p></div></div>
     {message && <p className="pilot-message">{message}</p>}
+    <button className="dashboard-schedule-link" onClick={() => onNavigate("board")}><span className="dashboard-schedule-icon">▦</span><span><small>MY SCHEDULE</small><strong>View My Assignments</strong><b>Open Schedule →</b></span></button>
     <div className="metrics personal-dashboard-metrics">
       <article><span className="metric-icon green">♙</span><div><strong>{organizations.length}</strong><p>Groups</p></div></article>
       <article><span className="metric-icon blue">◇</span><div><strong>{eventOptions.length}</strong><p>Upcoming Events</p></div></article>
@@ -640,7 +641,7 @@ function PersonalDashboard({ session, profile, organizations, onNavigate }: { se
       <article className="panel dashboard-event"><div className="panel-head"><div><p className="eyebrow">MY GROUPS</p><h2>{organizations.length} Group{organizations.length === 1 ? "" : "s"}</h2></div></div><div className="personal-context-list">{organizations.map((item) => <div key={item.id}>{item.logo_url ? <img src={item.logo_url} alt="" /> : <span className="event-mark">{item.name[0]}</span>}<strong>{item.name}</strong></div>)}{!organizations.length && !loading && <p>No group memberships are linked to this account.</p>}</div></article>
       <article className="panel dashboard-event"><div className="panel-head"><div><p className="eyebrow">MY EVENTS</p><h2>Current and Upcoming</h2></div></div><div className="personal-event-list">{eventOptions.slice(0, 8).map((item) => { const rulesDocument = rulesDocuments.find((document) => document.event_id === item.id); return <div key={item.id}><strong>{item.name}</strong><span>{item.organization} · Next assignment {formatDate(item.startsAt)} at {formatTime(item.startsAt)}</span>{rulesDocument && <EventDocumentLink session={session} document={rulesDocument} compact />}</div>; })}{!eventOptions.length && !loading && <p>No upcoming Law18Ref events are assigned to you.</p>}</div></article>
     </div>
-    <div className="dashboard-actions personal-dashboard-actions"><button className="primary" onClick={() => onNavigate("board")}>View My Assignments</button><button className="secondary" onClick={() => onNavigate("checkin")}>Check In</button><button className="secondary" onClick={() => onNavigate("account")}>Account Settings</button></div>
+    <div className="dashboard-actions personal-dashboard-actions"><button className="secondary" onClick={() => onNavigate("checkin")}>Check In</button><button className="secondary" onClick={() => onNavigate("account")}>Account Settings</button></div>
   </section>;
 }
 
@@ -3097,6 +3098,7 @@ function DashboardHome({
     <div className="welcome">
       <div><p className="eyebrow">DASHBOARD</p><h1>Welcome, {profile.full_name.split(" ")[0]}.</h1><p>Your events, assignments, and tournament-day tools in one place.</p></div>
     </div>
+    <button className="dashboard-schedule-link" onClick={() => onNavigate(profile.role === "referee" ? "board" : "schedule")}><span className="dashboard-schedule-icon">▦</span><span><small>SCHEDULE</small><strong>{profile.role === "referee" ? "View My Assignments" : "View Event Schedule"}</strong><b>Open Schedule →</b></span></button>
     <div className={`metrics dashboard-metrics${adminView ? " admin-dashboard-metrics" : ""}`}>
       {!adminView && <article><span className="metric-icon green">◇</span><div><strong>{events.length}</strong><p>Available events</p></div></article>}
       {!adminView && <article><span className="metric-icon blue">☷</span><div><strong>{data.games.length}</strong><p>Games in active event</p></div></article>}
@@ -3109,7 +3111,6 @@ function DashboardHome({
         {relevantEvents.length ? <div className="dashboard-event-body dashboard-event-list">
           {relevantEvents.map((item) => <p className={item.id === event?.id ? "selected-dashboard-event" : ""} key={item.id}><strong>{item.name}</strong><span>{formatDate(item.starts_on)} through {formatDate(item.ends_on)} · {item.venue_name}</span></p>)}
           <div className="dashboard-actions">
-            <button className="primary" onClick={() => onNavigate(profile.role === "referee" ? "board" : "schedule")}>{profile.role === "referee" ? "Open my day" : "View schedule"}</button>
             <button className="secondary" onClick={() => onNavigate("checkin")}>Check-in tools</button>
           </div>
         </div> : <div className="empty-dashboard"><p>No tournament is available yet.</p>{profile.role !== "referee" && <button className="primary" onClick={() => onNavigate("import")}>Import an event</button>}</div>}
@@ -4049,7 +4050,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.31.1</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.31.2</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

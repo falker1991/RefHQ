@@ -2,6 +2,12 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.31.2
+
+- Adds a prominent full-width schedule link immediately below the welcome area on every dashboard.
+- Opens the private My Assignments schedule for referees and the selected event schedule for staff and referee coaches.
+- Keeps the schedule action mobile-friendly and visually distinct from secondary dashboard tools.
+
 ## v0.31.1
 
 - Adds date-specific **Not Expected** attendance overrides without removing officials or changing their assignments.

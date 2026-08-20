@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.29.4 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.29.5 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.29.4 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.29\.4/);
+  assert.match(page, /Version 0\.29\.5/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.29.4 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.29.4");
+  assert.equal(JSON.parse(packageJson).version, "0.29.5");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1243,7 +1243,7 @@ test("v0.29.2 imports nonblank assignment contact details into the officials dir
   const [page, client] = await Promise.all([read("app/page.tsx"), read("app/supabase-client.ts")]);
   assert.match(client, /official_phone: normalizePhoneNumber\(cell\(record, headers, "mobile phone"\)\) \|\| null/);
   assert.match(client, /const contactsByName = new Map/);
-  assert.match(client, /if \(matched\.personal_contact_locked\) return/);
+  assert.match(client, /if \(matched\.personal_contact_locked\) \{/);
   assert.match(client, /if \(contact\.phone\) changes\.phone = contact\.phone/);
   assert.match(client, /source: "assignr_assignments"/);
   assert.match(page, /Nonblank email addresses and phone numbers in this assignments export will also update matching officials/);
@@ -1269,6 +1269,26 @@ test("v0.29.4 limits coaching assignments to ratings-enabled games", async () =>
   assert.match(migration, /delete from public\.coach_assignments ca/);
   assert.match(migration, /Imported Referee Coach, Site Coordinator/);
   assert.doesNotMatch(migration, /delete from public\.assignments/);
+});
+
+test("v0.29.5 completes schedule imports with isolated contact warnings and recipient notifications", async () => {
+  const [page, client, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/20260820153115_import_conflict_notifications.sql"),
+  ]);
+  assert.match(client, /recordEmailConflict/);
+  assert.match(client, /status: conflicts\.length \? "completed_with_warnings" : "completed"/);
+  assert.match(client, /errors: conflicts/);
+  assert.match(client, /return \{ event, conflicts \}/);
+  assert.match(page, /conflicting contact field/);
+  assert.match(page, /loadUserNotifications/);
+  assert.match(page, /notification-popover/);
+  assert.match(migration, /create table if not exists public\.user_notifications/);
+  assert.match(migration, /users view own notifications/);
+  assert.match(migration, /import\.completed_with_warnings/);
+  assert.match(migration, /select new\.uploaded_by as user_id[\s\S]*select p\.id from public\.profiles p where p\.is_site_owner/);
+  assert.match(migration, /revoke all on function public\.report_import_warnings\(\) from authenticated/);
 });
 
 test("v0.27.0 separates schedule date, filters, and sorting controls", async () => {
@@ -1454,5 +1474,5 @@ test("v0.28.1 keeps schedule crew columns aligned without range-query support", 
   assert.match(styles, /\.schedule-crew-list>span\{box-sizing:border-box;flex:0 0 calc\(\(100% - 21px\)\/4\)\}/);
   assert.match(styles, /@media\(max-width:900px\)\{\.schedule-crew-list>span\{flex-basis:calc\(\(100% - 7px\)\/2\)\}\}/);
   assert.match(styles, /@media\(max-width:700px\)\{\.schedule-crew-list>span\{flex-basis:100%\}\}/);
-  assert.equal(JSON.parse(packageJson).version, "0.29.4");
+  assert.equal(JSON.parse(packageJson).version, "0.29.5");
 });

@@ -216,6 +216,18 @@ export type AuditRecord = {
   created_at: string;
 };
 
+export type UserNotification = {
+  id: string;
+  organization_id: string | null;
+  event_id: string | null;
+  notification_type: string;
+  title: string;
+  message: string;
+  details: Record<string, unknown>;
+  read_at: string | null;
+  created_at: string;
+};
+
 export type AssignmentRecord = {
   id: string;
   game_id: string;
@@ -576,6 +588,17 @@ export async function loadOrganizationActivity(
     method: "POST",
     body: JSON.stringify({ target_organization: organizationId, result_limit: limit }),
   });
+}
+
+export async function loadUserNotifications(session: Law18Session, limit = 25) {
+  return rest<UserNotification[]>(session, `user_notifications?select=*&order=created_at.desc&limit=${limit}`);
+}
+
+export async function markUserNotificationsRead(session: Law18Session) {
+  await rest(session, "user_notifications?read_at=is.null", {
+    method: "PATCH",
+    body: JSON.stringify({ read_at: new Date().toISOString() }),
+  }, "return=minimal");
 }
 
 export async function loadOrganizationJoinLinks(
@@ -1246,6 +1269,19 @@ export type OfficialImportResult = {
   conflicts: { name: string; email: string; reason: string }[];
 };
 
+export type ScheduleImportConflict = {
+  name: string;
+  field: "primary_email";
+  value: string;
+  conflictingOfficial: string;
+  reason: string;
+};
+
+export type TournamentImportResult = {
+  event: EventRecord;
+  conflicts: ScheduleImportConflict[];
+};
+
 function csvRecords(text: string) {
   const records: string[][] = [];
   let record: string[] = [];
@@ -1744,7 +1780,7 @@ export async function importTournament(
     eventId?: string;
   },
   rows: ImportRow[],
-) {
+): Promise<TournamentImportResult> {
   if (!organizationId) throw new Error("Select a group before importing a schedule.");
   let event: EventRecord;
   if (details.eventId) {
@@ -1818,6 +1854,23 @@ export async function importTournament(
   });
   const newOfficials: Record<string, unknown>[] = [];
   const contactUpdates: Array<{ id: string; changes: Record<string, unknown> }> = [];
+  const conflicts: ScheduleImportConflict[] = [];
+  const conflictKeys = new Set<string>();
+  const recordEmailConflict = (contact: { fullName: string; email: string | null }, ownerId: string) => {
+    if (!contact.email) return;
+    const owner = existingOfficialsById.get(ownerId);
+    const importedOwner = contactsByName.get(ownerId);
+    const conflictKey = `${normalizeOfficialName(contact.fullName)}|${contact.email}|${ownerId}`;
+    if (conflictKeys.has(conflictKey)) return;
+    conflictKeys.add(conflictKey);
+    conflicts.push({
+      name: contact.fullName,
+      field: "primary_email",
+      value: contact.email,
+      conflictingOfficial: owner?.full_name || importedOwner?.fullName || "another official",
+      reason: "Primary email already belongs to a different official; email update skipped",
+    });
+  };
   const claimedEmails = new Map([...byEmail].map(([email, official]) => [email, official.id]));
   contactsByName.forEach((contact, key) => {
     const nameMatches = byName.get(key) || [];
@@ -1828,6 +1881,7 @@ export async function importTournament(
     const matched = (nameMatches.length === 1 ? nameMatches[0] : undefined) || emailMatch;
     if (!matched) {
       const emailAvailable = contact.email && !claimedEmails.has(contact.email);
+      if (contact.email && !emailAvailable) recordEmailConflict(contact, claimedEmails.get(contact.email)!);
       newOfficials.push({
         organization_id: organizationId,
         full_name: contact.fullName,
@@ -1841,11 +1895,18 @@ export async function importTournament(
       if (emailAvailable) claimedEmails.set(contact.email!, key);
       return;
     }
-    if (matched.personal_contact_locked) return;
+    if (matched.personal_contact_locked) {
+      if (contact.email && claimedEmails.has(contact.email) && claimedEmails.get(contact.email) !== matched.id) {
+        recordEmailConflict(contact, claimedEmails.get(contact.email)!);
+      }
+      return;
+    }
     const changes: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (contact.email && (!claimedEmails.has(contact.email) || claimedEmails.get(contact.email) === matched.id)) {
       changes.email = contact.email;
       claimedEmails.set(contact.email, matched.id);
+    } else if (contact.email) {
+      recordEmailConflict(contact, claimedEmails.get(contact.email)!);
     }
     if (contact.phone) changes.phone = contact.phone;
     if (!matched.linked_user_id) changes.source_display_name = contact.fullName;
@@ -1952,14 +2013,16 @@ export async function importTournament(
         organization_id: organizationId,
         event_id: event.id,
         uploaded_by: profile.id,
+        source: "assignr_assignments_csv",
         file_name: details.fileName,
         row_count: rows.length,
-        status: "completed",
+        status: conflicts.length ? "completed_with_warnings" : "completed",
+        errors: conflicts,
       }),
     },
     "return=minimal",
   );
-  return event;
+  return { event, conflicts };
 }
 
 export async function createOfficial(

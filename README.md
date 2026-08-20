@@ -2,6 +2,11 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.29.5
+
+- Schedule imports now skip only a conflicting contact field instead of stopping the batch. All assignments and valid contact updates continue, the import result identifies each skipped value and its existing owner, and the Import Job is retained as completed with warnings.
+- Import conflict warnings are written to Group Activity and delivered as in-app notifications to both the importing administrator and the Site Owner. Notification access is recipient-scoped with row-level security.
+
 ## v0.29.4
 
 - Limits Coaching-system assignments to ratings-enabled games. HQ and operational games are removed from Coaching selectors and rejected by the database, while imported Referee Coach and other schedule positions remain unchanged.

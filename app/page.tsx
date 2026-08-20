@@ -49,6 +49,7 @@ import {
   loadExternalCheckInConfig,
   loadOrganization,
   loadOrganizationActivity,
+  loadUserNotifications,
   loadOrganizationJoinLinks,
   loadOrganizations,
   loadGroupsAvailableForOfficialAddition,
@@ -63,6 +64,7 @@ import {
   logOfficialsExport,
   mergeOrganizationAccounts,
   markEventRatingsSeen,
+  markUserNotificationsRead,
   parseAssignrCsv,
   parseAssignrOfficialsCsv,
   saveAssessment,
@@ -119,6 +121,7 @@ import {
   type Profile,
   type ProvisionalEventAccess,
   type UnifiedAssignment,
+  type UserNotification,
 } from "./supabase-client";
 import { exportScheduleExcel, exportSchedulePdf, type ScheduleExportRow } from "./schedule-export";
 import { normalizePhoneNumber, phoneCallHref } from "./phone";
@@ -1485,17 +1488,20 @@ function ImportView({
     setBusy(true);
     setMessage("Importing tournament…");
     try {
-      const event = await importTournament(
+      const result = await importTournament(
         session,
         profile,
         organizationId,
         { ...details, fileName, eventId: destinationEventId || undefined },
         rows,
       );
-      setMessage(destinationEventId
-        ? `Schedule added to ${event.name} successfully.`
-        : "Tournament created successfully.");
-      onImported(event);
+      const successMessage = destinationEventId
+        ? `Schedule added to ${result.event.name} successfully.`
+        : "Tournament created successfully.";
+      setMessage(result.conflicts.length
+        ? `${successMessage} ${result.conflicts.length} conflicting contact field${result.conflicts.length === 1 ? " was" : "s were"} skipped; assignments and other valid updates were completed. ${result.conflicts.map((conflict) => `${conflict.name}: ${conflict.value} belongs to ${conflict.conflictingOfficial}`).join(" · ")}`
+        : successMessage);
+      onImported(result.event);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Import failed.");
     } finally {
@@ -3137,7 +3143,7 @@ function OrganizationActivity({
       <h3 className="lifecycle-list-title">Archived Events</h3>{archivedEvents.map((event) => <div className="archived-event-row" key={event.id}><div><strong>{event.name}</strong><small>{formatDate(event.starts_on)} through {formatDate(event.ends_on)} · {event.archive_reason === "automatic" ? "Automatically archived" : "Manually archived"}</small></div><div className="archived-event-actions"><input className="bulk-row-check" type="checkbox" aria-label={`Select ${event.name}`} checked={selectedEventIds.includes(event.id)} onChange={(change) => setSelectedEventIds((current) => change.target.checked ? [...current, event.id] : current.filter((id) => id !== event.id))} /><button className="secondary" disabled={busy} onClick={() => restoreArchivedEvent(event)}>Restore Event</button></div></div>)}{!archivedEvents.length && <EmptyState>No events are archived.</EmptyState>}</article>
     <article className="panel activity-log"><div className="panel-head"><div><p className="eyebrow">AUDIT LOG</p><h2>Group Activity</h2><p>Ratings, imports, schedules, assignments, members, events, check-ins, and other meaningful changes appear here.</p></div></div>
       <div className="activity-log-head"><span>Action</span><span>Performed by</span><span>Record</span><span>Date</span></div>
-      {activity.map((item) => <div className="activity-log-row" key={item.id}><strong>{actionLabel(item.action)}</strong><span>{item.actor_name}</span><span>{item.entity_type.replace(/_/g, " ")}</span><time>{new Intl.DateTimeFormat([], { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at))}</time></div>)}
+      {activity.map((item) => <div className="activity-log-row" key={item.id}><strong>{actionLabel(item.action)}{typeof item.details.message === "string" && <small>{item.details.message}</small>}</strong><span>{item.actor_name}</span><span>{item.entity_type.replace(/_/g, " ")}</span><time>{new Intl.DateTimeFormat([], { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at))}</time></div>)}
       {!activity.length && <EmptyState>No organization activity has been recorded yet.</EmptyState>}
     </article>
   </section>;
@@ -3557,6 +3563,8 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
   const [loading, setLoading] = useState(true);
   const [dashboardLoadError, setDashboardLoadError] = useState("");
   const [accountOpen, setAccountOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<UserNotification[]>([]);
   const [helpOpen, setHelpOpen] = useState(false);
   const [ratingModalGameId, setRatingModalGameId] = useState<string | null>(null);
   const [scheduleOfficialId, setScheduleOfficialId] = useState<string | null>(null);
@@ -3571,6 +3579,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
         if (!dropdown.contains(event.target as Node)) dropdown.removeAttribute("open");
       });
       if (!(event.target as Element).closest?.(".account-menu")) setAccountOpen(false);
+      if (!(event.target as Element).closest?.(".notification-menu")) setNotificationsOpen(false);
     };
     document.addEventListener("pointerdown", closeDropdowns);
     return () => document.removeEventListener("pointerdown", closeDropdowns);
@@ -3675,6 +3684,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
         await recordCurrentActivity(session).catch(() => undefined);
         await linkCurrentReferee(session);
         const [currentProfile, availableEvents, memberships, availableOrganizations] = await Promise.all([loadProfile(session), loadEvents(session), loadMemberships(session), loadOrganizations(session)]);
+        loadUserNotifications(session).then(setNotifications).catch(() => setNotifications([]));
         setProfile(currentProfile);
         setOrganizations(availableOrganizations.filter((item) => item.active !== false));
         setAllEvents(availableEvents);
@@ -3786,6 +3796,16 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     window.location.reload();
   }
 
+  async function openNotifications() {
+    const opening = !notificationsOpen;
+    setNotificationsOpen(opening);
+    setAccountOpen(false);
+    if (opening && notifications.some((item) => !item.read_at)) {
+      await markUserNotificationsRead(session).catch(() => undefined);
+      setNotifications((current) => current.map((item) => ({ ...item, read_at: item.read_at || new Date().toISOString() })));
+    }
+  }
+
   async function switchOrganization(nextId: string, nextView?: View) {
     let nextOrganization = organizations.find((item) => item.id === nextId);
     if (!nextOrganization) {
@@ -3815,7 +3835,11 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
   }
 
   async function handleImported(newEvent: EventRecord) {
-    const nextEvents = await loadEvents(session);
+    const [nextEvents, nextNotifications] = await Promise.all([
+      loadEvents(session),
+      loadUserNotifications(session).catch(() => [] as UserNotification[]),
+    ]);
+    setNotifications(nextNotifications);
     setAllEvents(nextEvents);
     setEvents(nextEvents.filter((item) => item.organization_id === organization?.id));
     if (organization?.id) setOrganizationOfficials(await loadOrganizationOfficials(session, organization.id));
@@ -3898,6 +3922,10 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       <div className="topbar-account-actions">
         <button className="help-button" aria-label="Open role help" title="Help and how-to" onClick={() => setHelpOpen(true)}>?</button>
         <button className="page-refresh-button" aria-label="Refresh page" title="Refresh page" onClick={refreshCurrentPage}>↻</button>
+        <div className="notification-menu">
+          <button className="notification-button" aria-label="Open notifications" aria-expanded={notificationsOpen} title="Notifications" onClick={() => void openNotifications()}>!{notifications.some((item) => !item.read_at) && <span className="nav-notification-badge">{notifications.filter((item) => !item.read_at).length}</span>}</button>
+          {notificationsOpen && <div className="notification-popover"><header><strong>Notifications</strong></header>{notifications.map((item) => <article className={item.read_at ? "" : "unread"} key={item.id}><strong>{item.title}</strong><p>{item.message}</p><time>{new Intl.DateTimeFormat([], { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at))}</time></article>)}{!notifications.length && <p className="notification-empty">No notifications.</p>}</div>}
+        </div>
         <div className="account-menu">
           <button className="avatar account-avatar" aria-label="Open account menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((open) => !open)}>{initials(profile?.full_name || session.user.email || "RH")}</button>
           {accountOpen && <div className="account-popover">
@@ -3942,7 +3970,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.29.4</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.29.5</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

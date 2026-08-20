@@ -257,6 +257,18 @@ export type CheckInRecord = {
   event_date: string;
 };
 
+export type AttendanceExpectationOverride = {
+  id: string;
+  event_id: string;
+  event_date: string;
+  official_id: string;
+  expected: false;
+  reason: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ExternalCheckInField = "last_name" | "first_name" | "email" | "phone" | "ussf_id" | "date_of_birth" | "other";
 
 export type ExternalCheckInConfig = {
@@ -1041,14 +1053,14 @@ export async function loadEventData(session: Law18Session, eventId: string) {
       : [],
   ]);
   const officials = [...new Map([...assignedOfficials, ...linkedEventOfficials].map((official) => [official.id, official])).values()];
-  const checkIns = await rest<CheckInRecord[]>(
-    session,
-    `check_ins?event_id=eq.${enc(eventId)}&select=*`,
-  );
+  const [checkIns, attendanceOverrides] = await Promise.all([
+    rest<CheckInRecord[]>(session, `check_ins?event_id=eq.${enc(eventId)}&select=*`),
+    loadEventAttendanceOverrides(session, eventId),
+  ]);
   const assessments = gameIds
     ? await rest<AssessmentRecord[]>(session, `assessments?game_id=in.(${gameIds})&select=*`)
     : [];
-  return { games, assignments, officials, checkIns, assessments, coachAssignments, documents, provisionalAccess };
+  return { games, assignments, officials, checkIns, attendanceOverrides, assessments, coachAssignments, documents, provisionalAccess };
 }
 
 export async function createCoachAssignment(
@@ -1089,6 +1101,40 @@ export async function loadEventCheckIns(session: Law18Session, eventId: string) 
   return rest<CheckInRecord[]>(
     session,
     `check_ins?event_id=eq.${enc(eventId)}&select=*&order=checked_in_at.desc`,
+  );
+}
+
+export async function loadEventAttendanceOverrides(session: Law18Session, eventId: string) {
+  return rest<AttendanceExpectationOverride[]>(
+    session,
+    `attendance_expectation_overrides?event_id=eq.${enc(eventId)}&select=*&order=created_at.desc`,
+  );
+}
+
+export async function setAttendanceExpected(
+  session: Law18Session,
+  eventId: string,
+  officialId: string,
+  eventDate: string,
+  expected: boolean,
+) {
+  if (expected) {
+    await rest(
+      session,
+      `attendance_expectation_overrides?event_id=eq.${enc(eventId)}&official_id=eq.${enc(officialId)}&event_date=eq.${enc(eventDate)}`,
+      { method: "DELETE" },
+      "return=minimal",
+    );
+    return;
+  }
+  await rest(
+    session,
+    "attendance_expectation_overrides?on_conflict=event_id,event_date,official_id",
+    {
+      method: "POST",
+      body: JSON.stringify({ event_id: eventId, official_id: officialId, event_date: eventDate, expected: false, created_by: session.user.id }),
+    },
+    "resolution=merge-duplicates,return=minimal",
   );
 }
 

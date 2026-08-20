@@ -2,6 +2,13 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.31.1
+
+- Adds date-specific **Not Expected** attendance overrides without removing officials or changing their assignments.
+- Adds a compact icon beside each name in the detailed check-in roster to exclude or restore an official.
+- Excludes Not Expected officials from the dashboard and live-roster required check-in totals.
+- Adds gray Not Expected roster styling, a dedicated filter, scoped staff permissions, and audit logging.
+
 ## v0.31.0
 
 - Moves primary page navigation from the fixed header into a right-side tray opened by the user badge.

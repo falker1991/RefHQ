@@ -1030,6 +1030,17 @@ export async function createCoachAssignment(
   coach: Pick<OfficialRecord, "id" | "linked_user_id">,
   gameId: string | null,
 ) {
+  if (gameId) {
+    const games = await rest<Pick<GameRecord, "id" | "operational" | "field_name" | "venue_name">[]>(
+      session,
+      `games?id=eq.${enc(gameId)}&event_id=eq.${enc(eventId)}&select=id,operational,field_name,venue_name`,
+    );
+    const game = games[0];
+    const hqLocation = `${game?.field_name || ""} ${game?.venue_name || ""}`.toLowerCase().includes("hq");
+    if (!game || game.operational || hqLocation) {
+      throw new Error("Referee coaches can only be assigned through Coaching to ratings-enabled games.");
+    }
+  }
   const rows = await rest<CoachAssignmentRecord[]>(session, "coach_assignments", {
     method: "POST",
     body: JSON.stringify({

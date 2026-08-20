@@ -2,6 +2,10 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.29.4
+
+- Limits Coaching-system assignments to ratings-enabled games. HQ and operational games are removed from Coaching selectors and rejected by the database, while imported Referee Coach and other schedule positions remain unchanged.
+
 ## v0.29.3
 
 - Corrects Assignr contact and assignment matching when two officials share an email address. An unambiguous official name now takes precedence over email so each person's contact details and game assignments remain on the correct directory record.

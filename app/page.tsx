@@ -2885,7 +2885,7 @@ function CoachWorkspace({
     return groups;
   }, new Map<string, { coach?: OfficialRecord; assignments: CoachAssignmentRecord[] }>()).values()]
     .sort((left, right) => (left.coach?.full_name || "Linked coach account").localeCompare(right.coach?.full_name || "Linked coach account"));
-  const scheduleGames = data.games.filter((game) => !game.operational).sort((a, b) => a.starts_at.localeCompare(b.starts_at) || a.field_name.localeCompare(b.field_name, undefined, { numeric: true }));
+  const scheduleGames = data.games.filter(isRateableGame).sort((a, b) => a.starts_at.localeCompare(b.starts_at) || a.field_name.localeCompare(b.field_name, undefined, { numeric: true }));
   const scheduleDates = [...new Set(scheduleGames.map((game) => game.starts_at.slice(0, 10)))];
   const scheduleSites = [...new Set(scheduleGames.map((game) => game.venue_name || "Unspecified site"))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const scheduleFields = [...new Set(scheduleGames.map((game) => game.field_name))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
@@ -2987,7 +2987,7 @@ function CoachWorkspace({
       return <details className="panel coach-access-card" key={coach?.id || assignments[0].id}>
         <summary><span className="official-name-cell"><span className="avatar">{initials(coach?.full_name || "Coach")}</span><span><strong>{coach?.full_name || "Linked coach account"}</strong><small>{hasFullSchedule ? "Full event schedule access" : `${gameAssignments.length} assigned game${gameAssignments.length === 1 ? "" : "s"}`}</small></span></span><b aria-hidden="true" /></summary>
         <div className="coach-access-summary">
-          {hasFullSchedule && <div className="coach-access-row"><div><strong>Full Event Schedule</strong><small>Access to every game in this event</small></div>{canManage && assignments.filter((assignment) => assignment.full_schedule).map((assignment) => <button className="text-button" disabled={busy} onClick={() => removeAssignment(assignment.id)} key={assignment.id}>Remove</button>)}</div>}
+          {hasFullSchedule && <div className="coach-access-row"><div><strong>Full Rateable Schedule</strong><small>Access to every ratings-enabled game in this event</small></div>{canManage && assignments.filter((assignment) => assignment.full_schedule).map((assignment) => <button className="text-button" disabled={busy} onClick={() => removeAssignment(assignment.id)} key={assignment.id}>Remove</button>)}</div>}
           {!hasFullSchedule && gameAssignments.map(({ assignment, game }) => <div className="coach-access-row" key={assignment.id}><div><strong>{game ? `${formatDate(game.starts_at)} · ${formatTime(game.starts_at)} · ${game.field_name}` : "Selected game"}</strong>{game && <small>{game.home_team} vs. {game.away_team}</small>}</div>{canManage && <button className="text-button" disabled={busy} onClick={() => removeAssignment(assignment.id)}>Remove</button>}</div>)}
         </div>
       </details>;
@@ -3942,7 +3942,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.29.3</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.29.4</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

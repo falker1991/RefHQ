@@ -2,6 +2,11 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.30.5
+
+- Expands Help according to the active role hierarchy. Users see navigation instructions and available PDF quick guides for their own active roles and every subordinate role they oversee.
+- Keeps the active-role badges unchanged so the additional material is clearly reference documentation rather than added account permission.
+
 ## v0.30.4
 
 - Opens Referee Coach schedules on one date by default: the current event date, or the event's first game date when it has not started.

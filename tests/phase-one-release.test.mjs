@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.30.4 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.30.5 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.30.4 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.30\.4/);
+  assert.match(page, /Version 0\.30\.5/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.30.4 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.30.4");
+  assert.equal(JSON.parse(packageJson).version, "0.30.5");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1361,6 +1361,18 @@ test("v0.30.4 opens coach schedules on one collapsed field-sorted event date", a
   assert.match(page, /coachGroupsInitialized\.current = true/);
 });
 
+test("v0.30.5 shows help and guides for active and subordinate roles", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /const subordinateHelpRoles: Record<MembershipRole, MembershipRole\[\]>/);
+  assert.match(page, /site_owner: \["site_owner", "organization_director", "organization_admin", "event_admin", "assignor", "site_coordinator", "referee_coach", "referee"\]/);
+  assert.match(page, /assignor: \["assignor", "site_coordinator", "referee_coach", "referee"\]/);
+  assert.match(page, /site_coordinator: \["site_coordinator", "referee"\]/);
+  assert.match(page, /referee_coach: \["referee_coach", "referee"\]/);
+  assert.match(page, /\.flatMap\(\(role\) => quickGuidesByRole\[role\] \|\| \[\]\)/);
+  assert.match(page, /active roles and the roles you oversee/);
+  assert.match(page, /helpVisibleRoles\.map\(\(role\) => <section/);
+});
+
 test("v0.27.0 separates schedule date, filters, and sorting controls", async () => {
   const [page, styles] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
   assert.match(page, /className="section-title schedule-section-title"/);
@@ -1384,14 +1396,14 @@ test("v0.27.1 consolidates coaching access into one card per coach", async () =>
   assert.match(styles, /Version 0\.27\.1 consolidated coaching-access cards/);
 });
 
-test("v0.27.2 exposes quick guides for the user's active roles", async () => {
+test("v0.27.2 exposes role-aware quick guides", async () => {
   const [page, styles, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/globals.css"),
     read("package.json"),
   ]);
   assert.match(page, /const quickGuidesByRole: Partial<Record<MembershipRole/);
-  assert.match(page, /const activeQuickGuides = \[\.\.\.new Map\(activeGroupRoles/);
+  assert.match(page, /const activeQuickGuides = \[\.\.\.new Map\(helpVisibleRoles/);
   assert.match(page, /className="role-quick-guides"/);
   assert.match(page, /Law18Ref-Referee-Coach-Quick-Guide\.pdf/);
   assert.match(page, /target="_blank" rel="noreferrer"/);
@@ -1544,5 +1556,5 @@ test("v0.28.1 keeps schedule crew columns aligned without range-query support", 
   assert.match(styles, /\.schedule-crew-list>span\{box-sizing:border-box;flex:0 0 calc\(\(100% - 21px\)\/4\)\}/);
   assert.match(styles, /@media\(max-width:900px\)\{\.schedule-crew-list>span\{flex-basis:calc\(\(100% - 7px\)\/2\)\}\}/);
   assert.match(styles, /@media\(max-width:700px\)\{\.schedule-crew-list>span\{flex-basis:100%\}\}/);
-  assert.equal(JSON.parse(packageJson).version, "0.30.4");
+  assert.equal(JSON.parse(packageJson).version, "0.30.5");
 });

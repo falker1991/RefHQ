@@ -3647,7 +3647,20 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     referee_coach: [{ title: "Referee Coach Quick Guide", description: "Finding assigned games, reviewing crews, and submitting ratings.", href: "/guides/Law18Ref-Referee-Coach-Quick-Guide.pdf" }],
     referee: [{ title: "Referee Quick Guide", description: "Account creation, assignments, event-day check-in, and shared evaluations.", href: "/guides/Law18Ref-Referee-Quick-Guide.pdf" }],
   };
-  const activeQuickGuides = [...new Map(activeGroupRoles
+  const subordinateHelpRoles: Record<MembershipRole, MembershipRole[]> = {
+    site_owner: ["site_owner", "organization_director", "organization_admin", "event_admin", "assignor", "site_coordinator", "referee_coach", "referee"],
+    organization_director: ["organization_director", "organization_admin", "event_admin", "assignor", "site_coordinator", "referee_coach", "referee"],
+    organization_admin: ["organization_admin", "event_admin", "assignor", "site_coordinator", "referee_coach", "referee"],
+    event_admin: ["event_admin", "assignor", "site_coordinator", "referee_coach", "referee"],
+    assignor: ["assignor", "site_coordinator", "referee_coach", "referee"],
+    site_coordinator: ["site_coordinator", "referee"],
+    referee_coach: ["referee_coach", "referee"],
+    referee: ["referee"],
+  };
+  const helpRoleOrder: MembershipRole[] = ["site_owner", "organization_director", "organization_admin", "event_admin", "assignor", "site_coordinator", "referee_coach", "referee"];
+  const helpVisibleRoleSet = new Set(activeGroupRoles.flatMap((role) => subordinateHelpRoles[role]));
+  const helpVisibleRoles = helpRoleOrder.filter((role) => helpVisibleRoleSet.has(role));
+  const activeQuickGuides = [...new Map(helpVisibleRoles
     .flatMap((role) => quickGuidesByRole[role] || [])
     .map((guide) => [guide.href, guide])).values()];
   const isAdministrativeStaff = ["site_owner", "organization_director", "organization_admin", "event_admin", "assignor"].some((role) => allRoles.has(role as MembershipRole));
@@ -3977,7 +3990,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     {helpOpen && <div className="confirmation-backdrop help-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setHelpOpen(false); }}><section className="confirmation-dialog role-help-dialog" role="dialog" aria-modal="true" aria-labelledby="role-help-title">
       <header><div><p className="eyebrow">HELP & HOW-TO</p><h2 id="role-help-title">How to Navigate Law18Ref</h2><p>Follow the directions below for your role in {organization?.name || "the active group"}.</p></div><button className="modal-close-button" aria-label="Close help" onClick={() => setHelpOpen(false)}>×</button></header>
       <aside className="role-help-roles" aria-label="Active group roles">{activeGroupRoles.map((role) => <span className="role-badge" key={role}>{roleNames[role]}</span>)}</aside>
-      <main className="role-help-content">{activeQuickGuides.length > 0 && <section className="role-quick-guides"><h3>Quick Guides</h3><p>Open or download the guides available for your active roles.</p><div>{activeQuickGuides.map((guide) => <a href={guide.href} target="_blank" rel="noreferrer" key={guide.href}><span><strong>{guide.title}</strong><small>{guide.description}</small></span><b>Open PDF ↗</b></a>)}</div></section>}{activeGroupRoles.map((role) => <section key={role}><h3>{helpByRole[role].title}</h3><ol>{helpByRole[role].items.map((item) => <li key={item}>{item}</li>)}</ol></section>)}{!activeGroupRoles.length && <EmptyState>No active role is assigned in this group.</EmptyState>}</main>
+      <main className="role-help-content">{activeQuickGuides.length > 0 && <section className="role-quick-guides"><h3>Quick Guides</h3><p>Open or download guides for your active roles and the roles you oversee.</p><div>{activeQuickGuides.map((guide) => <a href={guide.href} target="_blank" rel="noreferrer" key={guide.href}><span><strong>{guide.title}</strong><small>{guide.description}</small></span><b>Open PDF ↗</b></a>)}</div></section>}{helpVisibleRoles.map((role) => <section key={role}><h3>{helpByRole[role].title}</h3><ol>{helpByRole[role].items.map((item) => <li key={item}>{item}</li>)}</ol></section>)}{!activeGroupRoles.length && <EmptyState>No active role is assigned in this group.</EmptyState>}</main>
       <footer className="role-help-actions"><button className="primary" onClick={() => setHelpOpen(false)}>Close Help</button></footer>
     </section></div>}
     <div className="personal-header-spacer" aria-hidden="true" />
@@ -4004,7 +4017,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.30.4</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.30.5</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

@@ -2,6 +2,11 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.28.0
+
+- Replaces Last Login in the Officials directory with Last Active, refreshed when a linked user opens Law18Ref, navigates its tabs, returns to the visible app, or continues an active session.
+- Throttles presence writes without adding routine navigation to the group activity audit log.
+
 ## v0.27.14
 
 - Makes the administrative check-in QR card collapsible and collapsed by default while keeping QR generation and printing out of referee-only and coach-only views.

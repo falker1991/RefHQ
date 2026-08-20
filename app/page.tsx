@@ -74,7 +74,7 @@ import {
   saveAppearanceTheme,
   reactivateOrganization,
   replaceGameAssignments,
-  recordCurrentLogin,
+  recordCurrentActivity,
   removeOrganizationMember,
   removeCalendarFeed,
   setOrganizationJoinLinkActive,
@@ -1606,7 +1606,7 @@ function OfficialsDirectory({
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [sortBy, setSortBy] = useActiveFilterState<"name" | "email" | "phone" | "badge" | "identity" | "role" | "event" | "rating" | "last_login">(`officials-sort:${organizationId}`, "name");
+  const [sortBy, setSortBy] = useActiveFilterState<"name" | "email" | "phone" | "badge" | "identity" | "role" | "event" | "rating" | "last_active">(`officials-sort:${organizationId}`, "name");
   const [sortDirection, setSortDirection] = useActiveFilterState<"asc" | "desc">(`officials-order:${organizationId}`, "asc");
   const [groupRoleFilters, setGroupRoleFilters] = useActiveFilterState<MembershipRole[]>(`officials-group-roles:${organizationId}`, []);
   const [managing, setManaging] = useState<OfficialRecord | null>(null);
@@ -1716,13 +1716,13 @@ function OfficialsDirectory({
       role: [a.pending_org_roles?.length ? a.pending_org_roles.join(",") : a.pending_org_role, b.pending_org_roles?.length ? b.pending_org_roles.join(",") : b.pending_org_role],
       event: [eventOfficialIds.has(a.id) ? "assigned" : "unassigned", eventOfficialIds.has(b.id) ? "assigned" : "unassigned"],
       rating: [officialAverage(a.id), officialAverage(b.id)],
-      last_login: [a.last_login_at, b.last_login_at],
+      last_active: [a.last_login_at, b.last_login_at],
     }[sortBy];
     return compareDirectoryValues(values[0], values[1], sortDirection) || compareDirectoryValues(directoryNameSortKey(a.full_name), directoryNameSortKey(b.full_name), sortBy === "name" ? sortDirection : "asc");
   });
   const sortDirectionLabels = sortBy === "rating"
     ? { asc: "Low–High", desc: "High–Low" }
-    : sortBy === "last_login"
+    : sortBy === "last_active"
       ? { asc: "Oldest–Newest", desc: "Newest–Oldest" }
       : { asc: "A–Z", desc: "Z–A" };
   async function addOfficial() {
@@ -2117,7 +2117,7 @@ function OfficialsDirectory({
       <div className="segmented"><button className={scope === "organization" ? "active" : ""} onClick={() => setScope("organization")}>Group</button><button className={scope === "event" ? "active" : ""} onClick={() => setScope("event")}>Active Event</button></div>
       <input className="search" type="search" placeholder="Search name, email, or badge…" value={query} onChange={(event) => setQuery(event.target.value)} />
       <AssignmentFilterMenu label="Group Role" options={organizationRoleChoices.map((role) => ({ id: role, name: roleNames[role] }))} selected={groupRoleFilters} onChange={(roles) => setGroupRoleFilters(roles as MembershipRole[])} />
-      <label className="compact-sort">Sort by<select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}><option value="name">Name</option><option value="email">Email</option><option value="phone">Phone</option><option value="badge">Badge</option><option value="identity">Account Status</option><option value="role">Group Role</option><option value="event">Event Assignment</option><option value="rating">Average Rating</option><option value="last_login">Last Login</option></select></label>
+      <label className="compact-sort">Sort by<select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}><option value="name">Name</option><option value="email">Email</option><option value="phone">Phone</option><option value="badge">Badge</option><option value="identity">Account Status</option><option value="role">Group Role</option><option value="event">Event Assignment</option><option value="rating">Average Rating</option><option value="last_active">Last Active</option></select></label>
       <label className="compact-sort">Order<select value={sortDirection} onChange={(event) => setSortDirection(event.target.value as typeof sortDirection)}><option value="asc">{sortDirectionLabels.asc}</option><option value="desc">{sortDirectionLabels.desc}</option></select></label>
       {canManageOrganizationRoles && <label className="show-archived-ratings"><input type="checkbox" checked={showArchivedOfficials} onChange={(event) => setShowArchivedOfficials(event.target.checked)} /> Show Archived</label>}
       <SavedFilterControls filterKey="officials-directory" value={{ scope, query, groupRoleFilters, sortBy, sortDirection, showArchivedOfficials }} onApply={(value) => { setScope(value.scope); setQuery(value.query); setGroupRoleFilters(value.groupRoleFilters || []); setSortBy(value.sortBy); setSortDirection(value.sortDirection); setShowArchivedOfficials(value.showArchivedOfficials); }} />
@@ -2127,7 +2127,7 @@ function OfficialsDirectory({
     {canManageOfficials && <div className="bulk-action-bar panel"><label><input type="checkbox" checked={filtered.length > 0 && filtered.filter((item) => item.source !== "site_owner_profile").every((item) => selectedOfficialIds.includes(item.id))} onChange={(event) => setSelectedOfficialIds(event.target.checked ? filtered.filter((item) => item.source !== "site_owner_profile").map((item) => item.id) : [])} /> Select All Visible</label><strong>{selectedOfficialIds.length} selected</strong><button className="primary" disabled={busy || !selectedOfficialIds.length} onClick={openAddToGroup}>Add to Another Group</button>{canManageOrganizationRoles && <><button className="secondary" disabled={busy || !selectedOfficialIds.length} onClick={() => bulkOfficials("archive")}>Archive</button>{showArchivedOfficials && <button className="secondary" disabled={busy || !selectedOfficialIds.length} onClick={() => bulkOfficials("restore")}>Restore</button>}<button className="danger-button" disabled={busy || !selectedOfficialIds.length} onClick={() => bulkOfficials("delete")}>Delete Eligible</button></>}</div>}
     {addingToGroup && <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) setAddingToGroup(false); }}><section className="confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="add-to-group-title"><p className="eyebrow">ADD SELECTED OFFICIALS</p><h2 id="add-to-group-title">Add to Another Group</h2><p>The selected officials will remain in this group and will receive Referee access in the destination group.</p><label>Destination Group<select value={destinationGroupId} onChange={(event) => setDestinationGroupId(event.target.value)}>{destinationGroups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label><p className="import-note">Linked accounts keep their existing login. Provisional officials remain provisional. This action does not send invitations or email.</p><div className="confirmation-actions"><button className="secondary" disabled={busy} onClick={() => setAddingToGroup(false)}>Cancel</button><button className="primary" disabled={busy || !destinationGroupId} onClick={addSelectedToGroup}>{busy ? "Adding…" : `Add ${selectedOfficialIds.length} Official${selectedOfficialIds.length === 1 ? "" : "s"}`}</button></div></section></div>}
     <article className="panel directory-list">
-      <div className="directory-row directory-head"><span>Official</span><span className="directory-contact">Contact</span><span>Identity</span><span>Group Roles</span><span className="directory-average">Average Rating</span><span className="directory-login">Last Login</span><span className="directory-event">Event</span></div>
+      <div className="directory-row directory-head"><span>Official</span><span className="directory-contact">Contact</span><span>Identity</span><span>Group Roles</span><span className="directory-average">Average Rating</span><span className="directory-login">Last Active</span><span className="directory-event">Event</span></div>
       {filtered.map((official) => {
         const listedRoles = official.pending_org_roles?.length
           ? official.pending_org_roles
@@ -3582,7 +3582,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
   const helpByRole: Record<MembershipRole, { title: string; items: string[] }> = {
     site_owner: { title: "Site Owner Navigation", items: ["Use the group selector below the header to open the group you want to manage.", "Open Groups from your initials menu to create, open, archive, restore, rename, upload a logo, or configure features for a group.", "Open Site Appearance from your initials menu to edit, save, schedule, or restore site themes.", "Open Officials and use Copy Join Link to invite members to the active group.", "Open Activity within a group to review its audit log and event archive.", "After selecting a group and event, use the same event tabs described for Group Admins."] },
     organization_director: { title: "Group Director Navigation", items: ["Use the group and event selectors below the header to choose your working scope.", "Open Officials to appoint Group Admins and lower group roles, or open Event Access to appoint Event Admins and lower event roles.", "Use Groups, Activity, Import, Assignment Board, Schedule, Check-In, Coaching, and Ratings for complete group administration.", "Only the Site Owner can appoint or remove a Group Director."] },
-    organization_admin: { title: "Group Admin Navigation", items: ["Choose the group and active event from the selectors below the header.", "Open Groups from your initials menu to update the active group's name or logo.", "Open Officials to copy the group join link, add or edit people, review last login, set group roles, remove a member, merge accounts, or open Event Access. Use the selection boxes for bulk archive or deletion.", "Open Activity to review meaningful changes or bulk archive, restore, and delete events.", "Open Import to add officials, upload an Assignr schedule, configure automatic archiving, or archive the selected event now.", "Open Schedule to filter games by date, field, site, official, time, age group, gender, or competition. Choose a three-level sort order, save frequently used filters, or export all or filtered games to Excel or PDF.", "Open Assignment Board to review the day, Check-In to manage arrivals, and Coaching to assign coaches.", "Open Ratings to configure evaluations, filter history, switch between individual and full-game views, export a spreadsheet, or use selection boxes to archive and delete ratings. Archived-event ratings remain available here."] },
+    organization_admin: { title: "Group Admin Navigation", items: ["Choose the group and active event from the selectors below the header.", "Open Groups from your initials menu to update the active group's name or logo.", "Open Officials to copy the group join link, add or edit people, review last activity, set group roles, remove a member, merge accounts, or open Event Access. Use the selection boxes for bulk archive or deletion.", "Open Activity to review meaningful changes or bulk archive, restore, and delete events.", "Open Import to add officials, upload an Assignr schedule, configure automatic archiving, or archive the selected event now.", "Open Schedule to filter games by date, field, site, official, time, age group, gender, or competition. Choose a three-level sort order, save frequently used filters, or export all or filtered games to Excel or PDF.", "Open Assignment Board to review the day, Check-In to manage arrivals, and Coaching to assign coaches.", "Open Ratings to configure evaluations, filter history, switch between individual and full-game views, export a spreadsheet, or use selection boxes to archive and delete ratings. Archived-event ratings remain available here."] },
     event_admin: { title: "Event Admin Navigation", items: ["Select an assigned event from the Active Event menu below the header.", "Open Officials, then Event Access, to add or update event staff and set a Site Supervisor’s dates, sites, and assignment-editing access.", "Open Import for event schedule data and Event Lifecycle controls, including automatic archiving or Archive Now.", "Open Schedule to correct posted crews. Updated games remain orange until you use Change Confirmed after updating any outside records.", "Open Check-In for arrivals, Coaching for coach assignments, and Ratings for evaluation settings and history."] },
     assignor: { title: "Assignor Navigation", items: ["Select the event you are working from the Active Event menu below the header.", "Open Import to upload an authorized schedule, then use Assignment Board or Schedule to review crews.", "In Schedule, filter games, arrange three sort levels, save filter setups, export games, or use Edit Assignments to correct a posted crew. These corrections do not notify officials.", "Open Check-In to filter arrivals, manually check someone in, undo a check-in, or select an official’s name to see their event schedule and contact details.", "Open Coaching to place coaches on games. Use Rate Crew on a schedule game, or open Ratings and choose a game, when coaching tools are enabled."] },
     site_coordinator: { title: "Site Supervisor Navigation", items: ["Select today’s event from the Active Event menu.", "Open Assignment Board or Schedule to review games within your assigned dates and sites. Orange time columns indicate a schedule change awaiting Event Admin confirmation.", "If assignment editing was enabled for you, use Edit Assignments on a game in your scope; no notification is sent by this correction tool.", "Open Check-In to monitor arrivals. Select an official’s name to view their full schedule for that date—including read-only games outside your management scope—and contact details."] },
@@ -3666,7 +3666,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
           url.searchParams.delete("join");
           history.replaceState(null, "", `${url.pathname}${url.search}`);
         }
-        await recordCurrentLogin(session);
+        await recordCurrentActivity(session).catch(() => undefined);
         await linkCurrentReferee(session);
         const [currentProfile, availableEvents, memberships, availableOrganizations] = await Promise.all([loadProfile(session), loadEvents(session), loadMemberships(session), loadOrganizations(session)]);
         setProfile(currentProfile);
@@ -3743,6 +3743,20 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       displayAppearance(active);
     }).catch(() => undefined);
   }, [session, view]);
+
+  useEffect(() => {
+    const recordVisibleActivity = () => {
+      if (document.visibilityState === "visible") void recordCurrentActivity(session).catch(() => undefined);
+    };
+    const heartbeat = window.setInterval(recordVisibleActivity, 5 * 60 * 1000);
+    window.addEventListener("focus", recordVisibleActivity);
+    document.addEventListener("visibilitychange", recordVisibleActivity);
+    return () => {
+      window.clearInterval(heartbeat);
+      window.removeEventListener("focus", recordVisibleActivity);
+      document.removeEventListener("visibilitychange", recordVisibleActivity);
+    };
+  }, [session]);
 
   async function switchEvent(nextId: string) {
     const nextEvent = allEvents.find((item) => item.id === nextId);
@@ -3829,6 +3843,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
   ).length : 0;
   async function openView(nextView: View) {
     setView(nextView);
+    void recordCurrentActivity(session).catch(() => undefined);
     if (nextView === "assessments" && event && unreadPublicRatingCount) {
       await markEventRatingsSeen(session, event.id).catch(() => undefined);
       setData((current) => ({ ...current, assessments: current.assessments.map((assessment) =>
@@ -3871,7 +3886,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
   if (dashboardLoadError) return <main className="auth-page"><section className="auth-card"><h1>Reload Law18Ref</h1><p>Please reload the page to continue.</p><button className="primary wide" onClick={() => window.location.reload()}>Reload Page</button></section></main>;
   return <main>
     <header className="topbar">
-      <button className="brand" aria-label="Law18Referee Management dashboard" onClick={() => setView("dashboard")}><Mark /></button>
+      <button className="brand" aria-label="Law18Referee Management dashboard" onClick={() => void openView("dashboard")}><Mark /></button>
       <nav>{nav.map(([id, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => void openView(id)}>{label}{id === "assessments" && unreadPublicRatingCount > 0 && <span className="nav-notification-badge" aria-label={`${unreadPublicRatingCount} unread public ratings`}>{unreadPublicRatingCount > 99 ? "99+" : unreadPublicRatingCount}</span>}</button>)}</nav>
       <div className="topbar-account-actions">
         <button className="help-button" aria-label="Open role help" title="Help and how-to" onClick={() => setHelpOpen(true)}>?</button>
@@ -3920,7 +3935,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.27.14</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.28.0</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

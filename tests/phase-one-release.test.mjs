@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.27.14 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.28.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.27.14 uses the dashboard loading label, favicon metadata, and pr
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.27\.14/);
+  assert.match(page, /Version 0\.28\.0/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.27.14 uses the dashboard loading label, favicon metadata, and pr
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.27.14");
+  assert.equal(JSON.parse(packageJson).version, "0.28.0");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -516,7 +516,7 @@ test("official directory sorts populated values before missing values", async ()
   assert.match(page, /name: \[directoryNameSortKey\(a\.full_name\), directoryNameSortKey\(b\.full_name\)\]/);
   assert.match(page, /const compareDirectoryValues/);
   assert.match(page, /if \(leftMissing !== rightMissing\) return leftMissing \? 1 : -1/);
-  assert.match(page, /last_login: \[a\.last_login_at, b\.last_login_at\]/);
+  assert.match(page, /last_active: \[a\.last_login_at, b\.last_login_at\]/);
   assert.match(page, /rating: \[officialAverage\(a\.id\), officialAverage\(b\.id\)\]/);
   assert.match(page, /const \[sortDirection, setSortDirection\]/);
   assert.match(page, /direction === "desc" \? -comparison : comparison/);
@@ -1076,13 +1076,13 @@ test("organization admins can review audited actions and copy one officials join
   }
 });
 
-test("officials directory shows last login and supports recoverable member removal", async () => {
+test("officials directory shows last activity and supports recoverable member removal", async () => {
   const [page, client, migration] = await Promise.all([
     read("app/page.tsx"),
     read("app/supabase-client.ts"),
     read("supabase/migrations/202607300023_audit_join_links_and_member_removal.sql"),
   ]);
-  assert.match(page, />Last Login</);
+  assert.match(page, />Last Active</);
   assert.match(page, /Remove From Group/);
   assert.match(page, /Their Law18Ref account, assignments, ratings, check-ins, and audit history are preserved/);
   assert.match(client, /last_login_at\?: string \| null/);
@@ -1387,5 +1387,23 @@ test("v0.27.14 collapses staff QR controls and keeps referee check-in scanner-on
   assert.match(page, /\{!isCheckedIn && <QrScanner onFound=\{scanned\} \/>\}/);
   assert.doesNotMatch(page.match(/function RefereeCheckIn[\s\S]*?function CheckInView/)?.[0] || "", /QRCodeSVG/);
   assert.match(styles, /Version 0\.27\.14 collapsible staff-only check-in QR card/);
-  assert.equal(JSON.parse(packageJson).version, "0.27.14");
+});
+
+test("v0.28.0 records throttled visible activity without audit noise", async () => {
+  const [page, client, migration, packageJson] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/20260820000807_last_active_tracking.sql"),
+    read("package.json"),
+  ]);
+  assert.match(page, /recordCurrentActivity\(session\)/);
+  assert.match(page, /window\.setInterval\(recordVisibleActivity, 5 \* 60 \* 1000\)/);
+  assert.match(page, /document\.addEventListener\("visibilitychange", recordVisibleActivity\)/);
+  assert.match(page, /async function openView[\s\S]*recordCurrentActivity\(session\)/);
+  assert.match(client, /export async function recordCurrentActivity/);
+  assert.match(migration, /create or replace function public\.record_current_activity\(\)/);
+  assert.match(migration, /last_login_at < now\(\) - interval '30 seconds'/);
+  assert.match(migration, /revoke all on function public\.record_current_activity\(\) from public/);
+  assert.match(migration, /grant execute on function public\.record_current_activity\(\) to authenticated/);
+  assert.equal(JSON.parse(packageJson).version, "0.28.0");
 });

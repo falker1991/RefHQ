@@ -560,6 +560,13 @@ export async function recordCurrentLogin(session: Law18Session) {
   }, "return=minimal");
 }
 
+export async function recordCurrentActivity(session: Law18Session) {
+  await rest(session, "rpc/record_current_activity", {
+    method: "POST",
+    body: "{}",
+  }, "return=minimal");
+}
+
 export async function loadOrganizationActivity(
   session: Law18Session,
   organizationId: string,

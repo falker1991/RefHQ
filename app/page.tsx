@@ -353,11 +353,11 @@ function OfficialEventScheduleModal({ session, official, event, data, initialDat
     .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
   const availableDates = [...new Set(localGames.map((game) => new Intl.DateTimeFormat("en-CA", { timeZone: event.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(game.starts_at))))].sort();
   const [selectedDate, setSelectedDate] = useState(initialDate && availableDates.includes(initialDate) ? initialDate : defaultEventDate(availableDates, event.timezone, event.starts_on));
-  const scheduleListRef = useRef<HTMLDivElement>(null);
+  const scheduleDialogRef = useRef<HTMLElement>(null);
   const [dayContext, setDayContext] = useState<OfficialEventDayContext | null>(null);
   const [contextMessage, setContextMessage] = useState("");
   useEffect(() => {
-    scheduleListRef.current?.scrollTo({ top: 0, left: 0 });
+    scheduleDialogRef.current?.scrollTo({ top: 0, left: 0 });
   }, [official.id, selectedDate]);
   useEffect(() => {
     if (!siteSupervisorView) return;
@@ -367,12 +367,12 @@ function OfficialEventScheduleModal({ session, official, event, data, initialDat
   const contextOfficial = dayContext?.official || official;
   const contextGames = siteSupervisorView ? (dayContext?.games || []) : localGames.map((game) => ({ game, selected_position: data.assignments.find((item) => item.game_id === game.id && item.official_id === official.id)?.position || "referee" as const, selected_position_title: data.assignments.find((item) => item.game_id === game.id && item.official_id === official.id)?.position_title || null, within_management_scope: true, crew: sortGameCrew(data.assignments.filter((item) => item.game_id === game.id)).map((assignment) => ({ assignment, official_name: data.officials.find((person) => person.id === assignment.official_id)?.full_name || null })) }));
   const completionCutoff = Date.now() - (2 * 60 * 60 * 1000);
-  return <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) onClose(); }}><section className="confirmation-dialog official-event-schedule-dialog" role="dialog" aria-modal="true" aria-labelledby="official-event-schedule-title">
+  return <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) onClose(); }}><section className="confirmation-dialog official-event-schedule-dialog" ref={scheduleDialogRef} role="dialog" aria-modal="true" aria-labelledby="official-event-schedule-title">
     <header><div><p className="eyebrow">{siteSupervisorView ? "FULL DAY SCHEDULE" : "FULL EVENT SCHEDULE"}</p><h2 id="official-event-schedule-title">{contextOfficial.full_name}</h2><p>{event.name} · {contextGames.length} assignment{contextGames.length === 1 ? "" : "s"}</p></div><div className="official-schedule-header-actions">{canEdit && <button className="secondary" onClick={onEdit}>Edit Official</button>}<button className="modal-close-button" aria-label="Close schedule" onClick={onClose}>×</button></div></header>
     <div className="official-contact-summary"><div><strong>Phone</strong><PhoneLink phone={contextOfficial.phone} /></div><div><strong>Primary Email</strong><span>{contextOfficial.email || "Not provided"}</span></div><div><strong>Secondary Email</strong><span>{contextOfficial.secondary_email || "Not provided"}</span></div><div><strong>Date of Birth</strong><span>{contextOfficial.date_of_birth ? formatDate(contextOfficial.date_of_birth) : "Not provided"}</span></div></div>
     {siteSupervisorView && <label className="official-schedule-date">Event Date<select value={selectedDate} onChange={(change) => setSelectedDate(change.target.value)}>{availableDates.map((date) => <option value={date} key={date}>{formatDate(date)}</option>)}</select></label>}
     {contextMessage && <p className="pilot-message">{contextMessage}</p>}
-    <div className="official-event-schedule-list" ref={scheduleListRef}>{contextGames.map(({ game, selected_position, selected_position_title, within_management_scope, crew }) => {
+    <div className="official-event-schedule-list">{contextGames.map(({ game, selected_position, selected_position_title, within_management_scope, crew }) => {
       const selectedPosition = positionLabel(selected_position, selected_position_title);
       const completed = new Date(game.starts_at).getTime() <= completionCutoff;
       return <article className={`official-event-schedule-card ${completed ? "completed" : ""} ${within_management_scope ? "" : "outside-supervisor-scope"}`} key={game.id}>

@@ -2,6 +2,11 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.32.2
+
+- Makes the official schedule popup a single continuous scrolling surface so contact details cannot cover or clip the first assignment.
+- Always opens the popup at its true top, with contact details followed by the complete event schedule.
+
 ## v0.32.1
 
 - Makes updated schedule imports idempotent for game crews.

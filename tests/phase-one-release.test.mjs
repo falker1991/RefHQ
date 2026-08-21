@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.32.1 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.32.2 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -22,7 +22,7 @@ test("Version 0.32.1 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.32.1");
+  assert.equal(JSON.parse(packageJson).version, "0.32.2");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -760,7 +760,7 @@ test("official schedule modal is scrollable and grays completed assignments", as
   assert.match(page, /className="selected-position"/);
   assert.match(page, /data\.assignments\.filter\(\(item\) => item\.game_id === game\.id\)/);
   assert.match(page, /positionLabel\(crewAssignment\.position, crewAssignment\.position_title\)/);
-  assert.match(css, /\.official-event-schedule-list\{[^}]*overflow-y:auto/);
+  assert.match(css, /\.official-event-schedule-dialog\{[^}]*overflow-y:auto/);
   assert.match(css, /\.official-event-schedule-card\.completed/);
   assert.match(css, /\.checkin-crew-member\.selected-official/);
 });
@@ -1221,22 +1221,23 @@ test("v0.26.0 keeps authentication private and makes shared filters mobile frien
   assert.match(styles, /min-height:48px/);
 });
 
-test("v0.26.1 locks background scrolling while the official schedule modal scrolls", async () => {
+test("the background is locked while the complete official schedule modal scrolls", async () => {
   const [page, styles] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
   assert.match(page, /document\.body\.style\.position = "fixed"/);
   assert.match(page, /window\.scrollTo\(0, scrollPosition\)/);
   assert.match(styles, /official-event-schedule-dialog\{[^}]*height:min\(780px,calc\(100dvh - 28px\)\)/);
-  assert.match(styles, /official-event-schedule-list\{[^}]*overflow-y:auto[^}]*touch-action:pan-y/);
+  assert.match(styles, /official-event-schedule-dialog\{[^}]*overflow-x:hidden[^}]*overflow-y:auto[^}]*touch-action:pan-y/);
   assert.match(styles, /official-event-schedule-card\{[^}]*flex:0 0 auto/);
 });
 
-test("v0.29.1 keeps tall modal tops reachable and opens official schedules at the top", async () => {
+test("v0.32.2 keeps tall modal tops reachable and opens the complete dialog at the top", async () => {
   const [page, styles] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
-  assert.match(page, /scheduleListRef\.current\?\.scrollTo\(\{ top: 0, left: 0 \}\)/);
-  assert.match(page, /className="official-event-schedule-list" ref=\{scheduleListRef\}/);
+  assert.match(page, /scheduleDialogRef\.current\?\.scrollTo\(\{ top: 0, left: 0 \}\)/);
+  assert.match(page, /className="confirmation-dialog official-event-schedule-dialog" ref=\{scheduleDialogRef\}/);
   assert.match(styles, /confirmation-backdrop\{[^}]*align-items:flex-start[^}]*overflow-y:auto/);
   assert.match(styles, /confirmation-dialog\{[^}]*max-height:calc\(100dvh - 40px\)[^}]*overflow-y:auto/);
   assert.match(styles, /official-event-schedule-dialog>\.official-event-schedule-list\{[^}]*margin-top:0/);
+  assert.match(styles, /official-event-schedule-dialog>\.official-contact-summary\{position:static/);
 });
 
 test("v0.29.2 imports nonblank assignment contact details into the officials directory", async () => {
@@ -1658,7 +1659,7 @@ test("v0.28.1 keeps schedule crew columns aligned without range-query support", 
   assert.match(styles, /\.schedule-crew-list>span\{box-sizing:border-box;flex:0 0 calc\(\(100% - 21px\)\/4\)\}/);
   assert.match(styles, /@media\(max-width:900px\)\{\.schedule-crew-list>span\{flex-basis:calc\(\(100% - 7px\)\/2\)\}\}/);
   assert.match(styles, /@media\(max-width:700px\)\{\.schedule-crew-list>span\{flex-basis:100%\}\}/);
-  assert.equal(JSON.parse(packageJson).version, "0.32.1");
+  assert.equal(JSON.parse(packageJson).version, "0.32.2");
 });
 
 test("v0.31.9 edits board assignments through the permission-gated game detail line", async () => {
@@ -1671,7 +1672,7 @@ test("v0.31.9 edits board assignments through the permission-gated game detail l
   assert.match(page, /<small>\{game\.division \|\| "Tournament match"\}<\/small>/);
   assert.match(styles, /Version 0\.31\.9 assignment-board edit trigger/);
   assert.match(styles, /\.board-game-details-link:hover/);
-  assert.equal(JSON.parse(packageJson).version, "0.32.1");
+  assert.equal(JSON.parse(packageJson).version, "0.32.2");
 });
 
 test("v0.32.0 makes ratings durable, position-aware, and swappable within a game", async () => {
@@ -1696,7 +1697,7 @@ test("v0.32.0 makes ratings durable, position-aware, and swappable within a game
   assert.match(page, /await swapSameGameRatings\(session, firstSwapRatingId, secondSwapRatingId\)/);
   assert.match(page, /assessment\.rated_position_title/);
   assert.match(styles, /Version 0\.32\.0 durable rating ownership and same-game swaps/);
-  assert.equal(JSON.parse(packageJson).version, "0.32.1");
+  assert.equal(JSON.parse(packageJson).version, "0.32.2");
 });
 
 test("v0.31.10 preserves imported order for matching crew positions", async () => {
@@ -1715,7 +1716,7 @@ test("v0.31.10 preserves imported order for matching crew positions", async () =
   assert.match(migration, /with ordinality as item\(value, ordinality\)/);
   assert.match(migration, /item\.ordinality - 1, true/);
   assert.match(migration, /order by crew_order, id/);
-  assert.equal(JSON.parse(packageJson).version, "0.32.1");
+  assert.equal(JSON.parse(packageJson).version, "0.32.2");
 });
 
 test("v0.32.1 skips assignment writes when an updated import crew is unchanged", async () => {
@@ -1726,5 +1727,5 @@ test("v0.32.1 skips assignment writes when an updated import crew is unchanged",
   assert.match(client, /assignmentsToWrite = assignmentPayload\.filter\(\(assignment\) => changedGameIds\.has\(assignment\.game_id\)\)/);
   assert.match(client, /if \(assignmentsToWrite\.length\)/);
   assert.doesNotMatch(client, /await Promise\.all\(importedGameIds\.map\(\(gameId\) => rest/);
-  assert.equal(JSON.parse(packageJson).version, "0.32.1");
+  assert.equal(JSON.parse(packageJson).version, "0.32.2");
 });

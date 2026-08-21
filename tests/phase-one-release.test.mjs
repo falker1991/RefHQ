@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.31.8 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.31.9 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.31.8 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.31\.8/);
+  assert.match(page, /Version 0\.31\.9/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.31.8 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.31.8");
+  assert.equal(JSON.parse(packageJson).version, "0.31.9");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1658,5 +1658,18 @@ test("v0.28.1 keeps schedule crew columns aligned without range-query support", 
   assert.match(styles, /\.schedule-crew-list>span\{box-sizing:border-box;flex:0 0 calc\(\(100% - 21px\)\/4\)\}/);
   assert.match(styles, /@media\(max-width:900px\)\{\.schedule-crew-list>span\{flex-basis:calc\(\(100% - 7px\)\/2\)\}\}/);
   assert.match(styles, /@media\(max-width:700px\)\{\.schedule-crew-list>span\{flex-basis:100%\}\}/);
-  assert.equal(JSON.parse(packageJson).version, "0.31.8");
+  assert.equal(JSON.parse(packageJson).version, "0.31.9");
+});
+
+test("v0.31.9 edits board assignments through the permission-gated game detail line", async () => {
+  const [page, styles, packageJson] = await Promise.all([read("app/page.tsx"), read("app/globals.css"), read("package.json")]);
+  assert.match(page, /onEditAssignments\?: \(game: GameRecord\) => void/);
+  assert.match(page, /className="board-game-details-link" onClick=\{\(\) => onEditAssignments\(game\)\}/);
+  assert.match(page, /onEditAssignments=\{canEditAssignments \? setEditingGame : undefined\}/);
+  assert.match(page, /function AssignmentEditorDialog/);
+  assert.match(page, /await replaceGameAssignments\(session, game\.id/);
+  assert.match(page, /<small>\{game\.division \|\| "Tournament match"\}<\/small>/);
+  assert.match(styles, /Version 0\.31\.9 assignment-board edit trigger/);
+  assert.match(styles, /\.board-game-details-link:hover/);
+  assert.equal(JSON.parse(packageJson).version, "0.31.9");
 });

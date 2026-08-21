@@ -383,11 +383,33 @@ function OfficialEventScheduleModal({ session, official, event, data, initialDat
   </section></div>;
 }
 
-function BoardGameTile({ game, data, officials, eventTimezone, ratingLabel, onSelectOfficial }: { game: GameRecord; data: EventData; officials: Map<string, OfficialRecord>; eventTimezone: string; ratingLabel?: (officialId: string, position: AssignmentRecord["position"]) => string; onSelectOfficial: (officialId: string, eventDate?: string) => void }) {
+function AssignmentEditorDialog({ session, game, assignments, availableOfficials, onClose, onSaved }: { session: Law18Session; game: GameRecord; assignments: AssignmentRecord[]; availableOfficials: OfficialRecord[]; onClose: () => void; onSaved: () => Promise<void> | void }) {
+  const [drafts, setDrafts] = useState(() => sortGameCrew(assignments).map((assignment) => ({ official_id: assignment.official_id, position: assignment.position, position_title: assignment.position_title || "", source_position_title: assignment.source_position_title || assignment.position_title || "" })));
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  async function save() {
+    setBusy(true);
+    setMessage("");
+    try {
+      await replaceGameAssignments(session, game.id, drafts.filter((draft) => draft.official_id).map((draft) => ({ ...draft, position_title: draft.position_title.trim() || null, source_position_title: draft.source_position_title.trim() || null })));
+      await onSaved();
+      onClose();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to update this crew.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  const selectableOfficials = availableOfficials.filter((official) => !official.archived_at && !official.merged_into_official_id).slice().sort((left, right) => left.full_name.localeCompare(right.full_name));
+  const positions: AssignmentRecord["position"][] = ["referee", "assistant_referee", "fourth_official", "mentor", "referee_coach", "site_coordinator", "site_supervisor", "standby", "other"];
+  return <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) onClose(); }}><section className="confirmation-dialog assignment-editor-dialog" role="dialog" aria-modal="true"><header><div><p className="eyebrow">POSTED SCHEDULE CORRECTION</p><h2>{game.home_team} vs. {game.away_team}</h2><p>{formatDate(game.starts_at)} · {formatTime(game.starts_at)} · {game.field_name}</p></div><button className="modal-close-button" aria-label="Close assignment editor" onClick={onClose}>×</button></header><p className="import-note">Changes update Law18Ref immediately. Officials are not notified and no acceptance is requested.</p><div className="assignment-editor-rows">{drafts.map((draft, index) => <div className="assignment-editor-row" key={index}><span className="assignment-row-number" aria-hidden="true">{index + 1}</span><label className="assignment-position-field">Position<select value={draft.position} onChange={(change) => setDrafts((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, position: change.target.value as AssignmentRecord["position"] } : item))}>{positions.map((position) => <option value={position} key={position}>{positionLabel(position)}</option>)}</select></label><label className="assignment-official-field">Official<select value={draft.official_id} onChange={(change) => setDrafts((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, official_id: change.target.value } : item))}><option value="">Open position</option>{selectableOfficials.map((official) => <option value={official.id} key={official.id}>{official.full_name}</option>)}</select></label><button className="text-button assignment-remove-button" type="button" onClick={() => setDrafts((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</button><label className="assignment-display-title">Display title (optional)<input value={draft.position_title} onChange={(change) => setDrafts((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, position_title: change.target.value } : item))} placeholder={positionLabel(draft.position)} /></label></div>)}</div><button className="secondary add-assignment-row" type="button" onClick={() => setDrafts((current) => [...current, { official_id: "", position: "other", position_title: "", source_position_title: "" }])}>Add Assignment</button>{message && <p className="pilot-message assignment-editor-message">{message}</p>}<div className="assignment-editor-actions"><button className="secondary" disabled={busy} onClick={onClose}>Cancel</button><button className="primary" disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : "Update Posted Schedule"}</button></div></section></div>;
+}
+
+function BoardGameTile({ game, data, officials, eventTimezone, ratingLabel, onSelectOfficial, onEditAssignments }: { game: GameRecord; data: EventData; officials: Map<string, OfficialRecord>; eventTimezone: string; ratingLabel?: (officialId: string, position: AssignmentRecord["position"]) => string; onSelectOfficial: (officialId: string, eventDate?: string) => void; onEditAssignments?: (game: GameRecord) => void }) {
   const crew = sortGameCrew(data.assignments.filter((assignment) => assignment.game_id === game.id));
   return <article className="board-game">
     <strong>{game.home_team} <span>vs.</span> {game.away_team}</strong>
-    <small>{game.division || "Tournament match"}</small>
+    {onEditAssignments ? <button type="button" className="board-game-details-link" onClick={() => onEditAssignments(game)}>{game.division || "Tournament match"}</button> : <small>{game.division || "Tournament match"}</small>}
     <div className="crew-chips">{crew.map((assignment) => {
       const official = officials.get(assignment.official_id);
       const gameDate = dateKeyInTimeZone(game.starts_at, eventTimezone);
@@ -401,11 +423,12 @@ function BoardGameTile({ game, data, officials, eventTimezone, ratingLabel, onSe
   </article>;
 }
 
-function AssignmentBoard({ data, event, profile, ratingHistory, showRatingAverages, onSelectOfficial }: { data: EventData; event: EventRecord; profile: Profile; ratingHistory: { assessments: AssessmentRecord[]; games: GameRecord[]; assignments: AssignmentRecord[] }; showRatingAverages: boolean; onSelectOfficial: (officialId: string, eventDate?: string) => void }) {
+function AssignmentBoard({ session, data, event, profile, ratingHistory, showRatingAverages, availableOfficials, canEditAssignments, onAssignmentsChanged, onSelectOfficial }: { session: Law18Session; data: EventData; event: EventRecord; profile: Profile; ratingHistory: { assessments: AssessmentRecord[]; games: GameRecord[]; assignments: AssignmentRecord[] }; showRatingAverages: boolean; availableOfficials: OfficialRecord[]; canEditAssignments: boolean; onAssignmentsChanged: () => Promise<void> | void; onSelectOfficial: (officialId: string, eventDate?: string) => void }) {
   const officials = useMemo(() => new Map(data.officials.map((official) => [official.id, official])), [data.officials]);
   const [boardView, setBoardView] = useState<"grid" | "field" | "first_assignment">("grid");
   const [collapsedFields, setCollapsedFields] = useState<Set<string>>(new Set());
   const [collapsedFirstTimes, setCollapsedFirstTimes] = useState<Set<string>>(new Set());
+  const [editingGame, setEditingGame] = useState<GameRecord | null>(null);
   const [venueFilters, setVenueFilters] = useActiveFilterState<string[]>(`assignment-board-venues:${event.id}`, []);
   const availableDates = useMemo(() => [...new Set(data.games.map((game) => dateKeyInTimeZone(game.starts_at, event.timezone)))].sort(), [data.games, event.timezone]);
   const defaultBoardDate = defaultEventDate(availableDates, event.timezone, event.starts_on);
@@ -458,7 +481,7 @@ function AssignmentBoard({ data, event, profile, ratingHistory, showRatingAverag
               const game = visibleGames.find((item) => item.field_name === field && formatTime(item.starts_at) === time);
               if (!game) return <td key={field} className="board-empty">—</td>;
               return <td key={field}>
-                <BoardGameTile game={game} data={data} officials={officials} eventTimezone={event.timezone} ratingLabel={ratingLabel} onSelectOfficial={onSelectOfficial} />
+                <BoardGameTile game={game} data={data} officials={officials} eventTimezone={event.timezone} ratingLabel={ratingLabel} onSelectOfficial={onSelectOfficial} onEditAssignments={canEditAssignments ? setEditingGame : undefined} />
               </td>;
             })}</tr>
           ))}</tbody>
@@ -471,9 +494,10 @@ function AssignmentBoard({ data, event, profile, ratingHistory, showRatingAverag
           const next = new Set(current);
           if (next.has(field)) next.delete(field); else next.add(field);
           return next;
-        })}><span><strong>{field}</strong><small>{games.length} game{games.length === 1 ? "" : "s"}</small></span><b>{collapsed ? "+" : "−"}</b></button>{!collapsed && <div className="field-board-games">{games.map((game) => <div className="field-board-game" key={game.id}><time><strong>{formatTime(game.starts_at)}</strong><small>{formatDate(game.starts_at)}</small></time><BoardGameTile game={game} data={data} officials={officials} eventTimezone={event.timezone} ratingLabel={ratingLabel} onSelectOfficial={onSelectOfficial} /></div>)}</div>}</article>;
+        })}><span><strong>{field}</strong><small>{games.length} game{games.length === 1 ? "" : "s"}</small></span><b>{collapsed ? "+" : "−"}</b></button>{!collapsed && <div className="field-board-games">{games.map((game) => <div className="field-board-game" key={game.id}><time><strong>{formatTime(game.starts_at)}</strong><small>{formatDate(game.starts_at)}</small></time><BoardGameTile game={game} data={data} officials={officials} eventTimezone={event.timezone} ratingLabel={ratingLabel} onSelectOfficial={onSelectOfficial} onEditAssignments={canEditAssignments ? setEditingGame : undefined} /></div>)}</div>}</article>;
       })}</div>}
       {boardView === "first_assignment" && <div className="first-assignment-groups">{Object.entries(firstAssignmentGroups).map(([time, assignments]) => { const collapsed = collapsedFirstTimes.has(time); return <article className="panel first-assignment-time-group" key={time}><button className="field-board-heading" onClick={() => setCollapsedFirstTimes((current) => { const next = new Set(current); if (next.has(time)) next.delete(time); else next.add(time); return next; })}><span><strong>{time}</strong><small>{assignments.length} official{assignments.length === 1 ? "" : "s"}</small></span><b>{collapsed ? "+" : "−"}</b></button>{!collapsed && <div className="first-assignment-board"><div className="first-assignment-row first-assignment-head"><span>Official</span><span>First Assignment</span><span>Field</span><span>Position</span><span>Status</span></div>{assignments.map(({ official, assignment, game }) => { const gameDate = dateKeyInTimeZone(game.starts_at, event.timezone); const checked = data.checkIns.some((item) => item.official_id === official.id && item.event_date === gameDate && item.status === "checked_in"); return <div className={`first-assignment-row ${checked ? "arrived" : ""}`} key={official.id}><span className="official-name-cell"><span className="avatar">{initials(official.full_name)}</span><button className="official-name-link" onClick={() => onSelectOfficial(official.id, gameDate)}>{official.full_name}{ratingLabel?.(official.id, assignment.position)}</button></span><span><strong>{formatTime(game.starts_at)}</strong><small>{formatDate(game.starts_at)}</small></span><span>{game.field_name}</span><span>{positionLabel(assignment.position, assignment.position_title)}</span><Status checked={checked} /></div>; })}</div>}</article>; })}</div>}
+      {editingGame && <AssignmentEditorDialog key={editingGame.id} session={session} game={editingGame} assignments={data.assignments.filter((assignment) => assignment.game_id === editingGame.id)} availableOfficials={availableOfficials} onClose={() => setEditingGame(null)} onSaved={onAssignmentsChanged} />}
     </section>
   );
 }
@@ -4043,7 +4067,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       {organizationActionMessage && <p className="pilot-message organization-message">{organizationActionMessage}</p>}
       {qrCheckInMessage && <p className="pilot-message qr-checkin-message">{qrCheckInMessage}</p>}
       {profile && view === "dashboard" && (isPersonalWorkspace ? <PersonalDashboard session={session} profile={profile} organizations={organizations} onNavigate={setView} /> : <DashboardHome profile={profile} event={event} data={data} events={events} adminView={isAdministrativeStaff} onNavigate={setView} />)}
-      {view === "board" && (isStaff ? event && profile && eventFeatureEnabled(event, "assignment_board") && <AssignmentBoard data={data} event={event} profile={profile} ratingHistory={administrativeRatingHistory} showRatingAverages={isAdministrativeStaff} onSelectOfficial={selectScheduleOfficial} /> : profile && <UnifiedAssignmentsView session={session} profile={profile} />)}
+      {view === "board" && (isStaff ? event && profile && eventFeatureEnabled(event, "assignment_board") && <AssignmentBoard session={session} data={data} event={event} profile={profile} ratingHistory={administrativeRatingHistory} showRatingAverages={isAdministrativeStaff} availableOfficials={organizationOfficials.length ? organizationOfficials : data.officials} canEditAssignments={canEditAssignments} onAssignmentsChanged={() => refresh(event.id)} onSelectOfficial={selectScheduleOfficial} /> : profile && <UnifiedAssignmentsView session={session} profile={profile} />)}
       {view === "my_assignments" && profile && <UnifiedAssignmentsView session={session} profile={profile} />}
       {view === "checkin" && (isPersonalWorkspace ? <PersonalCheckInHub session={session} events={allEvents} /> : eventFeatureEnabled(event, "check_in") && event && (isStaff ? <CheckInView event={event} data={data} session={session} canManageCheckIns={isStaff} onRefresh={refreshCheckIns} onSelectOfficial={selectScheduleOfficial} /> : refereeHasCurrentOrFutureAssignment || coachHasCurrentOrFutureAssignment ? <RefereeCheckIn event={event} data={data} session={session} onCheckedIn={() => refresh(event.id)} /> : null))}
       {event && profile && view === "schedule" && (isStaff || isCoach) && <ScheduleView session={session} event={event} data={data} availableOfficials={organizationOfficials.length ? organizationOfficials : data.officials} canEdit={isAdministrativeStaff} canEditAssignments={canEditAssignments} canConfirmChanges={canConfigureEvent} showScheduleChangeMarkers={isStaff} canRateCrew={canAssess} coachView={isCoach && !isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onRateCrew={setRatingModalGameId} onCreated={() => refresh(event.id)} profile={profile} ratingHistory={administrativeRatingHistory} showRatingAverages={isAdministrativeStaff} onSelectOfficial={selectScheduleOfficial} />}
@@ -4061,7 +4085,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.31.8</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.31.9</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

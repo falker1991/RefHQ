@@ -2,6 +2,12 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.31.9
+
+- Enables posted-assignment editing directly from Assignment Board game tiles for users who already have assignment-editing permission.
+- Uses the age, league, or competition detail line beneath the matchup as the edit trigger without adding another visible action button.
+- Reuses the contained assignment editor and keeps the detail line non-interactive for users without editing access.
+
 ## v0.31.8
 
 - Standardizes the default event date across Assignment Board, Schedule, Check-In, Coaching, and date-specific official schedule views.

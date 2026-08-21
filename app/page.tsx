@@ -71,6 +71,7 @@ import {
   saveAssessment,
   swapSameGameRatings,
   saveProvisionalEventAccess,
+  setRatingAverageInclusion,
   setRatingArchived,
   setAttendanceExpected,
   saveUserEventAccess,
@@ -131,7 +132,7 @@ import {
 import { exportScheduleExcel, exportSchedulePdf, type ScheduleExportRow } from "./schedule-export";
 import { normalizePhoneNumber, phoneCallHref } from "./phone";
 
-const APP_VERSION = "0.32.5";
+const APP_VERSION = "0.33.0";
 
 type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups";
 const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups"];
@@ -308,7 +309,7 @@ function administrativeRatingAverage(officialId: string, position: AssignmentRec
   const source = preferences?.event_scope === "organization" ? history : currentData;
   const gameMap = new Map(source.games.map((game) => [game.id, game]));
   const scores = source.assessments.filter((assessment) => {
-    if (assessment.official_id !== officialId || assessment.status === "draft") return false;
+    if (assessment.official_id !== officialId || assessment.status === "draft" || assessment.include_in_averages === false) return false;
     const game = gameMap.get(assessment.game_id);
     if (!game || (preferences?.event_scope !== "organization" && game.event_id !== eventId)) return false;
     const date = game.starts_at.slice(0, 10);
@@ -1771,7 +1772,7 @@ function OfficialsDirectory({
   useEffect(() => { refreshArchivedOfficials().catch(() => undefined); }, [refreshArchivedOfficials]);
   const officialAverage = (officialId: string) => {
     const scores = directoryAssessments
-      .filter((assessment) => assessment.official_id === officialId && assessment.status !== "draft")
+      .filter((assessment) => assessment.official_id === officialId && assessment.status !== "draft" && assessment.include_in_averages !== false)
       .map(assessmentScore)
       .filter((score): score is number => score !== null);
     return scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : null;
@@ -2522,7 +2523,7 @@ function AssessmentCenter({
     }
     return (aGame?.starts_at || "").localeCompare(bGame?.starts_at || "");
   });
-  const filteredScores = sortedAssessments.map(assessmentScore).filter((score): score is number => score !== null);
+  const filteredScores = sortedAssessments.filter((assessment) => assessment.include_in_averages !== false).map(assessmentScore).filter((score): score is number => score !== null);
   const filteredAverage = filteredScores.length ? filteredScores.reduce((sum, score) => sum + score, 0) / filteredScores.length : null;
   const groupedAssessments = [...sortedAssessments.reduce((groups, assessment) => {
     const key = assessment.game_id;
@@ -2539,6 +2540,20 @@ function AssessmentCenter({
       setMessage(archived ? "Rating archived." : "Rating restored.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to update the rating.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function changeRatingAverageInclusion(assessment: AssessmentRecord, included: boolean) {
+    setBusy(true);
+    setMessage("");
+    try {
+      await setRatingAverageInclusion(session, assessment.id, included);
+      await refreshRatingHistory();
+      setMessage(included ? "Rating restored to scoring averages and referee visibility." : "Rating retained for staff, excluded from scoring averages, and hidden from the referee.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update this rating’s average setting.");
     } finally {
       setBusy(false);
     }
@@ -2628,7 +2643,7 @@ function AssessmentCenter({
     for (let index = 1; index <= maximumCrew; index += 1) {
       headings.push(
         `Official ${index} Name`, `Official ${index} Position`, `Official ${index} Eval Type`,
-        `Official ${index} Score`, `Official ${index} Positioning and Movement`, `Official ${index} Signaling/Offside`,
+        `Official ${index} Score`, `Official ${index} Counted in Averages`, `Official ${index} Positioning and Movement`, `Official ${index} Signaling/Offside`,
         `Official ${index} Teamwork`, `Official ${index} Match Control or Technical Area Management`,
         `Official ${index} Positive Areas of Performance`, `Official ${index} Areas for Improvement`,
         `Official ${index} Additional Comments/Suggestions`, `Official ${index} Private Coach/Admin Notes`,
@@ -2647,7 +2662,7 @@ function AssessmentCenter({
         historyOfficialMap.get(rating.official_id)?.full_name || "Unknown official",
         historyPosition(rating),
         rating.evaluation_type === "basic_eval" ? "Basic Eval" : "Skills Eval",
-        assessmentScore(rating)?.toFixed(2) || "",
+        assessmentScore(rating)?.toFixed(2) || "", rating.include_in_averages === false ? "No" : "Yes",
         rating.positioning ?? "", rating.decision_making ?? "", rating.communication ?? "", rating.match_control ?? "",
         rating.strengths || "", rating.development_focus || "", rating.additional_comments || "", rating.coach_notes || "",
       ));
@@ -2747,6 +2762,7 @@ function AssessmentCenter({
   const ratingActions = (assessment: AssessmentRecord, ratedGame?: GameRecord) => canManageRating(assessment) ? <div className="rating-history-actions">
     {canApprovePublic && assessment.visibility === "public" && assessment.status === "submitted" && <button className="primary" disabled={busy} onClick={() => approveRating(assessment)}>Approve & Share</button>}
     {!assessment.archived_at && ratedGame && onEditRating && <button className="secondary edit-rating-button" disabled={busy} onClick={() => onEditRating(assessment.game_id, ratedGame.event_id)}>Edit</button>}
+    {canConfigure && <button className="secondary average-inclusion-button" disabled={busy} onClick={() => changeRatingAverageInclusion(assessment, assessment.include_in_averages === false)}>{assessment.include_in_averages === false ? "Count in Averages" : "Exclude from Averages"}</button>}
     <button className="secondary" disabled={busy} onClick={() => changeRatingArchive(assessment, !assessment.archived_at)}>{assessment.archived_at ? "Restore" : "Archive"}</button>
     <button className="danger-button" disabled={busy} onClick={() => removeRating(assessment)}>Delete</button>
   </div> : null;
@@ -2787,7 +2803,7 @@ function AssessmentCenter({
       {historyView === "individual" && sortedAssessments.map((assessment) => {
       const score = assessmentScore(assessment);
       const ratedGame = historyGameMap.get(assessment.game_id);
-      return <article className={`${canConfigure ? "selectable-rating-row " : ""}${assessment.archived_at ? "archived-rating" : ""}`.trim()} key={assessment.id}>{canConfigure && <input className="bulk-row-check" type="checkbox" aria-label={`Select rating for ${historyOfficialMap.get(assessment.official_id)?.full_name || "official"}`} checked={selectedRatingIds.includes(assessment.id)} onChange={(event) => setSelectedRatingIds((current) => event.target.checked ? [...current, assessment.id] : current.filter((id) => id !== assessment.id))} />}<div><strong>{historyOfficialMap.get(assessment.official_id)?.full_name || "Referee"}</strong><p>{ratedGame?.home_team} vs. {ratedGame?.away_team}</p><small>{assessment.evaluation_type === "basic_eval" ? "Basic Eval" : "Skills Eval"} · {assessment.visibility === "public" ? "Public" : "Admin only"}{assessment.archived_at ? " · Archived" : ""}</small><small className="rating-submitter">Submitted by {ratingSubmitterMap.get(assessment.coach_id) || "Unknown user"}</small></div><span className="score">{score ? Number(score).toFixed(1) : "—"}</span><span className={`identity-pill ${assessment.status !== "draft" ? "linked" : ""}`}>{assessment.status}</span>{ratingActions(assessment, ratedGame)}</article>;
+      return <article className={`${canConfigure ? "selectable-rating-row " : ""}${assessment.archived_at ? "archived-rating " : ""}${assessment.include_in_averages === false ? "excluded-from-average" : ""}`.trim()} key={assessment.id}>{canConfigure && <input className="bulk-row-check" type="checkbox" aria-label={`Select rating for ${historyOfficialMap.get(assessment.official_id)?.full_name || "official"}`} checked={selectedRatingIds.includes(assessment.id)} onChange={(event) => setSelectedRatingIds((current) => event.target.checked ? [...current, assessment.id] : current.filter((id) => id !== assessment.id))} />}<div><strong>{historyOfficialMap.get(assessment.official_id)?.full_name || "Referee"}</strong><p>{ratedGame?.home_team} vs. {ratedGame?.away_team}</p><small>{assessment.evaluation_type === "basic_eval" ? "Basic Eval" : "Skills Eval"} · {assessment.visibility === "public" ? "Public" : "Admin only"}{assessment.archived_at ? " · Archived" : ""}{assessment.include_in_averages === false ? " · Excluded from averages" : ""}</small><small className="rating-submitter">Submitted by {ratingSubmitterMap.get(assessment.coach_id) || "Unknown user"}</small></div><span className="score">{score ? Number(score).toFixed(1) : "—"}</span><span className={`identity-pill ${assessment.status !== "draft" ? "linked" : ""}`}>{assessment.status}</span>{ratingActions(assessment, ratedGame)}</article>;
     })}
       {historyView === "game" && groupedAssessments.map(([ratedGameId, ratings]) => {
         const ratedGame = historyGameMap.get(ratedGameId);
@@ -2795,7 +2811,7 @@ function AssessmentCenter({
         const collapsed = collapsedRatingGameIds.includes(ratedGameId);
         const manageableRatings = ratings.filter(canManageRating);
         const swappable = manageableRatings.some((rating, index) => manageableRatings.slice(index + 1).some((candidate) => candidate.coach_id === rating.coach_id && candidate.official_id !== rating.official_id));
-        return <article className={`game-rating-history-card ${collapsed ? "collapsed" : ""}`} key={ratedGameId}><header>{canConfigure && <input className="bulk-row-check" type="checkbox" aria-label="Select all ratings for this game" checked={gameSelected} onChange={(change) => setSelectedRatingIds((current) => change.target.checked ? [...new Set([...current, ...ratings.map((item) => item.id)])] : current.filter((id) => !ratings.some((item) => item.id === id)))} />}<div><strong>{ratedGame?.home_team} vs. {ratedGame?.away_team}</strong><p>{ratedGame ? `${formatDate(ratedGame.starts_at)} · ${formatTime(ratedGame.starts_at)} · ${ratedGame.field_name}` : "Game details unavailable"}</p></div><span>{ratings.length} official{ratings.length === 1 ? "" : "s"}</span>{swappable && <button className="secondary swap-ratings-button" type="button" onClick={() => openRatingSwap(manageableRatings)}>Swap Ratings</button>}<button className="game-rating-collapse" aria-label={`${collapsed ? "Expand" : "Collapse"} ratings for this game`} aria-expanded={!collapsed} onClick={() => setCollapsedRatingGameIds((current) => current.includes(ratedGameId) ? current.filter((id) => id !== ratedGameId) : [...current, ratedGameId])}>{collapsed ? "▾" : "▴"}</button></header>{!collapsed && <div className="game-rating-officials">{orderGameRatings(ratings).map((assessment) => <div className={assessment.archived_at ? "archived-rating" : ""} key={assessment.id}><div><strong>{historyOfficialMap.get(assessment.official_id)?.full_name || "Referee"}</strong><small>{historyPosition(assessment)}{assessment.archived_at ? " · Archived" : ""}</small><small className="rating-submitter">Submitted by {ratingSubmitterMap.get(assessment.coach_id) || "Unknown user"}</small></div><span className="score">{assessmentScore(assessment)?.toFixed(1) || "—"}</span>{ratingActions(assessment, ratedGame)}</div>)}</div>}</article>;
+        return <article className={`game-rating-history-card ${collapsed ? "collapsed" : ""}`} key={ratedGameId}><header>{canConfigure && <input className="bulk-row-check" type="checkbox" aria-label="Select all ratings for this game" checked={gameSelected} onChange={(change) => setSelectedRatingIds((current) => change.target.checked ? [...new Set([...current, ...ratings.map((item) => item.id)])] : current.filter((id) => !ratings.some((item) => item.id === id)))} />}<div><strong>{ratedGame?.home_team} vs. {ratedGame?.away_team}</strong><p>{ratedGame ? `${formatDate(ratedGame.starts_at)} · ${formatTime(ratedGame.starts_at)} · ${ratedGame.field_name}` : "Game details unavailable"}</p></div><span>{ratings.length} official{ratings.length === 1 ? "" : "s"}</span>{swappable && <button className="secondary swap-ratings-button" type="button" onClick={() => openRatingSwap(manageableRatings)}>Swap Ratings</button>}<button className="game-rating-collapse" aria-label={`${collapsed ? "Expand" : "Collapse"} ratings for this game`} aria-expanded={!collapsed} onClick={() => setCollapsedRatingGameIds((current) => current.includes(ratedGameId) ? current.filter((id) => id !== ratedGameId) : [...current, ratedGameId])}>{collapsed ? "▾" : "▴"}</button></header>{!collapsed && <div className="game-rating-officials">{orderGameRatings(ratings).map((assessment) => <div className={`${assessment.archived_at ? "archived-rating " : ""}${assessment.include_in_averages === false ? "excluded-from-average" : ""}`.trim()} key={assessment.id}><div><strong>{historyOfficialMap.get(assessment.official_id)?.full_name || "Referee"}</strong><small>{historyPosition(assessment)}{assessment.archived_at ? " · Archived" : ""}{assessment.include_in_averages === false ? " · Excluded from averages" : ""}</small><small className="rating-submitter">Submitted by {ratingSubmitterMap.get(assessment.coach_id) || "Unknown user"}</small></div><span className="score">{assessmentScore(assessment)?.toFixed(1) || "—"}</span>{ratingActions(assessment, ratedGame)}</div>)}</div>}</article>;
       })}
       {swapRatingsForGame && <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) setSwapRatingsForGame(null); }}><section className="confirmation-dialog swap-ratings-dialog" role="dialog" aria-modal="true" aria-labelledby="swap-ratings-title"><header><div><p className="eyebrow">CORRECT RATING OWNERS</p><h2 id="swap-ratings-title">Swap Ratings</h2><p>Choose two officials rated by the same coach. Their complete evaluation contents will exchange places.</p></div><button className="modal-close-button" aria-label="Close rating swap" onClick={() => setSwapRatingsForGame(null)}>×</button></header><label>First official<select value={firstSwapRatingId} onChange={(change) => { setFirstSwapRatingId(change.target.value); setSecondSwapRatingId(""); }}><option value="">Choose an official</option>{swapRatingsForGame.map((assessment) => <option value={assessment.id} key={assessment.id}>{historyOfficialMap.get(assessment.official_id)?.full_name || "Unknown official"} · {ratingSubmitterMap.get(assessment.coach_id) || "Unknown coach"}</option>)}</select></label><label>Second official<select value={secondSwapRatingId} disabled={!firstSwapRatingId} onChange={(change) => setSecondSwapRatingId(change.target.value)}><option value="">Choose an official</option>{swapRatingsForGame.filter((assessment) => { const first = swapRatingsForGame.find((item) => item.id === firstSwapRatingId); return assessment.id !== firstSwapRatingId && assessment.coach_id === first?.coach_id && assessment.official_id !== first?.official_id; }).map((assessment) => <option value={assessment.id} key={assessment.id}>{historyOfficialMap.get(assessment.official_id)?.full_name || "Unknown official"}</option>)}</select></label><p className="import-note">This changes which official owns each rating. It does not change the game assignments.</p><div><button className="secondary" disabled={busy} onClick={() => setSwapRatingsForGame(null)}>Cancel</button><button className="primary" disabled={busy || !firstSwapRatingId || !secondSwapRatingId} onClick={() => void swapRatings()}>{busy ? "Swapping…" : "Swap Ratings"}</button></div></section></div>}
       {!sortedAssessments.length && <EmptyState>No ratings match these filters.</EmptyState>}</article>
@@ -4022,6 +4038,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
   const refereeOfficial = data.officials.find((item) => item.linked_user_id === session.user.id || item.email?.toLowerCase() === session.user.email?.toLowerCase());
   const unreadPublicRatingCount = refereeOfficial ? data.assessments.filter((assessment) =>
     assessment.official_id === refereeOfficial.id
+    && assessment.include_in_averages !== false
     && assessment.visibility === "public"
     && assessment.status === "shared"
     && !assessment.referee_seen_at
@@ -4032,7 +4049,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     if (nextView === "assessments" && event && unreadPublicRatingCount) {
       await markEventRatingsSeen(session, event.id).catch(() => undefined);
       setData((current) => ({ ...current, assessments: current.assessments.map((assessment) =>
-        assessment.official_id === refereeOfficial?.id && assessment.visibility === "public" && assessment.status === "shared"
+        assessment.official_id === refereeOfficial?.id && assessment.include_in_averages !== false && assessment.visibility === "public" && assessment.status === "shared"
           ? { ...assessment, referee_seen_at: new Date().toISOString() }
           : assessment,
       ) }));

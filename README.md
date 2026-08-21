@@ -2,6 +2,12 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.33.0
+
+- Lets authorized administrators retain a rating for staff while excluding it from all scoring averages and hiding it from the referee, then restore it later.
+- Clearly labels excluded ratings in individual and full-game history views and records the setting in spreadsheet exports.
+- Defaults all existing and future ratings to counted, protects the setting with server-side role checks, and logs every inclusion change.
+
 ## v0.32.5
 
 - Adds a permission-gated Refresh Check-Ins button to the Assignment Board and Schedule.

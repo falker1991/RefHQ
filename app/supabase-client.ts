@@ -328,6 +328,7 @@ export type AssessmentRecord = {
   visibility: "public" | "private";
   status: "draft" | "submitted" | "shared";
   evaluation_type: "skills_eval" | "basic_eval";
+  include_in_averages?: boolean;
   overall_rating: number | null;
   positioning: number | null;
   decision_making: number | null;
@@ -1152,6 +1153,13 @@ export async function setRatingArchived(session: Law18Session, assessmentId: str
   await rest(session, "rpc/set_rating_archived", {
     method: "POST",
     body: JSON.stringify({ target_assessment: assessmentId, should_archive: archived }),
+  });
+}
+
+export async function setRatingAverageInclusion(session: Law18Session, assessmentId: string, included: boolean) {
+  await rest(session, "rpc/set_rating_average_inclusion", {
+    method: "POST",
+    body: JSON.stringify({ target_assessment: assessmentId, should_include: included }),
   });
 }
 

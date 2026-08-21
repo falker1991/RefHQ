@@ -2,6 +2,11 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.32.5
+
+- Adds a permission-gated Refresh Check-Ins button to the Assignment Board and Schedule.
+- Reloads only check-in and attendance-expectation records, immediately updating highlights and counts without refreshing the full event.
+
 ## v0.32.4
 
 - Applies stable natural numeric field ordering across every Assignment Board view, including the Time and Field Grid.

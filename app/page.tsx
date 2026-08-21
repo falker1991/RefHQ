@@ -69,6 +69,7 @@ import {
   parseAssignrCsv,
   parseAssignrOfficialsCsv,
   saveAssessment,
+  swapSameGameRatings,
   saveProvisionalEventAccess,
   setRatingArchived,
   setAttendanceExpected,
@@ -2415,6 +2416,9 @@ function AssessmentCenter({
   const [showArchivedRatings, setShowArchivedRatings] = useActiveFilterState("ratings-show-archived", false);
   const [selectedRatingIds, setSelectedRatingIds] = useState<string[]>([]);
   const [collapsedRatingGameIds, setCollapsedRatingGameIds] = useState<string[]>([]);
+  const [swapRatingsForGame, setSwapRatingsForGame] = useState<AssessmentRecord[] | null>(null);
+  const [firstSwapRatingId, setFirstSwapRatingId] = useState("");
+  const [secondSwapRatingId, setSecondSwapRatingId] = useState("");
   const filterDropdownsRef = useRef<HTMLDivElement>(null);
   const [history, setHistory] = useState({ assessments: data.assessments, games: data.games, assignments: data.assignments, officials: data.officials, events: [] as EventRecord[], submitters: [] as { id: string; full_name: string }[] });
   const refreshRatingHistory = useCallback(() => loadAuthorizedRatingHistory(session, organizationId).then(setHistory), [organizationId, session]);
@@ -2441,7 +2445,7 @@ function AssessmentCenter({
   const gameAssignments = sortGameCrew([...new Map(data.assignments.filter((assignment) => assignment.game_id === gameId).map((assignment) => [assignment.official_id, assignment])).values()]);
   const eligibleGames = data.games.filter(isRateableGame).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
   const historyAssignment = (assessment: AssessmentRecord) => history.assignments.find((item) => item.game_id === assessment.game_id && item.official_id === assessment.official_id);
-  const historyPosition = (assessment: AssessmentRecord) => historyAssignment(assessment)?.position_title || "Unspecified position";
+  const historyPosition = (assessment: AssessmentRecord) => assessment.rated_position_title || (assessment.rated_position ? positionLabel(assessment.rated_position) : null) || historyAssignment(assessment)?.position_title || "Unspecified position";
   const ratingScoreLabel = (assessment: AssessmentRecord) => {
     const score = assessmentScore(assessment);
     return score === null ? "Unscored" : Number(score.toFixed(2)).toString();
@@ -2539,6 +2543,28 @@ function AssessmentCenter({
       setMessage(retainForReferee ? "Rating removed from administration and retained for the referee." : "Rating fully deleted.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to delete the rating.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openRatingSwap(ratings: AssessmentRecord[]) {
+    setSwapRatingsForGame(ratings);
+    setFirstSwapRatingId("");
+    setSecondSwapRatingId("");
+  }
+
+  async function swapRatings() {
+    if (!firstSwapRatingId || !secondSwapRatingId || firstSwapRatingId === secondSwapRatingId) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      await swapSameGameRatings(session, firstSwapRatingId, secondSwapRatingId);
+      setSwapRatingsForGame(null);
+      await refreshRatingHistory();
+      setMessage("The two officials’ ratings were swapped.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to swap these ratings.");
     } finally {
       setBusy(false);
     }
@@ -2754,8 +2780,11 @@ function AssessmentCenter({
         const ratedGame = historyGameMap.get(ratedGameId);
         const gameSelected = ratings.every((assessment) => selectedRatingIds.includes(assessment.id));
         const collapsed = collapsedRatingGameIds.includes(ratedGameId);
-        return <article className={`game-rating-history-card ${collapsed ? "collapsed" : ""}`} key={ratedGameId}><header>{canConfigure && <input className="bulk-row-check" type="checkbox" aria-label="Select all ratings for this game" checked={gameSelected} onChange={(change) => setSelectedRatingIds((current) => change.target.checked ? [...new Set([...current, ...ratings.map((item) => item.id)])] : current.filter((id) => !ratings.some((item) => item.id === id)))} />}<div><strong>{ratedGame?.home_team} vs. {ratedGame?.away_team}</strong><p>{ratedGame ? `${formatDate(ratedGame.starts_at)} · ${formatTime(ratedGame.starts_at)} · ${ratedGame.field_name}` : "Game details unavailable"}</p></div><span>{ratings.length} official{ratings.length === 1 ? "" : "s"}</span><button className="game-rating-collapse" aria-label={`${collapsed ? "Expand" : "Collapse"} ratings for this game`} aria-expanded={!collapsed} onClick={() => setCollapsedRatingGameIds((current) => current.includes(ratedGameId) ? current.filter((id) => id !== ratedGameId) : [...current, ratedGameId])}>{collapsed ? "▾" : "▴"}</button></header>{!collapsed && <div className="game-rating-officials">{orderGameRatings(ratings).map((assessment) => <div className={assessment.archived_at ? "archived-rating" : ""} key={assessment.id}><div><strong>{historyOfficialMap.get(assessment.official_id)?.full_name || "Referee"}</strong><small>{historyPosition(assessment)}{assessment.archived_at ? " · Archived" : ""}</small><small className="rating-submitter">Submitted by {ratingSubmitterMap.get(assessment.coach_id) || "Unknown user"}</small></div><span className="score">{assessmentScore(assessment)?.toFixed(1) || "—"}</span>{ratingActions(assessment, ratedGame)}</div>)}</div>}</article>;
+        const manageableRatings = ratings.filter(canManageRating);
+        const swappable = manageableRatings.some((rating, index) => manageableRatings.slice(index + 1).some((candidate) => candidate.coach_id === rating.coach_id && candidate.official_id !== rating.official_id));
+        return <article className={`game-rating-history-card ${collapsed ? "collapsed" : ""}`} key={ratedGameId}><header>{canConfigure && <input className="bulk-row-check" type="checkbox" aria-label="Select all ratings for this game" checked={gameSelected} onChange={(change) => setSelectedRatingIds((current) => change.target.checked ? [...new Set([...current, ...ratings.map((item) => item.id)])] : current.filter((id) => !ratings.some((item) => item.id === id)))} />}<div><strong>{ratedGame?.home_team} vs. {ratedGame?.away_team}</strong><p>{ratedGame ? `${formatDate(ratedGame.starts_at)} · ${formatTime(ratedGame.starts_at)} · ${ratedGame.field_name}` : "Game details unavailable"}</p></div><span>{ratings.length} official{ratings.length === 1 ? "" : "s"}</span>{swappable && <button className="secondary swap-ratings-button" type="button" onClick={() => openRatingSwap(manageableRatings)}>Swap Ratings</button>}<button className="game-rating-collapse" aria-label={`${collapsed ? "Expand" : "Collapse"} ratings for this game`} aria-expanded={!collapsed} onClick={() => setCollapsedRatingGameIds((current) => current.includes(ratedGameId) ? current.filter((id) => id !== ratedGameId) : [...current, ratedGameId])}>{collapsed ? "▾" : "▴"}</button></header>{!collapsed && <div className="game-rating-officials">{orderGameRatings(ratings).map((assessment) => <div className={assessment.archived_at ? "archived-rating" : ""} key={assessment.id}><div><strong>{historyOfficialMap.get(assessment.official_id)?.full_name || "Referee"}</strong><small>{historyPosition(assessment)}{assessment.archived_at ? " · Archived" : ""}</small><small className="rating-submitter">Submitted by {ratingSubmitterMap.get(assessment.coach_id) || "Unknown user"}</small></div><span className="score">{assessmentScore(assessment)?.toFixed(1) || "—"}</span>{ratingActions(assessment, ratedGame)}</div>)}</div>}</article>;
       })}
+      {swapRatingsForGame && <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) setSwapRatingsForGame(null); }}><section className="confirmation-dialog swap-ratings-dialog" role="dialog" aria-modal="true" aria-labelledby="swap-ratings-title"><header><div><p className="eyebrow">CORRECT RATING OWNERS</p><h2 id="swap-ratings-title">Swap Ratings</h2><p>Choose two officials rated by the same coach. Their complete evaluation contents will exchange places.</p></div><button className="modal-close-button" aria-label="Close rating swap" onClick={() => setSwapRatingsForGame(null)}>×</button></header><label>First official<select value={firstSwapRatingId} onChange={(change) => { setFirstSwapRatingId(change.target.value); setSecondSwapRatingId(""); }}><option value="">Choose an official</option>{swapRatingsForGame.map((assessment) => <option value={assessment.id} key={assessment.id}>{historyOfficialMap.get(assessment.official_id)?.full_name || "Unknown official"} · {ratingSubmitterMap.get(assessment.coach_id) || "Unknown coach"}</option>)}</select></label><label>Second official<select value={secondSwapRatingId} disabled={!firstSwapRatingId} onChange={(change) => setSecondSwapRatingId(change.target.value)}><option value="">Choose an official</option>{swapRatingsForGame.filter((assessment) => { const first = swapRatingsForGame.find((item) => item.id === firstSwapRatingId); return assessment.id !== firstSwapRatingId && assessment.coach_id === first?.coach_id && assessment.official_id !== first?.official_id; }).map((assessment) => <option value={assessment.id} key={assessment.id}>{historyOfficialMap.get(assessment.official_id)?.full_name || "Unknown official"}</option>)}</select></label><p className="import-note">This changes which official owns each rating. It does not change the game assignments.</p><div><button className="secondary" disabled={busy} onClick={() => setSwapRatingsForGame(null)}>Cancel</button><button className="primary" disabled={busy || !firstSwapRatingId || !secondSwapRatingId} onClick={() => void swapRatings()}>{busy ? "Swapping…" : "Swap Ratings"}</button></div></section></div>}
       {!sortedAssessments.length && <EmptyState>No ratings match these filters.</EmptyState>}</article>
   </section>;
 }
@@ -4085,7 +4114,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.31.10</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.32.0</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

@@ -2,6 +2,12 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.32.0
+
+- Prevents games, groups, officials, or user profiles from cascade-deleting related ratings; ratings must be removed through the explicit rating deletion workflow.
+- Stores each rating's position and automatically moves it when the same official changes position on that game.
+- Adds an audited Full Game Ratings action for authorized administrators to swap two officials' ratings submitted by the same coach.
+
 ## v0.31.10
 
 - Preserves each game's imported crew sequence with an explicit assignment order stored in Supabase.

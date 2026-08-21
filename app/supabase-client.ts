@@ -347,6 +347,8 @@ export type AssessmentRecord = {
   referee_seen_at?: string | null;
   deleted_at?: string | null;
   retained_for_referee?: boolean;
+  rated_position?: AssignmentRecord["position"] | null;
+  rated_position_title?: string | null;
 };
 
 export type RatingHistory = {
@@ -1157,6 +1159,13 @@ export async function deleteRating(session: Law18Session, assessmentId: string, 
   await rest(session, "rpc/delete_rating", {
     method: "POST",
     body: JSON.stringify({ target_assessment: assessmentId, keep_for_referee: retainForReferee }),
+  });
+}
+
+export async function swapSameGameRatings(session: Law18Session, firstAssessmentId: string, secondAssessmentId: string) {
+  await rest(session, "rpc/swap_same_game_ratings", {
+    method: "POST",
+    body: JSON.stringify({ first_assessment: firstAssessmentId, second_assessment: secondAssessmentId }),
   });
 }
 

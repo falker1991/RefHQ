@@ -2051,20 +2051,38 @@ export async function importTournament(
       accepted: true,
     };
   });
+  let assignmentsToWrite = assignmentPayload;
   if (details.eventId) {
     const importedGameIds = [...new Set(rows.map((row) => gameByExternalId.get(row.external_id)?.id).filter((id): id is string => Boolean(id)))];
-    await Promise.all(importedGameIds.map((gameId) => rest(
+    const existingAssignments = importedGameIds.length ? await rest<AssignmentRecord[]>(
+      session,
+      `assignments?game_id=in.(${importedGameIds.join(",")})&select=*&order=crew_order.asc,id.asc`,
+    ) : [];
+    const crewSignature = (crew: Array<Pick<AssignmentRecord, "official_id" | "position" | "position_title" | "source_position_title" | "crew_order">>) => JSON.stringify(crew.map((assignment, index) => ({
+      official_id: assignment.official_id,
+      position: assignment.position,
+      position_title: assignment.position_title || "",
+      source_position_title: assignment.source_position_title || "",
+      crew_order: assignment.crew_order ?? index,
+    })));
+    const changedGameIds = new Set(importedGameIds.filter((gameId) => {
+      const existingCrew = existingAssignments.filter((assignment) => assignment.game_id === gameId);
+      const incomingCrew = assignmentPayload.filter((assignment) => assignment.game_id === gameId);
+      return crewSignature(existingCrew) !== crewSignature(incomingCrew);
+    }));
+    await Promise.all([...changedGameIds].map((gameId) => rest(
       session,
       `assignments?game_id=eq.${enc(gameId)}`,
       { method: "DELETE" },
       "return=minimal",
     )));
+    assignmentsToWrite = assignmentPayload.filter((assignment) => changedGameIds.has(assignment.game_id));
   }
-  if (assignmentPayload.length) {
+  if (assignmentsToWrite.length) {
     await rest(
       session,
       "assignments?on_conflict=game_id,official_id,position",
-      { method: "POST", body: JSON.stringify(assignmentPayload) },
+      { method: "POST", body: JSON.stringify(assignmentsToWrite) },
       "resolution=merge-duplicates,return=minimal",
     );
   }

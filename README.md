@@ -2,6 +2,12 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.32.1
+
+- Makes updated schedule imports idempotent for game crews.
+- Compares every incoming official, position title, source title, and crew-order value before writing assignments.
+- Skips assignment deletion and reinsertion entirely when a rated game's imported crew has not changed, leaving its assignments and ratings untouched.
+
 ## v0.32.0
 
 - Prevents games, groups, officials, or user profiles from cascade-deleting related ratings; ratings must be removed through the explicit rating deletion workflow.

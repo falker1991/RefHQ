@@ -2,6 +2,11 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.32.4
+
+- Applies stable natural numeric field ordering across every Assignment Board view, including the Time and Field Grid.
+- Keeps numbered fields such as Field #2 ahead of Field #10 regardless of database return order.
+
 ## v0.32.3
 
 - Shows the deployed application version beside Help in the header for the Site Owner only.

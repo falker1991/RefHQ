@@ -131,7 +131,7 @@ import {
 import { exportScheduleExcel, exportSchedulePdf, type ScheduleExportRow } from "./schedule-export";
 import { normalizePhoneNumber, phoneCallHref } from "./phone";
 
-const APP_VERSION = "0.32.3";
+const APP_VERSION = "0.32.4";
 
 type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups";
 const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups"];
@@ -443,7 +443,8 @@ function AssignmentBoard({ session, data, event, profile, ratingHistory, showRat
   const availableVenues = useMemo(() => [...new Set(data.games.filter((game) => dateKeyInTimeZone(game.starts_at, event.timezone) === boardDate).map((game) => game.venue_name || "Unspecified venue"))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), [boardDate, data.games, event.timezone]);
   const visibleGames = useMemo(() => data.games.filter((game) => dateKeyInTimeZone(game.starts_at, event.timezone) === boardDate && (!venueFilters.length || venueFilters.includes(game.venue_name || "Unspecified venue"))), [boardDate, data.games, event.timezone, venueFilters]);
   const ratingLabel = showRatingAverages ? (officialId: string, position: AssignmentRecord["position"]) => administrativeRatingLabel(officialId, position, event.id, data, ratingHistory, profile.rating_average_preferences) : undefined;
-  const fields = [...new Set(visibleGames.map((game) => game.field_name))];
+  const fields = [...new Set(visibleGames.map((game) => game.field_name))]
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
   const times = [...new Map(visibleGames.map((game) => [formatTime(game.starts_at), timeSortValue(game.starts_at)])).entries()]
     .sort((a, b) => a[1] - b[1])
     .map(([label]) => label);
@@ -491,7 +492,7 @@ function AssignmentBoard({ session, data, event, profile, ratingHistory, showRat
           ))}</tbody>
         </table>
       </div>}
-      {boardView === "field" && <div className="field-board-list">{fields.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).map((field) => {
+      {boardView === "field" && <div className="field-board-list">{fields.map((field) => {
         const collapsed = collapsedFields.has(field);
         const games = visibleGames.filter((game) => game.field_name === field).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
         return <article className="panel field-board-group" key={field}><button className="field-board-heading" onClick={() => setCollapsedFields((current) => {

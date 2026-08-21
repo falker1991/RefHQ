@@ -2,6 +2,12 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.31.10
+
+- Preserves each game's imported crew sequence with an explicit assignment order stored in Supabase.
+- Treats the first repeated AR, Standby, or other matching role in the source file as the first one displayed throughout the site.
+- Preserves the displayed crew sequence when assignments are later edited manually.
+
 ## v0.31.9
 
 - Enables posted-assignment editing directly from Assignment Board game tiles for users who already have assignment-editing permission.

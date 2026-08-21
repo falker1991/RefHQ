@@ -267,7 +267,7 @@ function crewPositionPriority(assignment: AssignmentRecord) {
 
 function sortGameCrew(assignments: AssignmentRecord[]) {
   return assignments.map((assignment, sourceIndex) => ({ assignment, sourceIndex }))
-    .sort((a, b) => crewPositionPriority(a.assignment) - crewPositionPriority(b.assignment) || a.sourceIndex - b.sourceIndex)
+    .sort((a, b) => crewPositionPriority(a.assignment) - crewPositionPriority(b.assignment) || (a.assignment.crew_order ?? a.sourceIndex) - (b.assignment.crew_order ?? b.sourceIndex) || a.sourceIndex - b.sourceIndex)
     .map(({ assignment }) => assignment);
 }
 
@@ -4085,7 +4085,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.31.9</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.31.10</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

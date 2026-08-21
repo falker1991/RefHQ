@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.31.9 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.31.10 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.31.9 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.31\.9/);
+  assert.match(page, /Version 0\.31\.10/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.31.9 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.31.9");
+  assert.equal(JSON.parse(packageJson).version, "0.31.10");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1658,7 +1658,7 @@ test("v0.28.1 keeps schedule crew columns aligned without range-query support", 
   assert.match(styles, /\.schedule-crew-list>span\{box-sizing:border-box;flex:0 0 calc\(\(100% - 21px\)\/4\)\}/);
   assert.match(styles, /@media\(max-width:900px\)\{\.schedule-crew-list>span\{flex-basis:calc\(\(100% - 7px\)\/2\)\}\}/);
   assert.match(styles, /@media\(max-width:700px\)\{\.schedule-crew-list>span\{flex-basis:100%\}\}/);
-  assert.equal(JSON.parse(packageJson).version, "0.31.9");
+  assert.equal(JSON.parse(packageJson).version, "0.31.10");
 });
 
 test("v0.31.9 edits board assignments through the permission-gated game detail line", async () => {
@@ -1671,5 +1671,24 @@ test("v0.31.9 edits board assignments through the permission-gated game detail l
   assert.match(page, /<small>\{game\.division \|\| "Tournament match"\}<\/small>/);
   assert.match(styles, /Version 0\.31\.9 assignment-board edit trigger/);
   assert.match(styles, /\.board-game-details-link:hover/);
-  assert.equal(JSON.parse(packageJson).version, "0.31.9");
+  assert.equal(JSON.parse(packageJson).version, "0.31.10");
+});
+
+test("v0.31.10 preserves imported order for matching crew positions", async () => {
+  const [page, client, migration, packageJson] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/supabase-client.ts"),
+    read("supabase/migrations/20260821140654_preserve_game_crew_import_order.sql"),
+    read("package.json"),
+  ]);
+  assert.match(client, /crew_order\?: number/);
+  assert.match(client, /const nextCrewOrder = new Map<string, number>\(\)/);
+  assert.match(client, /crew_order: crewOrder/);
+  assert.match(client, /order=crew_order\.asc/);
+  assert.match(page, /a\.assignment\.crew_order \?\? a\.sourceIndex/);
+  assert.match(migration, /add column if not exists crew_order integer/);
+  assert.match(migration, /with ordinality as item\(value, ordinality\)/);
+  assert.match(migration, /item\.ordinality - 1, true/);
+  assert.match(migration, /order by crew_order, id/);
+  assert.equal(JSON.parse(packageJson).version, "0.31.10");
 });

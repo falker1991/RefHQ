@@ -245,6 +245,7 @@ export type AssignmentRecord = {
     | "other";
   position_title: string | null;
   source_position_title: string | null;
+  crew_order?: number;
 };
 
 export type CheckInRecord = {
@@ -1034,7 +1035,7 @@ export async function loadEventData(session: Law18Session, eventId: string) {
   const eventOrganizationId = eventRows[0]?.organization_id;
   const gameIds = games.map((game) => game.id).join(",");
   const assignments = gameIds
-    ? await rest<AssignmentRecord[]>(session, `assignments?game_id=in.(${gameIds})&select=*`)
+    ? await rest<AssignmentRecord[]>(session, `assignments?game_id=in.(${gameIds})&select=*&order=crew_order.asc`)
     : [];
   const officialIds = [...new Set([
     ...assignments.map((assignment) => assignment.official_id),
@@ -2022,18 +2023,22 @@ export async function importTournament(
     ...(organizationRows[0]?.position_title_aliases || {}),
     ...(event.position_title_aliases || {}),
   };
+  const nextCrewOrder = new Map<string, number>();
   const assignmentPayload = assignmentRows.map((row) => {
     const gameId = gameByExternalId.get(row.external_id)?.id;
     const nameMatches = officialByName.get(normalizeOfficialName(row.official_name)) || [];
     const emailMatch = row.official_email ? officialByEmail.get(row.official_email)?.id : undefined;
     const officialId = (nameMatches.length === 1 ? nameMatches[0].id : undefined) || emailMatch;
     if (!gameId || !officialId) throw new Error(`Unable to match assignment for game ${row.external_id}.`);
+    const crewOrder = nextCrewOrder.get(row.external_id) || 0;
+    nextCrewOrder.set(row.external_id, crewOrder + 1);
     return {
       game_id: gameId,
       official_id: officialId,
       position: normalizePosition(row.position),
       position_title: positionAliases[positionAliasKey(row.position)] || row.position.trim() || "Official",
       source_position_title: row.position.trim() || "Official",
+      crew_order: crewOrder,
       accepted: true,
     };
   });

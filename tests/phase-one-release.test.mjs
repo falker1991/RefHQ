@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.31.3 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.31.4 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.31.3 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.31\.3/);
+  assert.match(page, /Version 0\.31\.4/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.31.3 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.31.3");
+  assert.equal(JSON.parse(packageJson).version, "0.31.4");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1425,6 +1425,17 @@ test("v0.31.3 lets Site Supervisors resolve names only for visible game crews", 
   assert.doesNotMatch(migration, /grant (?:select|all) on public\.officials/);
 });
 
+test("v0.31.4 lets every linked coach view games from coaching assignments", async () => {
+  const migration = await read("supabase/migrations/20260821001612_linked_coach_assignment_game_visibility.sql");
+  assert.match(migration, /function public\.can_view_game\(game_uuid uuid, event_uuid uuid\)/);
+  assert.match(migration, /from public\.coach_assignments coaching/);
+  assert.match(migration, /coaching\.coach_id = \(select auth\.uid\(\)\)/);
+  assert.match(migration, /coaching\.event_id = event_uuid/);
+  assert.match(migration, /coaching\.full_schedule or coaching\.game_id = game_uuid/);
+  assert.match(migration, /revoke all on function public\.can_view_game\(uuid, uuid\) from public, anon/);
+  assert.doesNotMatch(migration, /coach_official_id = \(select auth\.uid\(\)\)/);
+});
+
 test("v0.27.0 separates schedule date, filters, and sorting controls", async () => {
   const [page, styles] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
   assert.match(page, /className="section-title schedule-section-title"/);
@@ -1608,5 +1619,5 @@ test("v0.28.1 keeps schedule crew columns aligned without range-query support", 
   assert.match(styles, /\.schedule-crew-list>span\{box-sizing:border-box;flex:0 0 calc\(\(100% - 21px\)\/4\)\}/);
   assert.match(styles, /@media\(max-width:900px\)\{\.schedule-crew-list>span\{flex-basis:calc\(\(100% - 7px\)\/2\)\}\}/);
   assert.match(styles, /@media\(max-width:700px\)\{\.schedule-crew-list>span\{flex-basis:100%\}\}/);
-  assert.equal(JSON.parse(packageJson).version, "0.31.3");
+  assert.equal(JSON.parse(packageJson).version, "0.31.4");
 });

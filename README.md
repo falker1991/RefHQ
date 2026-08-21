@@ -2,6 +2,12 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.31.4
+
+- Restores game visibility for every linked Referee Coach based on their saved coaching assignments.
+- Supports both individually assigned games and full-event coaching access without requiring duplicate game IDs in event membership records.
+- Keeps coaches limited to their own coaching scope and does not broaden access for unlinked or unrelated accounts.
+
 ## v0.31.3
 
 - Fixes Site Supervisor schedules displaying assigned crew positions as Unassigned.

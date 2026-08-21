@@ -2,6 +2,11 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.32.3
+
+- Shows the deployed application version beside Help in the header for the Site Owner only.
+- Keeps the shared footer version synchronized with the application release.
+
 ## v0.32.2
 
 - Makes the official schedule popup a single continuous scrolling surface so contact details cannot cover or clip the first assignment.

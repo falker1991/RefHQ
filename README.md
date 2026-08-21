@@ -2,6 +2,18 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.31.8
+
+- Standardizes the default event date across Assignment Board, Schedule, Check-In, Coaching, and date-specific official schedule views.
+- Opens every operational tab on today when today is scheduled, the first upcoming event day before or between dates, or the final date for a completed event.
+- Uses the event timezone consistently and still permits users to select multiple dates or clear date filters afterward.
+
+## v0.31.7
+
+- Opens the Check-In tab on the current event date when games are scheduled today.
+- Selects the first upcoming event date when the event has not started or today is an off day between event dates.
+- Falls back to the event's final date for completed events so the day selector always has a valid value.
+
 ## v0.31.6
 
 - Makes the live check-in counter reflect the roster currently visible after applying name, status, and site filters.

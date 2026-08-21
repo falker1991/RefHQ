@@ -351,7 +351,7 @@ function OfficialEventScheduleModal({ session, official, event, data, initialDat
   const localGames = data.games.filter((game) => refereeGameIds.has(game.id) || coachingGameIds.has(game.id) || coachesFullEvent)
     .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
   const availableDates = [...new Set(localGames.map((game) => new Intl.DateTimeFormat("en-CA", { timeZone: event.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(game.starts_at))))].sort();
-  const [selectedDate, setSelectedDate] = useState(initialDate && availableDates.includes(initialDate) ? initialDate : availableDates[0] || event.starts_on);
+  const [selectedDate, setSelectedDate] = useState(initialDate && availableDates.includes(initialDate) ? initialDate : defaultEventDate(availableDates, event.timezone, event.starts_on));
   const scheduleListRef = useRef<HTMLDivElement>(null);
   const [dayContext, setDayContext] = useState<OfficialEventDayContext | null>(null);
   const [contextMessage, setContextMessage] = useState("");
@@ -408,11 +408,11 @@ function AssignmentBoard({ data, event, profile, ratingHistory, showRatingAverag
   const [collapsedFirstTimes, setCollapsedFirstTimes] = useState<Set<string>>(new Set());
   const [venueFilters, setVenueFilters] = useActiveFilterState<string[]>(`assignment-board-venues:${event.id}`, []);
   const availableDates = useMemo(() => [...new Set(data.games.map((game) => dateKeyInTimeZone(game.starts_at, event.timezone)))].sort(), [data.games, event.timezone]);
-  const today = dateKeyInTimeZone(new Date(), event.timezone);
-  const [boardDate, setBoardDate] = useState(() => availableDates.includes(today) ? today : availableDates[0] || event.starts_on);
+  const defaultBoardDate = defaultEventDate(availableDates, event.timezone, event.starts_on);
+  const [boardDate, setBoardDate] = useState(defaultBoardDate);
   useEffect(() => {
-    if (!availableDates.includes(boardDate)) setBoardDate(availableDates.includes(today) ? today : availableDates[0] || event.starts_on);
-  }, [availableDates, boardDate, event.starts_on, today]);
+    if (!availableDates.includes(boardDate)) setBoardDate(defaultBoardDate);
+  }, [availableDates, boardDate, defaultBoardDate]);
   const availableVenues = useMemo(() => [...new Set(data.games.filter((game) => dateKeyInTimeZone(game.starts_at, event.timezone) === boardDate).map((game) => game.venue_name || "Unspecified venue"))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), [boardDate, data.games, event.timezone]);
   const visibleGames = useMemo(() => data.games.filter((game) => dateKeyInTimeZone(game.starts_at, event.timezone) === boardDate && (!venueFilters.length || venueFilters.includes(game.venue_name || "Unspecified venue"))), [boardDate, data.games, event.timezone, venueFilters]);
   const ratingLabel = showRatingAverages ? (officialId: string, position: AssignmentRecord["position"]) => administrativeRatingLabel(officialId, position, event.id, data, ratingHistory, profile.rating_average_preferences) : undefined;
@@ -612,6 +612,14 @@ function dateKeyInTimeZone(value: string | Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(value));
   const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value || "";
   return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function defaultEventDate(dates: string[], timeZone: string, fallback: string) {
+  const sortedDates = [...new Set(dates)].sort();
+  const today = dateKeyInTimeZone(new Date(), timeZone);
+  return sortedDates.includes(today)
+    ? today
+    : sortedDates.find((date) => date > today) || sortedDates.at(-1) || fallback;
 }
 
 function PersonalDashboard({ session, profile, organizations, onNavigate }: { session: Law18Session; profile: Profile; organizations: OrganizationRecord[]; onNavigate: (view: View) => void }) {
@@ -856,7 +864,8 @@ function RefereeCheckIn({ event, data, session, onCheckedIn }: { event: EventRec
 
 function CheckInView({ event, data, session, canManageCheckIns, onRefresh, onSelectOfficial }: { event: EventRecord; data: EventData; session: Law18Session; canManageCheckIns: boolean; onRefresh: () => Promise<void>; onSelectOfficial: (officialId: string, eventDate?: string) => void }) {
   const eventDates = [...new Set(data.games.map((game) => game.starts_at.slice(0, 10)))].sort();
-  const [eventDate, setEventDate] = useState(eventDates[0] || event.starts_on);
+  const defaultCheckInDate = defaultEventDate(eventDates, event.timezone, event.starts_on);
+  const [eventDate, setEventDate] = useState(defaultCheckInDate);
   const [rosterView, setRosterView] = useState<"detailed" | "grid">("detailed");
   const [statusFilters, setStatusFilters] = useActiveFilterState<string[]>(`checkin-status:${event.id}`, []);
   const [siteFilters, setSiteFilters] = useActiveFilterState<string[]>(`checkin-sites:${event.id}`, []);
@@ -1043,13 +1052,12 @@ function ScheduleView({ session, event, data, availableOfficials, canEdit, canEd
   const hasFullEventRatingAccess = myCoachingAssignments.some((assignment) => assignment.full_schedule);
   const assignedCoachingGameIds = new Set(myCoachingAssignments.map((assignment) => assignment.game_id).filter((gameId): gameId is string => Boolean(gameId)));
   const scheduleEventDates = [...new Set(data.games.map((game) => dateKeyInTimeZone(game.starts_at, event.timezone)))].sort();
-  const eventToday = dateKeyInTimeZone(new Date().toISOString(), event.timezone);
-  const defaultCoachDate = eventToday < (scheduleEventDates[0] || event.starts_on) ? scheduleEventDates[0] || event.starts_on : eventToday;
+  const defaultScheduleDate = defaultEventDate(scheduleEventDates, event.timezone, event.starts_on);
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [sortOrder, setSortOrder] = useActiveFilterState<ScheduleSortField[]>(`schedule-sort-order:${event.id}`, coachView ? ["field", "time", "date"] : ["date", "field", "time"]);
-  const [dateFilters, setDateFilters] = useActiveFilterState<string[]>(`schedule-date:${event.id}`, coachView ? [defaultCoachDate] : []);
+  const [dateFilters, setDateFilters] = useActiveFilterState<string[]>(`schedule-date:${event.id}`, [defaultScheduleDate]);
   const [fieldFilters, setFieldFilters] = useActiveFilterState<string[]>(`schedule-field:${event.id}`, []);
   const [siteFilters, setSiteFilters] = useActiveFilterState<string[]>(`schedule-site:${event.id}`, []);
   const [officialFilters, setOfficialFilters] = useActiveFilterState<string[]>(`schedule-official:${event.id}`, []);
@@ -2892,12 +2900,15 @@ function CoachWorkspace({
   canManage: boolean;
   onSaved: () => void;
 }) {
+  const scheduleGames = data.games.filter(isRateableGame).sort((a, b) => a.starts_at.localeCompare(b.starts_at) || a.field_name.localeCompare(b.field_name, undefined, { numeric: true }));
+  const scheduleDates = [...new Set(scheduleGames.map((game) => dateKeyInTimeZone(game.starts_at, event.timezone)))];
+  const defaultCoachingDate = defaultEventDate(scheduleDates, event.timezone, event.starts_on);
   const [coachId, setCoachId] = useState("");
   const [scope, setScope] = useState<"full" | "games">("full");
   const [selectedGameIds, setSelectedGameIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [scheduleDatesFilter, setScheduleDatesFilter] = useActiveFilterState<string[]>(`coaching-dates:${event.id}`, []);
+  const [scheduleDatesFilter, setScheduleDatesFilter] = useActiveFilterState<string[]>(`coaching-dates:${event.id}`, [defaultCoachingDate]);
   const [scheduleSitesFilter, setScheduleSitesFilter] = useActiveFilterState<string[]>(`coaching-sites:${event.id}`, []);
   const [scheduleFieldsFilter, setScheduleFieldsFilter] = useActiveFilterState<string[]>(`coaching-fields:${event.id}`, []);
   const [scheduleTimesFilter, setScheduleTimesFilter] = useActiveFilterState<string[]>(`coaching-times:${event.id}`, []);
@@ -2946,13 +2957,11 @@ function CoachWorkspace({
     return groups;
   }, new Map<string, { coach?: OfficialRecord; assignments: CoachAssignmentRecord[] }>()).values()]
     .sort((left, right) => (left.coach?.full_name || "Linked coach account").localeCompare(right.coach?.full_name || "Linked coach account"));
-  const scheduleGames = data.games.filter(isRateableGame).sort((a, b) => a.starts_at.localeCompare(b.starts_at) || a.field_name.localeCompare(b.field_name, undefined, { numeric: true }));
-  const scheduleDates = [...new Set(scheduleGames.map((game) => game.starts_at.slice(0, 10)))];
   const scheduleSites = [...new Set(scheduleGames.map((game) => game.venue_name || "Unspecified site"))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const scheduleFields = [...new Set(scheduleGames.map((game) => game.field_name))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const scheduleTimes = [...new Set(scheduleGames.map((game) => formatTime(game.starts_at)))];
   const filteredScheduleGames = scheduleGames.filter((game) =>
-    (!scheduleDatesFilter.length || scheduleDatesFilter.includes(game.starts_at.slice(0, 10)))
+    (!scheduleDatesFilter.length || scheduleDatesFilter.includes(dateKeyInTimeZone(game.starts_at, event.timezone)))
     && (!scheduleSitesFilter.length || scheduleSitesFilter.includes(game.venue_name || "Unspecified site"))
     && (!scheduleFieldsFilter.length || scheduleFieldsFilter.includes(game.field_name))
     && (!scheduleTimesFilter.length || scheduleTimesFilter.includes(formatTime(game.starts_at)))
@@ -4052,7 +4061,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} modal onClose={() => setRatingModalGameId(null)} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
-      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.31.6</span><small>by FalkSports</small></div></footer>
+      <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version 0.31.8</span><small>by FalkSports</small></div></footer>
   </main>;
 }
 

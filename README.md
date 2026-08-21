@@ -2,6 +2,12 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.31.5
+
+- Rebuilds the schedule assignment editor as a contained, vertically stacked modal instead of allowing assignment cards to spread horizontally.
+- Keeps the dialog within the visible browser area and gives the assignment list its own scrolling region.
+- Preserves readable position, official, display-title, and removal controls across desktop and mobile widths.
+
 ## v0.31.4
 
 - Restores game visibility for every linked Referee Coach based on their saved coaching assignments.

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.31.5 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.31.6 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -14,7 +14,7 @@ test("Version 0.31.5 uses the dashboard loading label, favicon metadata, and pre
   ]);
   assert.match(page, /Loading Dashboard/);
   assert.doesNotMatch(page, /Loading tournament data/);
-  assert.match(page, /Version 0\.31\.5/);
+  assert.match(page, /Version 0\.31\.6/);
   assert.match(page, /<small>by FalkSports<\/small>/);
   assert.match(layout, /favicon\.png/);
   assert.match(layout, /const title = "Tournament referee operations"/);
@@ -22,7 +22,7 @@ test("Version 0.31.5 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.31.5");
+  assert.equal(JSON.parse(packageJson).version, "0.31.6");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -1396,7 +1396,7 @@ test("v0.31.1 excludes date-specific Not Expected officials from attendance tota
   assert.match(page, /className={`expectation-toggle/);
   assert.match(page, /title={isExpected \? "Mark not expected" : "Restore as expected"}/);
   assert.match(page, /id: "not_expected", name: "Not expected"/);
-  assert.match(page, /rosterDetails\.filter\(\(item\) => item\.isExpected\)\.length/);
+  assert.match(page, /visibleExpectedRoster\.length/);
   assert.match(page, /attendanceOverrides\.filter\(\(item\) => item\.event_date === today/);
   assert.match(client, /export async function setAttendanceExpected/);
   assert.match(styles, /Version 0\.31\.1 attendance expectation overrides/);
@@ -1446,6 +1446,14 @@ test("v0.31.5 contains and scrolls the assignment editor at every viewport", asy
   assert.match(styles, /\.assignment-editor-dialog \.assignment-editor-row\{display:grid;grid-template-columns:34px/);
   assert.match(styles, /@media\(max-width:650px\)/);
   assert.match(styles, /@media\(max-width:410px\)/);
+});
+
+test("v0.31.6 derives check-in totals from the filtered roster", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /const visibleExpectedRoster = visibleRoster\.filter\(\(item\) => item\.isExpected\)/);
+  assert.match(page, /const visibleCheckedCount = visibleExpectedRoster\.filter\(\(item\) => item\.isChecked\)\.length/);
+  assert.match(page, /\{visibleCheckedCount\}\/\{visibleExpectedRoster\.length\} checked in/);
+  assert.doesNotMatch(page, /\{checked\.size\}\/\{rosterDetails\.filter/);
 });
 
 test("v0.27.0 separates schedule date, filters, and sorting controls", async () => {
@@ -1631,5 +1639,5 @@ test("v0.28.1 keeps schedule crew columns aligned without range-query support", 
   assert.match(styles, /\.schedule-crew-list>span\{box-sizing:border-box;flex:0 0 calc\(\(100% - 21px\)\/4\)\}/);
   assert.match(styles, /@media\(max-width:900px\)\{\.schedule-crew-list>span\{flex-basis:calc\(\(100% - 7px\)\/2\)\}\}/);
   assert.match(styles, /@media\(max-width:700px\)\{\.schedule-crew-list>span\{flex-basis:100%\}\}/);
-  assert.equal(JSON.parse(packageJson).version, "0.31.5");
+  assert.equal(JSON.parse(packageJson).version, "0.31.6");
 });

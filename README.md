@@ -2,6 +2,12 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.31.6
+
+- Makes the live check-in counter reflect the roster currently visible after applying name, status, and site filters.
+- Counts checked-in officials against expected officials within the filtered results while continuing to exclude people marked Not Expected.
+- Restores the full event-day attendance count automatically when filters are cleared.
+
 ## v0.31.5
 
 - Rebuilds the schedule assignment editor as a contained, vertically stacked modal instead of allowing assignment cards to spread horizontally.

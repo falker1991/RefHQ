@@ -2,6 +2,10 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.35.4
+
+- Highlights changed games throughout every Assignment Board view until an authorized administrator confirms the existing schedule-change marker.
+
 ## v0.35.3
 
 - Expands the frozen-header Assignment Board grid toward the full viewport width and height.

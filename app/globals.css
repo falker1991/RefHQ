@@ -86,7 +86,7 @@
 .schedule-pdf-options{margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:12px}.schedule-pdf-options legend{padding:0 6px;font-weight:800;color:var(--ink)}.schedule-pdf-selects{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.schedule-pdf-checks{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:14px}.schedule-pdf-checks label{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--ink)}.schedule-pdf-checks input{width:auto;min-height:0;margin:0}.schedule-pdf-options>p{margin:12px 0 0;color:var(--muted);font-size:12px}@media(max-width:700px){.schedule-pdf-selects{grid-template-columns:1fr}}
 
 /* Keep both axes labeled while navigating a large assignment grid. */
-.board-wrap{position:relative;max-height:min(72dvh,760px);overflow:auto;overscroll-behavior:contain}
+.board-wrap{position:relative;width:min(1680px,calc(100vw - 24px));max-width:none;max-height:min(84dvh,900px);margin-left:50%;overflow:auto;overscroll-behavior:auto;transform:translateX(-50%);-webkit-overflow-scrolling:touch}
 .assignment-board thead th{z-index:2;box-shadow:0 1px 0 var(--line)}
 .assignment-board tbody>tr>th{position:sticky;left:0;z-index:1;box-shadow:1px 0 0 var(--line)}
 .assignment-board thead th:first-child{left:0;z-index:3;box-shadow:1px 1px 0 var(--line)}

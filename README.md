@@ -2,6 +2,11 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.35.3
+
+- Expands the frozen-header Assignment Board grid toward the full viewport width and height.
+- Restores natural page scroll chaining when the grid reaches its top or bottom boundary.
+
 ## v0.35.2
 
 - Freezes the field header row and time header column while scrolling the Assignment Board grid in either direction.

@@ -133,7 +133,7 @@ import {
 import { exportScheduleExcel, exportSchedulePdf, type ScheduleExportRow } from "./schedule-export";
 import { normalizePhoneNumber, phoneCallHref } from "./phone";
 
-const APP_VERSION = "0.34.4";
+const APP_VERSION = "0.34.5";
 
 type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups";
 const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups"];
@@ -4310,7 +4310,54 @@ export default function Home() {
     return auth.subscribe(setSession);
   }, []);
   useEffect(() => {
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    if (!("serviceWorker" in navigator)) return;
+    let replacingPage = false;
+    const reloadForVersion = (version: string) => {
+      if (replacingPage || sessionStorage.getItem("law18ref-version-reload") === version) return;
+      replacingPage = true;
+      sessionStorage.setItem("law18ref-version-reload", version);
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.set("app-version", version);
+      window.location.replace(nextUrl.toString());
+    };
+    const checkForLatestVersion = async () => {
+      try {
+        const response = await fetch(`/version.json?check=${Date.now()}`, { cache: "no-store" });
+        if (!response.ok) return;
+        const latest = await response.json() as { version?: string };
+        if (latest.version && latest.version !== APP_VERSION) {
+          const registration = await navigator.serviceWorker.getRegistration();
+          await registration?.update();
+          reloadForVersion(latest.version);
+        } else if (latest.version === APP_VERSION) {
+          sessionStorage.removeItem("law18ref-version-reload");
+          const currentUrl = new URL(window.location.href);
+          if (currentUrl.searchParams.has("app-version")) {
+            currentUrl.searchParams.delete("app-version");
+            window.history.replaceState({}, "", currentUrl.toString());
+          }
+        }
+      } catch {
+        // Offline users keep the installed version until connectivity returns.
+      }
+    };
+    const controllerChanged = () => {
+      if (replacingPage) return;
+      replacingPage = true;
+      window.location.reload();
+    };
+    const becameVisible = () => { if (document.visibilityState === "visible") void checkForLatestVersion(); };
+    navigator.serviceWorker.addEventListener("controllerchange", controllerChanged);
+    navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then((registration) => registration.update()).then(checkForLatestVersion).catch(() => undefined);
+    window.addEventListener("focus", checkForLatestVersion);
+    document.addEventListener("visibilitychange", becameVisible);
+    const periodicCheck = window.setInterval(checkForLatestVersion, 5 * 60 * 1000);
+    return () => {
+      navigator.serviceWorker.removeEventListener("controllerchange", controllerChanged);
+      window.removeEventListener("focus", checkForLatestVersion);
+      document.removeEventListener("visibilitychange", becameVisible);
+      window.clearInterval(periodicCheck);
+    };
   }, []);
   if (externalCheckInRequest) return <ExternalCheckInPage eventSlug={externalCheckInRequest.eventSlug} eventDate={externalCheckInRequest.eventDate} onExit={() => { window.history.replaceState({}, "", "/"); window.location.reload(); }} />;
   if (loading) return <main className="auth-page"><p className="auth-loading">Loading Dashboard</p></main>;

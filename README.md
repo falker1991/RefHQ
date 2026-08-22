@@ -2,6 +2,10 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.34.5
+
+- The installed web app now checks for a newer deployment on startup, focus, visibility changes, and every five minutes, activates versioned service-worker caches, and reloads once into the latest release.
+
 ## v0.34.4
 
 - Ratings export filenames now describe the active filters with compact date ranges, event names, abbreviated referee names, and other selected criteria instead of using the UTC export date.

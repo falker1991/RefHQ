@@ -133,7 +133,7 @@ import {
 import { exportScheduleExcel, exportSchedulePdf, type ScheduleExportRow } from "./schedule-export";
 import { normalizePhoneNumber, phoneCallHref } from "./phone";
 
-const APP_VERSION = "0.34.3";
+const APP_VERSION = "0.34.4";
 
 type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups";
 const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups"];
@@ -2768,9 +2768,29 @@ function AssessmentCenter({
     }
 
     const csv = [headings, ...rows].map((row) => row.map(escapeCell).join(",")).join("\r\n");
+    const safeFilenameToken = (value: string) => value.trim().replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "");
+    const abbreviatedOfficialName = (value: string) => {
+      const parts = value.trim().split(/\s+/).filter(Boolean);
+      return parts.length > 1 ? `${parts[0][0]}-${parts.at(-1)}` : parts[0] || "official";
+    };
+    const compactValues = (values: string[], transform: (value: string) => string = (value) => value) => {
+      const compact = values.slice(0, 2).map((value) => safeFilenameToken(transform(value))).filter(Boolean);
+      return `${compact.join("_")}${values.length > 2 ? `_plus${values.length - 2}` : ""}`;
+    };
+    const filenameSegments = ["law18ref-ratings", ratingExportMode];
+    if (historyDateRange.from || historyDateRange.through) filenameSegments.push(`dt-${historyDateRange.from || "start"}${historyDateRange.through && historyDateRange.through !== historyDateRange.from ? `_to_${historyDateRange.through}` : ""}`);
+    if (historyEventIds.length) filenameSegments.push(`evt-${compactValues(historyEventIds.map((id) => history.events.find((item) => item.id === id)?.name || events.find((item) => item.id === id)?.name || "event"))}`);
+    if (historyFilters.referees.length) filenameSegments.push(`ref-${compactValues(historyFilters.referees, abbreviatedOfficialName)}`);
+    if (historyFilters.ageGroups.length) filenameSegments.push(`age-${compactValues(historyFilters.ageGroups)}`);
+    if (historyFilters.genders.length) filenameSegments.push(`gen-${compactValues(historyFilters.genders)}`);
+    if (historyFilters.positions.length) filenameSegments.push(`pos-${compactValues(historyFilters.positions)}`);
+    if (historyFilters.scores.length) filenameSegments.push(`score-${compactValues(historyFilters.scores)}`);
+    if (historyStatus !== "all") filenameSegments.push(historyStatus);
+    if (showArchivedRatings) filenameSegments.push("incl-archived");
+    if (ratingExportMode === "summary") filenameSegments.push(`by-${compactValues(summaryCriteria)}`);
     const link = document.createElement("a");
     link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    link.download = `law18ref-ratings-${ratingExportMode}-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `${filenameSegments.join("_").slice(0, 180)}.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
     setExportDialogOpen(false);

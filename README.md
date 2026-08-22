@@ -2,6 +2,10 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.34.4
+
+- Ratings export filenames now describe the active filters with compact date ranges, event names, abbreviated referee names, and other selected criteria instead of using the UTC export date.
+
 ## v0.34.3
 
 - Ratings exports now use deterministic event, date, time, venue, field, and game ordering, keeping duplicate full-game submissions in adjacent rows.

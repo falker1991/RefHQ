@@ -69,6 +69,7 @@ import {
   parseAssignrCsv,
   parseAssignrOfficialsCsv,
   saveAssessment,
+  submitDraftRating,
   swapSameGameRatings,
   saveProvisionalEventAccess,
   setRatingAverageInclusion,
@@ -132,7 +133,7 @@ import {
 import { exportScheduleExcel, exportSchedulePdf, type ScheduleExportRow } from "./schedule-export";
 import { normalizePhoneNumber, phoneCallHref } from "./phone";
 
-const APP_VERSION = "0.33.0";
+const APP_VERSION = "0.34.0";
 
 type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups";
 const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups"];
@@ -2427,7 +2428,11 @@ function AssessmentCenter({
   const [refereeFilterSearch, setRefereeFilterSearch] = useState("");
   const [historyDateRange, setHistoryDateRange] = useActiveFilterState("ratings-date-range", { from: "", through: "" });
   const [historyView, setHistoryView] = useState<"individual" | "game">("individual");
+  const [historyStatus, setHistoryStatus] = useActiveFilterState<"all" | "submitted" | "draft">("ratings-status", "all");
   const [showArchivedRatings, setShowArchivedRatings] = useActiveFilterState("ratings-show-archived", false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [ratingExportMode, setRatingExportMode] = useState<"individual" | "game" | "summary">("individual");
+  const [summaryCriteria, setSummaryCriteria] = useState<string[]>(["official"]);
   const [selectedRatingIds, setSelectedRatingIds] = useState<string[]>([]);
   const [collapsedRatingGameIds, setCollapsedRatingGameIds] = useState<string[]>([]);
   const [swapRatingsForGame, setSwapRatingsForGame] = useState<AssessmentRecord[] | null>(null);
@@ -2490,12 +2495,13 @@ function AssessmentCenter({
     [key]: current[key].includes(value) ? current[key].filter((item) => item !== value) : [...current[key], value],
   }));
   const activeHistoryFilterCount = Object.values(historyFilters).reduce((sum, values) => sum + values.length, 0)
-    + historyEventIds.length + Number(Boolean(historyDateRange.from)) + Number(Boolean(historyDateRange.through));
+    + historyEventIds.length + Number(Boolean(historyDateRange.from)) + Number(Boolean(historyDateRange.through)) + Number(historyStatus !== "all");
   const sortedAssessments = history.assessments.filter((item) => {
     const game = historyGameMap.get(item.game_id);
     const referee = historyOfficialMap.get(item.official_id)?.full_name || "Unknown official";
     const gameDate = game?.starts_at.slice(0, 10) || "";
     return (!canSubmit || showArchivedRatings || !item.archived_at)
+      && (historyStatus === "all" || (historyStatus === "draft" ? item.status === "draft" : item.status !== "draft"))
       && (!historyEventIds.length || Boolean(game?.event_id && historyEventIds.includes(game.event_id)))
       && (!historyFilters.referees.length || historyFilters.referees.includes(referee))
       && (!historyFilters.ageGroups.length || historyFilters.ageGroups.includes(game?.age_group || "Unspecified age group"))
@@ -2612,6 +2618,21 @@ function AssessmentCenter({
     }
   }
 
+  async function submitSavedDraft(assessment: AssessmentRecord) {
+    setBusy(true);
+    setMessage("");
+    try {
+      await submitDraftRating(session, assessment.id);
+      await refreshRatingHistory();
+      setMessage("Draft rating submitted.");
+      onSaved();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to submit this draft rating.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function bulkRatings(action: "archive" | "restore" | "delete") {
     if (!selectedRatingIds.length) return;
     let retainPublicForReferees = false;
@@ -2636,45 +2657,94 @@ function AssessmentCenter({
     }
   }
 
+  const ratingExportFields = (rating: AssessmentRecord) => {
+    const ratedGame = historyGameMap.get(rating.game_id);
+    const ratedEvent = history.events.find((item) => item.id === ratedGame?.event_id) || events.find((item) => item.id === ratedGame?.event_id);
+    return {
+      event: ratedEvent?.name || "",
+      date: ratedGame ? formatDate(ratedGame.starts_at) : "",
+      time: ratedGame ? formatTime(ratedGame.starts_at) : "",
+      field: ratedGame?.field_name || "",
+      homeTeam: ratedGame?.home_team || "",
+      awayTeam: ratedGame?.away_team || "",
+      age: ratedGame?.age_group || "Unspecified age group",
+      gender: ratedGame?.gender || "Unspecified gender",
+      official: historyOfficialMap.get(rating.official_id)?.full_name || "Unknown official",
+      position: historyPosition(rating),
+      submitter: ratingSubmitterMap.get(rating.coach_id) || "Unknown user",
+      evaluationType: rating.evaluation_type === "basic_eval" ? "Basic Eval" : "Skills Eval",
+      status: rating.status === "draft" ? "Draft" : "Submitted",
+      score: assessmentScore(rating),
+    };
+  };
+
   async function exportRatings() {
-    if (!groupedAssessments.length) return;
-    const maximumCrew = Math.max(...groupedAssessments.map(([, ratings]) => ratings.length));
-    const headings = ["Event", "Date", "Time", "Field", "Home Team", "Away Team", "Age Group", "Gender"];
-    for (let index = 1; index <= maximumCrew; index += 1) {
-      headings.push(
-        `Official ${index} Name`, `Official ${index} Position`, `Official ${index} Eval Type`,
-        `Official ${index} Score`, `Official ${index} Counted in Averages`, `Official ${index} Positioning and Movement`, `Official ${index} Signaling/Offside`,
-        `Official ${index} Teamwork`, `Official ${index} Match Control or Technical Area Management`,
-        `Official ${index} Positive Areas of Performance`, `Official ${index} Areas for Improvement`,
-        `Official ${index} Additional Comments/Suggestions`, `Official ${index} Private Coach/Admin Notes`,
-      );
-    }
+    if (!sortedAssessments.length || (ratingExportMode === "summary" && !summaryCriteria.length)) return;
     const escapeCell = (value: unknown) => `"${String(value ?? "").replaceAll("\"", "\"\"")}"`;
-    const rows = groupedAssessments.map(([gameId, ratings]) => {
-      const ratedGame = historyGameMap.get(gameId);
-      const ratedEvent = history.events.find((item) => item.id === ratedGame?.event_id);
-      const cells: unknown[] = [
-        ratedEvent?.name || "", ratedGame ? formatDate(ratedGame.starts_at) : "",
-        ratedGame ? formatTime(ratedGame.starts_at) : "", ratedGame?.field_name || "",
-        ratedGame?.home_team || "", ratedGame?.away_team || "", ratedGame?.age_group || "", ratedGame?.gender || "",
-      ];
-      orderGameRatings(ratings).forEach((rating) => cells.push(
-        historyOfficialMap.get(rating.official_id)?.full_name || "Unknown official",
-        historyPosition(rating),
-        rating.evaluation_type === "basic_eval" ? "Basic Eval" : "Skills Eval",
-        assessmentScore(rating)?.toFixed(2) || "", rating.include_in_averages === false ? "No" : "Yes",
-        rating.positioning ?? "", rating.decision_making ?? "", rating.communication ?? "", rating.match_control ?? "",
-        rating.strengths || "", rating.development_focus || "", rating.additional_comments || "", rating.coach_notes || "",
-      ));
-      while (cells.length < headings.length) cells.push("");
-      return cells.map(escapeCell).join(",");
-    });
-    const csv = [headings.map(escapeCell).join(","), ...rows].join("\r\n");
+    let headings: string[] = [];
+    let rows: unknown[][] = [];
+
+    if (ratingExportMode === "individual") {
+      headings = ["Event", "Date", "Time", "Field", "Home Team", "Away Team", "Age Group", "Gender", "Official", "Position", "Submitted By", "Status", "Eval Type", "Score", "Counted in Averages", "Positioning and Movement", "Signaling/Offside", "Teamwork", "Match Control or Technical Area Management", "Positive Areas of Performance", "Areas for Improvement", "Additional Comments/Suggestions", "Private Coach/Admin Notes"];
+      rows = sortedAssessments.map((rating) => {
+        const fields = ratingExportFields(rating);
+        return [fields.event, fields.date, fields.time, fields.field, fields.homeTeam, fields.awayTeam, fields.age, fields.gender, fields.official, fields.position, fields.submitter, fields.status, fields.evaluationType, fields.score?.toFixed(2) || "", rating.include_in_averages === false ? "No" : "Yes", rating.positioning ?? "", rating.decision_making ?? "", rating.communication ?? "", rating.match_control ?? "", rating.strengths || "", rating.development_focus || "", rating.additional_comments || "", rating.coach_notes || ""];
+      });
+    } else if (ratingExportMode === "game") {
+      const submissions = [...sortedAssessments.reduce((groups, rating) => {
+        const key = `${rating.game_id}:${rating.coach_id}`;
+        groups.set(key, [...(groups.get(key) || []), rating]);
+        return groups;
+      }, new Map<string, AssessmentRecord[]>()).values()].sort((a, b) => {
+        if (a[0].game_id !== b[0].game_id) return (historyGameMap.get(a[0].game_id)?.starts_at || "").localeCompare(historyGameMap.get(b[0].game_id)?.starts_at || "");
+        return (a[0].submitted_at || a[0].created_at || "").localeCompare(b[0].submitted_at || b[0].created_at || "");
+      });
+      const maximumCrew = Math.max(...submissions.map((ratings) => ratings.length));
+      headings = ["Event", "Date", "Time", "Field", "Home Team", "Away Team", "Age Group", "Gender", "Submitted By", "Status", "Duplicate Submission"];
+      for (let index = 1; index <= maximumCrew; index += 1) headings.push(`Official ${index} Name`, `Official ${index} Position`, `Official ${index} Score`, `Official ${index} Counted in Averages`, `Official ${index} Positive Areas`, `Official ${index} Areas for Improvement`, `Official ${index} Additional Comments`, `Official ${index} Private Notes`);
+      const gameOccurrence = new Map<string, number>();
+      rows = submissions.map((ratings) => {
+        const first = ratingExportFields(ratings[0]);
+        const occurrence = gameOccurrence.get(ratings[0].game_id) || 0;
+        gameOccurrence.set(ratings[0].game_id, occurrence + 1);
+        const cells: unknown[] = [first.event, first.date, first.time, first.field, first.homeTeam, first.awayTeam, first.age, first.gender, first.submitter, first.status, occurrence > 0 ? "Yes" : "No"];
+        orderGameRatings(ratings).forEach((rating) => {
+          const fields = ratingExportFields(rating);
+          cells.push(fields.official, fields.position, fields.score?.toFixed(2) || "", rating.include_in_averages === false ? "No" : "Yes", rating.strengths || "", rating.development_focus || "", rating.additional_comments || "", rating.coach_notes || "");
+        });
+        while (cells.length < headings.length) cells.push("");
+        return cells;
+      });
+    } else {
+      const criteria = [
+        ["official", "Official"], ["position", "Position"], ["event", "Event"], ["date", "Date"],
+        ["age", "Age Group"], ["gender", "Gender"], ["field", "Field"], ["submitter", "Submitted By"],
+        ["evaluationType", "Evaluation Type"], ["status", "Status"], ["score", "Rating Score"],
+      ] as const;
+      const selectedCriteria = criteria.filter(([key]) => summaryCriteria.includes(key));
+      headings = [...selectedCriteria.map(([, label]) => label), "Rating Count", "Scored Rating Count", "Average Score"];
+      const summaryGroups = sortedAssessments.reduce((groups, rating) => {
+        const fields = ratingExportFields(rating);
+        const values = selectedCriteria.map(([key]) => String(fields[key] ?? ""));
+        const key = JSON.stringify(values);
+        const current = groups.get(key) || { values, ratings: [] as AssessmentRecord[] };
+        current.ratings.push(rating);
+        groups.set(key, current);
+        return groups;
+      }, new Map<string, { values: string[]; ratings: AssessmentRecord[] }>());
+      rows = [...summaryGroups.values()].map(({ values, ratings }) => {
+        const scores = ratings.filter((rating) => rating.include_in_averages !== false).map(assessmentScore).filter((score): score is number => score !== null);
+        return [...values, ratings.length, scores.length, scores.length ? (scores.reduce((sum, score) => sum + score, 0) / scores.length).toFixed(2) : ""];
+      });
+    }
+
+    const csv = [headings, ...rows].map((row) => row.map(escapeCell).join(",")).join("\r\n");
     const link = document.createElement("a");
     link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    link.download = `law18ref-ratings-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `law18ref-ratings-${ratingExportMode}-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
+    setExportDialogOpen(false);
     await logRatingExport(session, sortedAssessments.length, groupedAssessments.length).catch(() => undefined);
   }
 
@@ -2760,6 +2830,7 @@ function AssessmentCenter({
 
   const canManageRating = (assessment: AssessmentRecord) => canConfigure || assessment.coach_id === session.user.id;
   const ratingActions = (assessment: AssessmentRecord, ratedGame?: GameRecord) => canManageRating(assessment) ? <div className="rating-history-actions">
+    {assessment.status === "draft" && <button className="primary submit-draft-rating-button" disabled={busy} onClick={() => void submitSavedDraft(assessment)}>Submit Draft</button>}
     {canApprovePublic && assessment.visibility === "public" && assessment.status === "submitted" && <button className="primary" disabled={busy} onClick={() => approveRating(assessment)}>Approve & Share</button>}
     {!assessment.archived_at && ratedGame && onEditRating && <button className="secondary edit-rating-button" disabled={busy} onClick={() => onEditRating(assessment.game_id, ratedGame.event_id)}>Edit</button>}
     {canConfigure && <button className="secondary average-inclusion-button" disabled={busy} onClick={() => changeRatingAverageInclusion(assessment, assessment.include_in_averages === false)}>{assessment.include_in_averages === false ? "Count in Averages" : "Exclude from Averages"}</button>}
@@ -2784,7 +2855,7 @@ function AssessmentCenter({
       {message && !canConfigure && <p className="pilot-message assessment-message">{message}</p>}
       <div className="assessment-actions"><button className="secondary" disabled={busy || !gameAssignments.length} onClick={() => submitCrew("draft")}>Save crew draft</button><button className="primary" disabled={busy || !gameAssignments.length} onClick={() => submitCrew("submitted")}>Submit all ratings</button></div>
     </article>}
-    <article className="panel history ratings-history"><div className="panel-head"><div><p className="eyebrow">HISTORY</p><h2>{sortedAssessments.length} matching rating{sortedAssessments.length === 1 ? "" : "s"}</h2><p className="filtered-rating-average">Average Score <strong>{filteredAverage?.toFixed(2) || "—"}</strong></p></div><div className="rating-history-toolbar"><div className="segmented-control" aria-label="Rating history view"><button className={historyView === "individual" ? "active" : ""} onClick={() => setHistoryView("individual")}>Individual Ratings</button><button className={historyView === "game" ? "active" : ""} onClick={() => setHistoryView("game")}>Full Game Ratings</button></div><button className="secondary" disabled={!sortedAssessments.length} onClick={exportRatings}>Export Spreadsheet</button></div><div className="history-filters"><AssignmentFilterMenu label="Events" options={[...new Set(history.games.map((game) => game.event_id))].map((id) => ({ id, name: history.events.find((item) => item.id === id)?.name || events.find((item) => item.id === id)?.name || `Previous event · ${id.slice(0, 8)}` }))} selected={historyEventIds} onChange={setHistoryEventIds} /><label className="compact-sort">Sort by<select value={ratingSort} onChange={(e) => setRatingSort(e.target.value as typeof ratingSort)}><option value="date">Date</option><option value="gender">Gender</option><option value="age_group">Age group</option><option value="referee">Referee</option><option value="position">Position</option><option value="score">Rating Score</option></select></label><label className="show-archived-ratings"><input type="checkbox" checked={showArchivedRatings} onChange={(event) => setShowArchivedRatings(event.target.checked)} /> Show Archived Ratings</label></div></div>
+    <article className="panel history ratings-history"><div className="panel-head"><div><p className="eyebrow">HISTORY</p><h2>{sortedAssessments.length} matching rating{sortedAssessments.length === 1 ? "" : "s"}</h2><p className="filtered-rating-average">Average Score <strong>{filteredAverage?.toFixed(2) || "—"}</strong></p></div><div className="rating-history-toolbar"><div className="segmented-control" aria-label="Rating history view"><button className={historyView === "individual" ? "active" : ""} onClick={() => setHistoryView("individual")}>Individual Ratings</button><button className={historyView === "game" ? "active" : ""} onClick={() => setHistoryView("game")}>Full Game Ratings</button></div><button className="secondary" disabled={!sortedAssessments.length} onClick={() => setExportDialogOpen(true)}>Export Spreadsheet</button></div><div className="history-filters"><AssignmentFilterMenu label="Events" options={[...new Set(history.games.map((game) => game.event_id))].map((id) => ({ id, name: history.events.find((item) => item.id === id)?.name || events.find((item) => item.id === id)?.name || `Previous event · ${id.slice(0, 8)}` }))} selected={historyEventIds} onChange={setHistoryEventIds} /><label className="compact-sort">Status<select value={historyStatus} onChange={(e) => setHistoryStatus(e.target.value as typeof historyStatus)}><option value="all">All Ratings</option><option value="submitted">Submitted</option><option value="draft">Drafts</option></select></label><label className="compact-sort">Sort by<select value={ratingSort} onChange={(e) => setRatingSort(e.target.value as typeof ratingSort)}><option value="date">Date</option><option value="gender">Gender</option><option value="age_group">Age group</option><option value="referee">Referee</option><option value="position">Position</option><option value="score">Rating Score</option></select></label><label className="show-archived-ratings"><input type="checkbox" checked={showArchivedRatings} onChange={(event) => setShowArchivedRatings(event.target.checked)} /> Show Archived Ratings</label></div></div>
       {canConfigure && <div className="bulk-action-bar"><label><input type="checkbox" checked={sortedAssessments.length > 0 && sortedAssessments.every((item) => selectedRatingIds.includes(item.id))} onChange={(event) => setSelectedRatingIds(event.target.checked ? sortedAssessments.map((item) => item.id) : [])} /> Select All Visible</label><strong>{selectedRatingIds.length} selected</strong><button className="secondary" disabled={busy || !selectedRatingIds.length} onClick={() => bulkRatings("archive")}>Archive</button>{showArchivedRatings && <button className="secondary" disabled={busy || !selectedRatingIds.length} onClick={() => bulkRatings("restore")}>Restore</button>}<button className="danger-button" disabled={busy || !selectedRatingIds.length} onClick={() => bulkRatings("delete")}>Delete</button></div>}
       <details className="ratings-filter-panel"><summary>Filter Ratings{activeHistoryFilterCount ? ` · ${activeHistoryFilterCount} selected` : ""}</summary><div className="ratings-filter-grid" ref={filterDropdownsRef}>{([
         ["referees", "Referees", filterOptions.referees],
@@ -2798,7 +2869,7 @@ function AssessmentCenter({
           : options;
         const allSelected = options.length > 0 && options.every((option) => historyFilters[key].includes(option));
         return <details className="rating-filter-dropdown" key={key}><summary><span>{label}</span><small>{historyFilters[key].length ? `${historyFilters[key].length} selected` : "All"}</small></summary><div className="rating-filter-options">{key === "referees" && <input className="rating-referee-search" type="search" value={refereeFilterSearch} placeholder="Search referees…" aria-label="Search referees" onChange={(event) => setRefereeFilterSearch(event.target.value)} />}<label className="rating-select-all"><input type="checkbox" checked={allSelected} onChange={() => setHistoryFilters((current) => ({ ...current, [key]: allSelected ? [] : [...options] }))} /><strong>Select All</strong></label>{visibleOptions.map((option) => <label key={option}><input type="checkbox" checked={historyFilters[key].includes(option)} onChange={() => toggleHistoryFilter(key, option)} /><span>{option}</span></label>)}{!visibleOptions.length && <small>No matching referees</small>}</div></details>;
-      })}<fieldset className="rating-date-range"><legend>Date Range</legend><label>From<input type="date" value={historyDateRange.from} max={historyDateRange.through || undefined} onChange={(event) => setHistoryDateRange((current) => ({ ...current, from: event.target.value }))} /></label><label>Through<input type="date" value={historyDateRange.through} min={historyDateRange.from || undefined} onChange={(event) => setHistoryDateRange((current) => ({ ...current, through: event.target.value }))} /></label></fieldset></div><div className="rating-filter-actions"><SavedFilterControls filterKey="ratings-history" value={{ historyFilters, historyDateRange, historyEventIds, ratingSort, showArchivedRatings }} onApply={(saved) => { setHistoryFilters(saved.historyFilters); setHistoryDateRange(saved.historyDateRange); setHistoryEventIds(saved.historyEventIds); setRatingSort(saved.ratingSort); setShowArchivedRatings(saved.showArchivedRatings); }} /><button className="text-button clear-rating-filters" disabled={!activeHistoryFilterCount} onClick={() => { setHistoryFilters({ referees: [], ageGroups: [], genders: [], positions: [], scores: [] }); setHistoryEventIds([]); setHistoryDateRange({ from: "", through: "" }); setRefereeFilterSearch(""); }}>Clear All Filters</button></div></details>
+      })}<fieldset className="rating-date-range"><legend>Date Range</legend><label>From<input type="date" value={historyDateRange.from} max={historyDateRange.through || undefined} onChange={(event) => setHistoryDateRange((current) => ({ ...current, from: event.target.value }))} /></label><label>Through<input type="date" value={historyDateRange.through} min={historyDateRange.from || undefined} onChange={(event) => setHistoryDateRange((current) => ({ ...current, through: event.target.value }))} /></label></fieldset></div><div className="rating-filter-actions"><SavedFilterControls filterKey="ratings-history" value={{ historyFilters, historyDateRange, historyEventIds, ratingSort, historyStatus, showArchivedRatings }} onApply={(saved) => { setHistoryFilters(saved.historyFilters); setHistoryDateRange(saved.historyDateRange); setHistoryEventIds(saved.historyEventIds); setRatingSort(saved.ratingSort); setHistoryStatus(saved.historyStatus || "all"); setShowArchivedRatings(saved.showArchivedRatings); }} /><button className="text-button clear-rating-filters" disabled={!activeHistoryFilterCount} onClick={() => { setHistoryFilters({ referees: [], ageGroups: [], genders: [], positions: [], scores: [] }); setHistoryEventIds([]); setHistoryDateRange({ from: "", through: "" }); setHistoryStatus("all"); setRefereeFilterSearch(""); }}>Clear All Filters</button></div></details>
       {message && !canConfigure && <p className="pilot-message assessment-message">{message}</p>}
       {historyView === "individual" && sortedAssessments.map((assessment) => {
       const score = assessmentScore(assessment);
@@ -2813,6 +2884,13 @@ function AssessmentCenter({
         const swappable = manageableRatings.some((rating, index) => manageableRatings.slice(index + 1).some((candidate) => candidate.coach_id === rating.coach_id && candidate.official_id !== rating.official_id));
         return <article className={`game-rating-history-card ${collapsed ? "collapsed" : ""}`} key={ratedGameId}><header>{canConfigure && <input className="bulk-row-check" type="checkbox" aria-label="Select all ratings for this game" checked={gameSelected} onChange={(change) => setSelectedRatingIds((current) => change.target.checked ? [...new Set([...current, ...ratings.map((item) => item.id)])] : current.filter((id) => !ratings.some((item) => item.id === id)))} />}<div><strong>{ratedGame?.home_team} vs. {ratedGame?.away_team}</strong><p>{ratedGame ? `${formatDate(ratedGame.starts_at)} · ${formatTime(ratedGame.starts_at)} · ${ratedGame.field_name}` : "Game details unavailable"}</p></div><span>{ratings.length} official{ratings.length === 1 ? "" : "s"}</span>{swappable && <button className="secondary swap-ratings-button" type="button" onClick={() => openRatingSwap(manageableRatings)}>Swap Ratings</button>}<button className="game-rating-collapse" aria-label={`${collapsed ? "Expand" : "Collapse"} ratings for this game`} aria-expanded={!collapsed} onClick={() => setCollapsedRatingGameIds((current) => current.includes(ratedGameId) ? current.filter((id) => id !== ratedGameId) : [...current, ratedGameId])}>{collapsed ? "▾" : "▴"}</button></header>{!collapsed && <div className="game-rating-officials">{orderGameRatings(ratings).map((assessment) => <div className={`${assessment.archived_at ? "archived-rating " : ""}${assessment.include_in_averages === false ? "excluded-from-average" : ""}`.trim()} key={assessment.id}><div><strong>{historyOfficialMap.get(assessment.official_id)?.full_name || "Referee"}</strong><small>{historyPosition(assessment)}{assessment.archived_at ? " · Archived" : ""}{assessment.include_in_averages === false ? " · Excluded from averages" : ""}</small><small className="rating-submitter">Submitted by {ratingSubmitterMap.get(assessment.coach_id) || "Unknown user"}</small></div><span className="score">{assessmentScore(assessment)?.toFixed(1) || "—"}</span>{ratingActions(assessment, ratedGame)}</div>)}</div>}</article>;
       })}
+      {exportDialogOpen && <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) setExportDialogOpen(false); }}><section className="confirmation-dialog rating-export-dialog" role="dialog" aria-modal="true" aria-labelledby="rating-export-title"><header><div><p className="eyebrow">EXPORT FILTERED RATINGS</p><h2 id="rating-export-title">Choose Export Format</h2><p>The export includes the {sortedAssessments.length} ratings currently matching your filters.</p></div><button className="modal-close-button" aria-label="Close rating export" onClick={() => setExportDialogOpen(false)}>×</button></header><div className="rating-export-mode" role="radiogroup" aria-label="Rating export format">{([
+        ["individual", "Individual Official Ratings", "One row for every official rating."],
+        ["game", "Full Game Submissions", "One row per game submission. Later submissions for the same match are marked as duplicates."],
+        ["summary", "Summary", "Counts and average scores grouped by your selected criteria."],
+      ] as const).map(([mode, title, description]) => <label key={mode} className={ratingExportMode === mode ? "selected" : ""}><input type="radio" name="rating-export-mode" value={mode} checked={ratingExportMode === mode} onChange={() => setRatingExportMode(mode)} /><span><strong>{title}</strong><small>{description}</small></span></label>)}</div>{ratingExportMode === "summary" && <fieldset className="rating-summary-criteria"><legend>Summarize By</legend><p>Select one or more fields. Each unique combination becomes one summary row.</p><div>{([
+        ["official", "Official"], ["position", "Position"], ["event", "Event"], ["date", "Date"], ["age", "Age Group"], ["gender", "Gender"], ["field", "Field"], ["submitter", "Submitted By"], ["evaluationType", "Evaluation Type"], ["status", "Status"], ["score", "Rating Score"],
+      ] as const).map(([key, label]) => <label key={key}><input type="checkbox" checked={summaryCriteria.includes(key)} onChange={(event) => setSummaryCriteria((current) => event.target.checked ? [...current, key] : current.filter((item) => item !== key))} /> {label}</label>)}</div>{!summaryCriteria.length && <small className="field-error">Select at least one summary field.</small>}</fieldset>}<footer><button className="secondary" onClick={() => setExportDialogOpen(false)}>Cancel</button><button className="primary" disabled={ratingExportMode === "summary" && !summaryCriteria.length} onClick={() => void exportRatings()}>Export CSV</button></footer></section></div>}
       {swapRatingsForGame && <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) setSwapRatingsForGame(null); }}><section className="confirmation-dialog swap-ratings-dialog" role="dialog" aria-modal="true" aria-labelledby="swap-ratings-title"><header><div><p className="eyebrow">CORRECT RATING OWNERS</p><h2 id="swap-ratings-title">Swap Ratings</h2><p>Choose two officials rated by the same coach. Their complete evaluation contents will exchange places.</p></div><button className="modal-close-button" aria-label="Close rating swap" onClick={() => setSwapRatingsForGame(null)}>×</button></header><label>First official<select value={firstSwapRatingId} onChange={(change) => { setFirstSwapRatingId(change.target.value); setSecondSwapRatingId(""); }}><option value="">Choose an official</option>{swapRatingsForGame.map((assessment) => <option value={assessment.id} key={assessment.id}>{historyOfficialMap.get(assessment.official_id)?.full_name || "Unknown official"} · {ratingSubmitterMap.get(assessment.coach_id) || "Unknown coach"}</option>)}</select></label><label>Second official<select value={secondSwapRatingId} disabled={!firstSwapRatingId} onChange={(change) => setSecondSwapRatingId(change.target.value)}><option value="">Choose an official</option>{swapRatingsForGame.filter((assessment) => { const first = swapRatingsForGame.find((item) => item.id === firstSwapRatingId); return assessment.id !== firstSwapRatingId && assessment.coach_id === first?.coach_id && assessment.official_id !== first?.official_id; }).map((assessment) => <option value={assessment.id} key={assessment.id}>{historyOfficialMap.get(assessment.official_id)?.full_name || "Unknown official"}</option>)}</select></label><p className="import-note">This changes which official owns each rating. It does not change the game assignments.</p><div><button className="secondary" disabled={busy} onClick={() => setSwapRatingsForGame(null)}>Cancel</button><button className="primary" disabled={busy || !firstSwapRatingId || !secondSwapRatingId} onClick={() => void swapRatings()}>{busy ? "Swapping…" : "Swap Ratings"}</button></div></section></div>}
       {!sortedAssessments.length && <EmptyState>No ratings match these filters.</EmptyState>}</article>
   </section>;
@@ -3751,11 +3829,11 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
   const helpByRole: Record<MembershipRole, { title: string; items: string[] }> = {
     site_owner: { title: "Site Owner Navigation", items: ["Use the group selector below the header to open the group you want to manage.", "Open Groups from your initials menu to create, open, archive, restore, rename, upload a logo, or configure features for a group.", "Open Site Appearance from your initials menu to edit, save, schedule, or restore site themes.", "Open Officials and use Copy Join Link to invite members to the active group.", "Open Activity within a group to review its audit log and event archive.", "After selecting a group and event, use the same event tabs described for Group Admins."] },
     organization_director: { title: "Group Director Navigation", items: ["Use the group and event selectors below the header to choose your working scope.", "Open Officials to appoint Group Admins and lower group roles, or open Event Access to appoint Event Admins and lower event roles.", "Use Groups, Activity, Import, Assignment Board, Schedule, Check-In, Coaching, and Ratings for complete group administration.", "Only the Site Owner can appoint or remove a Group Director."] },
-    organization_admin: { title: "Group Admin Navigation", items: ["Choose the group and active event from the selectors below the header.", "Open Groups from your initials menu to update the active group's name or logo.", "Open Officials to copy the group join link, add or edit people, review last activity, set group roles, remove a member, merge accounts, or open Event Access. Use the selection boxes for bulk archive or deletion.", "Open Activity to review meaningful changes or bulk archive, restore, and delete events.", "Open Import to add officials, upload an Assignr schedule, configure automatic archiving, or archive the selected event now.", "Open Schedule to filter games by date, field, site, official, time, age group, gender, or competition. Choose a three-level sort order, save frequently used filters, or export all or filtered games to Excel or PDF.", "Open Assignment Board to review the day, Check-In to manage arrivals, and Coaching to assign coaches.", "Open Ratings to configure evaluations, filter history, switch between individual and full-game views, export a spreadsheet, or use selection boxes to archive and delete ratings. Archived-event ratings remain available here."] },
+    organization_admin: { title: "Group Admin Navigation", items: ["Choose the group and active event from the selectors below the header.", "Open Groups from your initials menu to update the active group's name or logo.", "Open Officials to copy the group join link, add or edit people, review last activity, set group roles, remove a member, merge accounts, or open Event Access. Use the selection boxes for bulk archive or deletion.", "Open Activity to review meaningful changes or bulk archive, restore, and delete events.", "Open Import to add officials, upload an Assignr schedule, configure automatic archiving, or archive the selected event now.", "Open Schedule to filter games by date, field, site, official, time, age group, gender, or competition. Choose a three-level sort order, save frequently used filters, or export all or filtered games to Excel or PDF.", "Open Assignment Board to review the day, Check-In to manage arrivals, and Coaching to assign coaches.", "Open Ratings to configure evaluations; filter All, Submitted, or Draft history; switch between individual and full-game views; submit a saved draft; or export filtered ratings as individual rows, full-game rows, or a grouped summary. Archived-event ratings remain available here."] },
     event_admin: { title: "Event Admin Navigation", items: ["Select an assigned event from the Active Event menu below the header.", "Open Officials, then Event Access, to add or update event staff and set a Site Supervisor’s dates, sites, and assignment-editing access.", "Open Import for event schedule data and Event Lifecycle controls, including automatic archiving or Archive Now.", "Open Schedule to correct posted crews. Updated games remain orange until you use Change Confirmed after updating any outside records.", "Open Check-In for arrivals, Coaching for coach assignments, and Ratings for evaluation settings and history."] },
     assignor: { title: "Assignor Navigation", items: ["Select the event you are working from the Active Event menu below the header.", "Open Import to upload an authorized schedule, then use Assignment Board or Schedule to review crews.", "In Schedule, filter games, arrange three sort levels, save filter setups, export games, or use Edit Assignments to correct a posted crew. These corrections do not notify officials.", "Open Check-In to filter arrivals, manually check someone in, undo a check-in, or select an official’s name to see their event schedule and contact details.", "Open Coaching to place coaches on games. Use Rate Crew on a schedule game, or open Ratings and choose a game, when coaching tools are enabled."] },
     site_coordinator: { title: "Site Supervisor Navigation", items: ["Select today’s event from the Active Event menu.", "Open Assignment Board or Schedule to review games within your assigned dates and sites. Orange time columns indicate a schedule change awaiting Event Admin confirmation.", "If assignment editing was enabled for you, use Edit Assignments on a game in your scope; no notification is sent by this correction tool.", "Open Check-In to monitor arrivals. Select an official’s name to view their full schedule for that date—including read-only games outside your management scope—and contact details."] },
-    referee_coach: { title: "Referee Coach Navigation", items: ["Select the event you are coaching from the My Event menu.", "Open Schedule to see games and crews in your coaching scope. Use its filters, three-level sorting, saved filter setups, and Excel/PDF export controls when you need a focused coaching schedule.", "Select Rate Crew on a game to open its evaluation form, complete the crew ratings, and submit them together.", "Open Ratings to choose a game, review individual or full-game history, filter results, or export the filtered ratings. Your permitted history remains available after an event is archived.", "When Check-In appears, open it at the venue, select Scan QR Code, and scan the code displayed by event staff."] },
+    referee_coach: { title: "Referee Coach Navigation", items: ["Select the event you are coaching from the My Event menu.", "Open Schedule to see games and crews in your coaching scope. Use its filters, three-level sorting, saved filter setups, and Excel/PDF export controls when you need a focused coaching schedule.", "Select Rate Crew on a game to open its evaluation form, complete the crew ratings, and submit them together.", "Open Ratings to review only the ratings you submitted. Use the status selector for All, Submitted, or Draft ratings; select Submit Draft to finish a saved draft; and choose individual, full-game, or summary format when exporting the filtered results.", "When Check-In appears, open it at the venue, select Scan QR Code, and scan the code displayed by event staff."] },
     referee: { title: "Referee Navigation", items: ["Your Dashboard lists every group and upcoming event linked to your account; referees do not need to select an active group or event.", "Open My Assignments to view one schedule containing all of your Law18Ref games and any personal external calendar feeds you have connected.", "Open your initials menu, then Account Settings, to manage account-wide personal information and private calendar feeds.", "On an assigned event day, open Check-In. Law18Ref opens the eligible event automatically or asks you to choose when you have more than one check-in that day.", "Select Scan QR Code and scan the code displayed by event staff. The scanner disappears after your check-in is recorded.", "Open My Evals to view evaluations that have been shared with you."] },
   };
   const quickGuidesByRole: Partial<Record<MembershipRole, { title: string; description: string; href: string }[]>> = {

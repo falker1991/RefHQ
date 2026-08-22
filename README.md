@@ -2,6 +2,12 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.34.0
+
+- Keeps referee-coach rating history private to the coach who submitted it while preserving authorized administrator and assignor access.
+- Adds a Submitted/Draft/All status filter and lets a coach submit a saved draft directly from rating history.
+- Adds filtered rating exports as individual official rows, full-game submission rows with duplicate-submission markers, or configurable grouped summaries.
+
 ## v0.33.0
 
 - Lets authorized administrators retain a rating for staff while excluding it from all scoring averages and hiding it from the referee, then restore it later.

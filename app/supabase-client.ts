@@ -1251,6 +1251,15 @@ export async function approvePublicRating(session: Law18Session, assessmentId: s
   });
 }
 
+export async function submitDraftRating(session: Law18Session, assessmentId: string) {
+  const rows = await rest<AssessmentRecord[]>(session, `assessments?id=eq.${enc(assessmentId)}&status=eq.draft`, {
+    method: "PATCH",
+    body: JSON.stringify({ status: "submitted", submitted_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
+  }, "return=representation");
+  if (!rows[0]) throw new Error("This draft is no longer available or you do not have permission to submit it.");
+  return rows[0];
+}
+
 export async function markEventRatingsSeen(session: Law18Session, eventId: string) {
   return rest(session, "rpc/mark_event_ratings_seen", {
     method: "POST",

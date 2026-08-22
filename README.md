@@ -2,6 +2,10 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.34.3
+
+- Ratings exports now use deterministic event, date, time, venue, field, and game ordering, keeping duplicate full-game submissions in adjacent rows.
+
 ## v0.34.2
 
 - Rating CSV exports now omit Skills Eval-only columns when the filtered export contains only Basic Evals.

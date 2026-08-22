@@ -133,7 +133,7 @@ import {
 import { exportScheduleExcel, exportSchedulePdf, type ScheduleExportRow } from "./schedule-export";
 import { normalizePhoneNumber, phoneCallHref } from "./phone";
 
-const APP_VERSION = "0.34.2";
+const APP_VERSION = "0.34.3";
 
 type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups";
 const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups"];
@@ -2681,7 +2681,25 @@ function AssessmentCenter({
   async function exportRatings() {
     if (!sortedAssessments.length || (ratingExportMode === "summary" && !summaryCriteria.length)) return;
     const escapeCell = (value: unknown) => `"${String(value ?? "").replaceAll("\"", "\"\"")}"`;
-    const includesSkillsEvals = sortedAssessments.some((rating) => rating.evaluation_type !== "basic_eval");
+    const compareExportGames = (left: AssessmentRecord, right: AssessmentRecord) => {
+      const leftGame = historyGameMap.get(left.game_id);
+      const rightGame = historyGameMap.get(right.game_id);
+      const leftEvent = history.events.find((item) => item.id === leftGame?.event_id) || events.find((item) => item.id === leftGame?.event_id);
+      const rightEvent = history.events.find((item) => item.id === rightGame?.event_id) || events.find((item) => item.id === rightGame?.event_id);
+      return (leftEvent?.name || "").localeCompare(rightEvent?.name || "", undefined, { numeric: true, sensitivity: "base" })
+        || (leftGame?.starts_at || "").localeCompare(rightGame?.starts_at || "")
+        || (leftGame?.venue_name || "").localeCompare(rightGame?.venue_name || "", undefined, { numeric: true, sensitivity: "base" })
+        || (leftGame?.field_name || "").localeCompare(rightGame?.field_name || "", undefined, { numeric: true, sensitivity: "base" })
+        || (leftGame?.home_team || "").localeCompare(rightGame?.home_team || "", undefined, { numeric: true, sensitivity: "base" })
+        || (leftGame?.away_team || "").localeCompare(rightGame?.away_team || "", undefined, { numeric: true, sensitivity: "base" })
+        || left.game_id.localeCompare(right.game_id);
+    };
+    const exportedAssessments = [...sortedAssessments].sort((left, right) => compareExportGames(left, right)
+      || (left.submitted_at || left.created_at || "").localeCompare(right.submitted_at || right.created_at || "")
+      || left.coach_id.localeCompare(right.coach_id)
+      || crewPositionPriority({ position: left.position, position_title: left.position_title } as AssignmentRecord) - crewPositionPriority({ position: right.position, position_title: right.position_title } as AssignmentRecord)
+      || (historyOfficialMap.get(left.official_id)?.full_name || "").localeCompare(historyOfficialMap.get(right.official_id)?.full_name || "", undefined, { sensitivity: "base" }));
+    const includesSkillsEvals = exportedAssessments.some((rating) => rating.evaluation_type !== "basic_eval");
     let headings: string[] = [];
     let rows: unknown[][] = [];
 
@@ -2689,7 +2707,7 @@ function AssessmentCenter({
       headings = ["Event", "Date", "Time", "Field", "Home Team", "Away Team", "Age Group", "Gender", "Official", "Position", "Submitted By", "Status", "Eval Type", "Score", "Counted in Averages"];
       if (includesSkillsEvals) headings.push("Positioning and Movement", "Signaling/Offside", "Teamwork", "Match Control or Technical Area Management", "Positive Areas of Performance", "Areas for Improvement", "Additional Comments/Suggestions", "Private Coach/Admin Notes");
       else headings.push("Notes");
-      rows = sortedAssessments.map((rating) => {
+      rows = exportedAssessments.map((rating) => {
         const fields = ratingExportFields(rating);
         const cells: unknown[] = [fields.event, fields.date, fields.time, fields.field, fields.homeTeam, fields.awayTeam, fields.age, fields.gender, fields.official, fields.position, fields.submitter, fields.status, fields.evaluationType, fields.score?.toFixed(2) || "", rating.include_in_averages === false ? "No" : "Yes"];
         if (includesSkillsEvals) cells.push(rating.positioning ?? "", rating.decision_making ?? "", rating.communication ?? "", rating.match_control ?? "", rating.strengths || "", rating.development_focus || "", rating.additional_comments || "", rating.coach_notes || "");
@@ -2697,14 +2715,13 @@ function AssessmentCenter({
         return cells;
       });
     } else if (ratingExportMode === "game") {
-      const submissions = [...sortedAssessments.reduce((groups, rating) => {
+      const submissions = [...exportedAssessments.reduce((groups, rating) => {
         const key = `${rating.game_id}:${rating.coach_id}`;
         groups.set(key, [...(groups.get(key) || []), rating]);
         return groups;
-      }, new Map<string, AssessmentRecord[]>()).values()].sort((a, b) => {
-        if (a[0].game_id !== b[0].game_id) return (historyGameMap.get(a[0].game_id)?.starts_at || "").localeCompare(historyGameMap.get(b[0].game_id)?.starts_at || "");
-        return (a[0].submitted_at || a[0].created_at || "").localeCompare(b[0].submitted_at || b[0].created_at || "");
-      });
+      }, new Map<string, AssessmentRecord[]>()).values()].sort((a, b) => compareExportGames(a[0], b[0])
+        || (a[0].submitted_at || a[0].created_at || "").localeCompare(b[0].submitted_at || b[0].created_at || "")
+        || a[0].coach_id.localeCompare(b[0].coach_id));
       const maximumCrew = Math.max(...submissions.map((ratings) => ratings.length));
       headings = ["Event", "Date", "Time", "Field", "Home Team", "Away Team", "Age Group", "Gender", "Submitted By", "Status", "Duplicate Submission"];
       for (let index = 1; index <= maximumCrew; index += 1) {

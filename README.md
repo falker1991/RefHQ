@@ -2,6 +2,14 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.34.2
+
+- Rating CSV exports now omit Skills Eval-only columns when the filtered export contains only Basic Evals.
+
+## v0.34.1
+
+- Shows the Ratings tab for users who have both Site Supervisor and Referee Coach access, preserving their combined event capabilities.
+
 ## v0.34.0
 
 - Keeps referee-coach rating history private to the coach who submitted it while preserving authorized administrator and assignor access.

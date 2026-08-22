@@ -133,7 +133,7 @@ import {
 import { exportScheduleExcel, exportSchedulePdf, type ScheduleExportRow } from "./schedule-export";
 import { normalizePhoneNumber, phoneCallHref } from "./phone";
 
-const APP_VERSION = "0.34.0";
+const APP_VERSION = "0.34.2";
 
 type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups";
 const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups"];
@@ -2681,14 +2681,20 @@ function AssessmentCenter({
   async function exportRatings() {
     if (!sortedAssessments.length || (ratingExportMode === "summary" && !summaryCriteria.length)) return;
     const escapeCell = (value: unknown) => `"${String(value ?? "").replaceAll("\"", "\"\"")}"`;
+    const includesSkillsEvals = sortedAssessments.some((rating) => rating.evaluation_type !== "basic_eval");
     let headings: string[] = [];
     let rows: unknown[][] = [];
 
     if (ratingExportMode === "individual") {
-      headings = ["Event", "Date", "Time", "Field", "Home Team", "Away Team", "Age Group", "Gender", "Official", "Position", "Submitted By", "Status", "Eval Type", "Score", "Counted in Averages", "Positioning and Movement", "Signaling/Offside", "Teamwork", "Match Control or Technical Area Management", "Positive Areas of Performance", "Areas for Improvement", "Additional Comments/Suggestions", "Private Coach/Admin Notes"];
+      headings = ["Event", "Date", "Time", "Field", "Home Team", "Away Team", "Age Group", "Gender", "Official", "Position", "Submitted By", "Status", "Eval Type", "Score", "Counted in Averages"];
+      if (includesSkillsEvals) headings.push("Positioning and Movement", "Signaling/Offside", "Teamwork", "Match Control or Technical Area Management", "Positive Areas of Performance", "Areas for Improvement", "Additional Comments/Suggestions", "Private Coach/Admin Notes");
+      else headings.push("Notes");
       rows = sortedAssessments.map((rating) => {
         const fields = ratingExportFields(rating);
-        return [fields.event, fields.date, fields.time, fields.field, fields.homeTeam, fields.awayTeam, fields.age, fields.gender, fields.official, fields.position, fields.submitter, fields.status, fields.evaluationType, fields.score?.toFixed(2) || "", rating.include_in_averages === false ? "No" : "Yes", rating.positioning ?? "", rating.decision_making ?? "", rating.communication ?? "", rating.match_control ?? "", rating.strengths || "", rating.development_focus || "", rating.additional_comments || "", rating.coach_notes || ""];
+        const cells: unknown[] = [fields.event, fields.date, fields.time, fields.field, fields.homeTeam, fields.awayTeam, fields.age, fields.gender, fields.official, fields.position, fields.submitter, fields.status, fields.evaluationType, fields.score?.toFixed(2) || "", rating.include_in_averages === false ? "No" : "Yes"];
+        if (includesSkillsEvals) cells.push(rating.positioning ?? "", rating.decision_making ?? "", rating.communication ?? "", rating.match_control ?? "", rating.strengths || "", rating.development_focus || "", rating.additional_comments || "", rating.coach_notes || "");
+        else cells.push(rating.coach_notes || "");
+        return cells;
       });
     } else if (ratingExportMode === "game") {
       const submissions = [...sortedAssessments.reduce((groups, rating) => {
@@ -2701,7 +2707,11 @@ function AssessmentCenter({
       });
       const maximumCrew = Math.max(...submissions.map((ratings) => ratings.length));
       headings = ["Event", "Date", "Time", "Field", "Home Team", "Away Team", "Age Group", "Gender", "Submitted By", "Status", "Duplicate Submission"];
-      for (let index = 1; index <= maximumCrew; index += 1) headings.push(`Official ${index} Name`, `Official ${index} Position`, `Official ${index} Score`, `Official ${index} Counted in Averages`, `Official ${index} Positive Areas`, `Official ${index} Areas for Improvement`, `Official ${index} Additional Comments`, `Official ${index} Private Notes`);
+      for (let index = 1; index <= maximumCrew; index += 1) {
+        headings.push(`Official ${index} Name`, `Official ${index} Position`, `Official ${index} Score`, `Official ${index} Counted in Averages`);
+        if (includesSkillsEvals) headings.push(`Official ${index} Positive Areas`, `Official ${index} Areas for Improvement`, `Official ${index} Additional Comments`, `Official ${index} Private Notes`);
+        else headings.push(`Official ${index} Notes`);
+      }
       const gameOccurrence = new Map<string, number>();
       rows = submissions.map((ratings) => {
         const first = ratingExportFields(ratings[0]);
@@ -2710,7 +2720,9 @@ function AssessmentCenter({
         const cells: unknown[] = [first.event, first.date, first.time, first.field, first.homeTeam, first.awayTeam, first.age, first.gender, first.submitter, first.status, occurrence > 0 ? "Yes" : "No"];
         orderGameRatings(ratings).forEach((rating) => {
           const fields = ratingExportFields(rating);
-          cells.push(fields.official, fields.position, fields.score?.toFixed(2) || "", rating.include_in_averages === false ? "No" : "Yes", rating.strengths || "", rating.development_focus || "", rating.additional_comments || "", rating.coach_notes || "");
+          cells.push(fields.official, fields.position, fields.score?.toFixed(2) || "", rating.include_in_averages === false ? "No" : "Yes");
+          if (includesSkillsEvals) cells.push(rating.strengths || "", rating.development_focus || "", rating.additional_comments || "", rating.coach_notes || "");
+          else cells.push(rating.coach_notes || "");
         });
         while (cells.length < headings.length) cells.push("");
         return cells;
@@ -4155,7 +4167,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
   const nav: [View, string][] = isAdministrativeStaff
     ? [["dashboard", "Dashboard"], ...(eventFeatureEnabled(event, "assignment_board") ? [["board", "Assignment Board"] as [View, string]] : []), ...(eventFeatureEnabled(event, "check_in") ? [["checkin", "Check-In"] as [View, string]] : []), ["schedule", "Schedule"], ["officials", "Officials"], ...(eventFeatureEnabled(event, "coaching") ? [["coaching", "Coaching"] as [View, string]] : []), ...(eventFeatureEnabled(event, "ratings") ? [["assessments", "Ratings"] as [View, string]] : []), ["import", "Import"], ...(canConfigureEvent ? [["event_settings", "Event Settings"] as [View, string]] : []), ...(profile?.is_site_owner || organizationRoles.includes("organization_director") || organizationRoles.includes("organization_admin") ? [["activity", "Activity"] as [View, string]] : [])]
     : isSiteCoordinator
-      ? [["dashboard", "Dashboard"], ...(eventFeatureEnabled(event, "assignment_board") ? [["board", "Assignment Board"] as [View, string]] : []), ...(eventFeatureEnabled(event, "check_in") ? [["checkin", "Check-In"] as [View, string]] : []), ["schedule", "Schedule"]]
+      ? [["dashboard", "Dashboard"], ...(eventFeatureEnabled(event, "assignment_board") ? [["board", "Assignment Board"] as [View, string]] : []), ...(eventFeatureEnabled(event, "check_in") ? [["checkin", "Check-In"] as [View, string]] : []), ["schedule", "Schedule"], ...(canAssess && eventFeatureEnabled(event, "ratings") ? [["assessments", "Ratings"] as [View, string]] : [])]
     : isCoach
       ? [["dashboard", "Dashboard"], ...(eventFeatureEnabled(event, "check_in") && coachHasCurrentOrFutureAssignment ? [["checkin", "Check-In"] as [View, string]] : []), ["schedule", "Schedule"], ...(eventFeatureEnabled(event, "ratings") ? [["assessments", "Ratings"] as [View, string]] : [])]
       : [["dashboard", "Dashboard"], ["board", "My Assignments"], ["checkin", "Check-In"], ["assessments", "My Evals"]];

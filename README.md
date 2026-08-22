@@ -2,6 +2,11 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.35.1
+
+- Makes crew-rating saves wait for both database confirmation and refreshed event data before reporting success or closing the rating form.
+- Treats an empty Supabase upsert response as a failed save instead of allowing the interface to appear successful.
+
 ## v0.35.0
 
 - Schedule PDFs use a paper-efficient position-column layout with dynamic R/AR1/AR2/4th and nonstandard crew columns, compact presets, abbreviated names, Letter/Legal sizing, optional details, and optional group separators.

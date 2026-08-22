@@ -133,7 +133,7 @@ import {
 import { exportScheduleExcel, exportSchedulePdf, type ScheduleExportRow, type SchedulePdfOptions } from "./schedule-export";
 import { normalizePhoneNumber, phoneCallHref } from "./phone";
 
-const APP_VERSION = "0.35.0";
+const APP_VERSION = "0.35.1";
 
 type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups";
 const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups"];
@@ -2408,7 +2408,7 @@ function AssessmentCenter({
   canSubmit: boolean;
   canConfigure: boolean;
   canApprovePublic: boolean;
-  onSaved: () => void;
+  onSaved: () => Promise<void> | void;
   onEventUpdated: (event: EventRecord) => void;
   initialGameId?: string;
   modal?: boolean;
@@ -2422,6 +2422,7 @@ function AssessmentCenter({
   const [drafts, setDrafts] = useState<Record<string, CrewRatingDraft>>({});
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const savingCrewRef = useRef(false);
   const [configuration, setConfiguration] = useState<{ ratingType: EventRecord["rating_type"]; adminOnly: boolean; approvalRole: NonNullable<EventRecord["public_rating_approval_role"]> }>({ ratingType: event.rating_type, adminOnly: event.ratings_admin_only, approvalRole: event.public_rating_approval_role || "inherit" });
   const [ratingSort, setRatingSort] = useActiveFilterState<"date" | "gender" | "age_group" | "referee" | "position" | "score">("ratings-sort", "date");
   const [historyEventIds, setHistoryEventIds] = useActiveFilterState<string[]>("ratings-events", []);
@@ -2826,11 +2827,13 @@ function AssessmentCenter({
   }
 
   async function submitCrew(status: "draft" | "submitted") {
-    if (!organizationId || !gameId || !gameAssignments.length) return;
+    if (!organizationId || !gameId || !gameAssignments.length || savingCrewRef.current) return;
+    savingCrewRef.current = true;
+    let ratingsConfirmed = false;
     setBusy(true);
     setMessage("");
     try {
-      await Promise.all(gameAssignments.map((assignment) => {
+      const savedRatings = await Promise.all(gameAssignments.map((assignment) => {
         const rating = drafts[assignment.official_id] || blankCrewRating();
         const skillValues = skillValuesForAssignment(assignment, rating);
         return saveAssessment(session, organizationId, {
@@ -2850,15 +2853,22 @@ function AssessmentCenter({
           coach_notes: rating.coach_notes || null,
         });
       }));
+      if (savedRatings.length !== gameAssignments.length || savedRatings.some((rating) => !rating?.id)) {
+        throw new Error("Not every crew rating was confirmed. Please try saving again.");
+      }
+      ratingsConfirmed = true;
+      await onSaved();
       setMessage(status === "draft" ? `Draft ratings saved for ${gameAssignments.length} officials.` : `Ratings submitted for ${gameAssignments.length} officials.`);
-      onSaved();
       if (status === "submitted") {
         if (modal) onClose?.();
         else chooseGame("");
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to save the ratings.");
+      setMessage(ratingsConfirmed
+        ? "The ratings were saved, but the latest data could not be reloaded. Your entries remain on this screen; use Refresh before leaving."
+        : error instanceof Error ? error.message : "Unable to save the ratings.");
     } finally {
+      savingCrewRef.current = false;
       setBusy(false);
     }
   }
@@ -2903,7 +2913,7 @@ function AssessmentCenter({
         </section>;
       })}{gameId && !gameAssignments.length && <EmptyState>No officials are assigned to this game.</EmptyState>}</div>
       {message && !canConfigure && <p className="pilot-message assessment-message">{message}</p>}
-      <div className="assessment-actions"><button className="secondary" disabled={busy || !gameAssignments.length} onClick={() => submitCrew("draft")}>Save crew draft</button><button className="primary" disabled={busy || !gameAssignments.length} onClick={() => submitCrew("submitted")}>Submit all ratings</button></div>
+      <div className="assessment-actions"><button type="button" className="secondary" disabled={busy || !gameAssignments.length} onClick={() => void submitCrew("draft")}>{busy ? "Saving…" : "Save crew draft"}</button><button type="button" className="primary" disabled={busy || !gameAssignments.length} onClick={() => void submitCrew("submitted")}>{busy ? "Saving…" : "Submit all ratings"}</button></div>
     </article>}
     <article className="panel history ratings-history"><div className="panel-head"><div><p className="eyebrow">HISTORY</p><h2>{sortedAssessments.length} matching rating{sortedAssessments.length === 1 ? "" : "s"}</h2><p className="filtered-rating-average">Average Score <strong>{filteredAverage?.toFixed(2) || "—"}</strong></p></div><div className="rating-history-toolbar"><div className="segmented-control" aria-label="Rating history view"><button className={historyView === "individual" ? "active" : ""} onClick={() => setHistoryView("individual")}>Individual Ratings</button><button className={historyView === "game" ? "active" : ""} onClick={() => setHistoryView("game")}>Full Game Ratings</button></div><button className="secondary" disabled={!sortedAssessments.length} onClick={() => setExportDialogOpen(true)}>Export Spreadsheet</button></div><div className="history-filters"><AssignmentFilterMenu label="Events" options={[...new Set(history.games.map((game) => game.event_id))].map((id) => ({ id, name: history.events.find((item) => item.id === id)?.name || events.find((item) => item.id === id)?.name || `Previous event · ${id.slice(0, 8)}` }))} selected={historyEventIds} onChange={setHistoryEventIds} /><label className="compact-sort">Status<select value={historyStatus} onChange={(e) => setHistoryStatus(e.target.value as typeof historyStatus)}><option value="all">All Ratings</option><option value="submitted">Submitted</option><option value="draft">Drafts</option></select></label><label className="compact-sort">Sort by<select value={ratingSort} onChange={(e) => setRatingSort(e.target.value as typeof ratingSort)}><option value="date">Date</option><option value="gender">Gender</option><option value="age_group">Age group</option><option value="referee">Referee</option><option value="position">Position</option><option value="score">Rating Score</option></select></label><label className="show-archived-ratings"><input type="checkbox" checked={showArchivedRatings} onChange={(event) => setShowArchivedRatings(event.target.checked)} /> Show Archived Ratings</label></div></div>
       {canConfigure && <div className="bulk-action-bar"><label><input type="checkbox" checked={sortedAssessments.length > 0 && sortedAssessments.every((item) => selectedRatingIds.includes(item.id))} onChange={(event) => setSelectedRatingIds(event.target.checked ? sortedAssessments.map((item) => item.id) : [])} /> Select All Visible</label><strong>{selectedRatingIds.length} selected</strong><button className="secondary" disabled={busy || !selectedRatingIds.length} onClick={() => bulkRatings("archive")}>Archive</button>{showArchivedRatings && <button className="secondary" disabled={busy || !selectedRatingIds.length} onClick={() => bulkRatings("restore")}>Restore</button>}<button className="danger-button" disabled={busy || !selectedRatingIds.length} onClick={() => bulkRatings("delete")}>Delete</button></div>}

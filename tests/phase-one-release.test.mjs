@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Version 0.35.0 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
+test("Version 0.35.1 uses the dashboard loading label, favicon metadata, and preserved Worker secrets", async () => {
   const [page, layout, manifest, packageJson, viteConfig] = await Promise.all([
     read("app/page.tsx"),
     read("app/layout.tsx"),
@@ -22,7 +22,7 @@ test("Version 0.35.0 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.35.0");
+  assert.equal(JSON.parse(packageJson).version, "0.35.1");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -875,14 +875,14 @@ test("all users have active-group role-aware help", async () => {
   }
 });
 
-test("v0.35.0 shows the application version beside Help for the Site Owner only", async () => {
+test("v0.35.1 shows the application version beside Help for the Site Owner only", async () => {
   const [page, css, packageJson] = await Promise.all([read("app/page.tsx"), read("app/globals.css"), read("package.json")]);
-  assert.match(page, /const APP_VERSION = "0\.35\.0"/);
+  assert.match(page, /const APP_VERSION = "0\.35\.1"/);
   assert.match(page, /profile\?\.is_site_owner && <span className="owner-version"/);
   assert.match(page, /<button className="help-button"/);
   assert.match(page, /Version \{APP_VERSION\}/);
   assert.match(css, /\.owner-version\{/);
-  assert.equal(JSON.parse(packageJson).version, "0.35.0");
+  assert.equal(JSON.parse(packageJson).version, "0.35.1");
 });
 
 test("assessment upsert uses a non-partial matching unique index", async () => {
@@ -895,11 +895,11 @@ test("assessment upsert uses a non-partial matching unique index", async () => {
   assert.doesNotMatch(migration, /where official_id is not null/i);
 });
 
-test("v0.35.0 gives combined Site Supervisor and Referee Coach users the Ratings tab", async () => {
+test("v0.35.1 gives combined Site Supervisor and Referee Coach users the Ratings tab", async () => {
   const [page, packageJson] = await Promise.all([read("app/page.tsx"), read("package.json")]);
   assert.match(page, /: isSiteCoordinator[\s\S]*canAssess && eventFeatureEnabled\(event, "ratings"\)[\s\S]*\["assessments", "Ratings"\]/);
   assert.match(page, /const canAssess = isCoach/);
-  assert.equal(JSON.parse(packageJson).version, "0.35.0");
+  assert.equal(JSON.parse(packageJson).version, "0.35.1");
 });
 
 test("rating drafts are readable only by their creator", async () => {
@@ -1042,7 +1042,7 @@ test("event schedules support reusable filters, ordered sorting, and Excel or PD
   assert.ok(dependencies.xlsx && dependencies.jspdf && dependencies["jspdf-autotable"]);
 });
 
-test("v0.35.0 creates paper-efficient schedule PDFs with one dynamic column per crew position", async () => {
+test("v0.35.1 creates paper-efficient schedule PDFs with one dynamic column per crew position", async () => {
   const [page, exporter, css, packageJson] = await Promise.all([read("app/page.tsx"), read("app/schedule-export.ts"), read("app/globals.css"), read("package.json")]);
   assert.match(exporter, /export type SchedulePdfOptions/);
   assert.match(exporter, /function crewColumns/);
@@ -1058,7 +1058,7 @@ test("v0.35.0 creates paper-efficient schedule PDFs with one dynamic column per 
   assert.match(page, /Group Separator Rows/);
   assert.match(page, /Each crew position receives its own column/);
   assert.match(css, /\.schedule-pdf-options/);
-  assert.equal(JSON.parse(packageJson).version, "0.35.0");
+  assert.equal(JSON.parse(packageJson).version, "0.35.1");
 });
 
 test("assignment board exposes all three Phase 1 views", async () => {
@@ -1116,7 +1116,7 @@ test("v0.34.0 retains ratings that administrators exclude from scoring averages"
   assert.match(page, /assessment\.include_in_averages !== false\s+&& assessment\.visibility === "public"/);
   assert.match(page, /Official \$\{index\} Counted in Averages/);
   assert.match(css, /\.excluded-from-average\{/);
-  assert.equal(JSON.parse(packageJson).version, "0.35.0");
+  assert.equal(JSON.parse(packageJson).version, "0.35.1");
 });
 
 test("roadmap records organization capability and check-in method controls", async () => {
@@ -1736,7 +1736,7 @@ test("v0.28.1 keeps schedule crew columns aligned without range-query support", 
   assert.match(styles, /\.schedule-crew-list>span\{box-sizing:border-box;flex:0 0 calc\(\(100% - 21px\)\/4\)\}/);
   assert.match(styles, /@media\(max-width:900px\)\{\.schedule-crew-list>span\{flex-basis:calc\(\(100% - 7px\)\/2\)\}\}/);
   assert.match(styles, /@media\(max-width:700px\)\{\.schedule-crew-list>span\{flex-basis:100%\}\}/);
-  assert.equal(JSON.parse(packageJson).version, "0.35.0");
+  assert.equal(JSON.parse(packageJson).version, "0.35.1");
 });
 
 test("v0.31.9 edits board assignments through the permission-gated game detail line", async () => {
@@ -1749,7 +1749,7 @@ test("v0.31.9 edits board assignments through the permission-gated game detail l
   assert.match(page, /<small>\{game\.division \|\| "Tournament match"\}<\/small>/);
   assert.match(styles, /Version 0\.31\.9 assignment-board edit trigger/);
   assert.match(styles, /\.board-game-details-link:hover/);
-  assert.equal(JSON.parse(packageJson).version, "0.35.0");
+  assert.equal(JSON.parse(packageJson).version, "0.35.1");
 });
 
 test("v0.32.0 makes ratings durable, position-aware, and swappable within a game", async () => {
@@ -1774,7 +1774,7 @@ test("v0.32.0 makes ratings durable, position-aware, and swappable within a game
   assert.match(page, /await swapSameGameRatings\(session, firstSwapRatingId, secondSwapRatingId\)/);
   assert.match(page, /assessment\.rated_position_title/);
   assert.match(styles, /Version 0\.32\.0 durable rating ownership and same-game swaps/);
-  assert.equal(JSON.parse(packageJson).version, "0.35.0");
+  assert.equal(JSON.parse(packageJson).version, "0.35.1");
 });
 
 test("v0.31.10 preserves imported order for matching crew positions", async () => {
@@ -1793,7 +1793,7 @@ test("v0.31.10 preserves imported order for matching crew positions", async () =
   assert.match(migration, /with ordinality as item\(value, ordinality\)/);
   assert.match(migration, /item\.ordinality - 1, true/);
   assert.match(migration, /order by crew_order, id/);
-  assert.equal(JSON.parse(packageJson).version, "0.35.0");
+  assert.equal(JSON.parse(packageJson).version, "0.35.1");
 });
 
 test("v0.32.1 skips assignment writes when an updated import crew is unchanged", async () => {
@@ -1804,7 +1804,7 @@ test("v0.32.1 skips assignment writes when an updated import crew is unchanged",
   assert.match(client, /assignmentsToWrite = assignmentPayload\.filter\(\(assignment\) => changedGameIds\.has\(assignment\.game_id\)\)/);
   assert.match(client, /if \(assignmentsToWrite\.length\)/);
   assert.doesNotMatch(client, /await Promise\.all\(importedGameIds\.map\(\(gameId\) => rest/);
-  assert.equal(JSON.parse(packageJson).version, "0.35.0");
+  assert.equal(JSON.parse(packageJson).version, "0.35.1");
 });
 
 test("v0.34.0 makes coach history private and expands draft filtering and exports", async () => {
@@ -1826,30 +1826,30 @@ test("v0.34.0 makes coach history private and expands draft filtering and export
   assert.match(page, /Duplicate Submission/);
   assert.match(page, /Summarize By/);
   assert.match(styles, /\.rating-export-dialog/);
-  assert.equal(JSON.parse(packageJson).version, "0.35.0");
+  assert.equal(JSON.parse(packageJson).version, "0.35.1");
 });
 
-test("v0.35.0 omits Skills Eval-only columns from Basic Eval-only exports", async () => {
+test("v0.35.1 omits Skills Eval-only columns from Basic Eval-only exports", async () => {
   const [page, packageJson] = await Promise.all([read("app/page.tsx"), read("package.json")]);
   assert.match(page, /const includesSkillsEvals = exportedAssessments\.some/);
   assert.match(page, /if \(includesSkillsEvals\) headings\.push\("Positioning and Movement"/);
   assert.match(page, /else headings\.push\("Notes"\)/);
   assert.match(page, /if \(includesSkillsEvals\) headings\.push\(`Official \$\{index\} Positive Areas`/);
   assert.match(page, /else headings\.push\(`Official \$\{index\} Notes`\)/);
-  assert.equal(JSON.parse(packageJson).version, "0.35.0");
+  assert.equal(JSON.parse(packageJson).version, "0.35.1");
 });
 
-test("v0.35.0 keeps duplicate game-rating submissions adjacent in deterministic export order", async () => {
+test("v0.35.1 keeps duplicate game-rating submissions adjacent in deterministic export order", async () => {
   const [page, packageJson] = await Promise.all([read("app/page.tsx"), read("package.json")]);
   assert.match(page, /const compareExportGames = \(left: AssessmentRecord, right: AssessmentRecord\)/);
   assert.match(page, /leftEvent\?\.name[\s\S]*leftGame\?\.starts_at[\s\S]*leftGame\?\.venue_name[\s\S]*leftGame\?\.field_name/);
   assert.match(page, /\|\| left\.game_id\.localeCompare\(right\.game_id\)/);
   assert.match(page, /const exportedAssessments = \[\.\.\.sortedAssessments\]\.sort/);
   assert.match(page, /values\(\)\]\.sort\(\(a, b\) => compareExportGames\(a\[0\], b\[0\]\)/);
-  assert.equal(JSON.parse(packageJson).version, "0.35.0");
+  assert.equal(JSON.parse(packageJson).version, "0.35.1");
 });
 
-test("v0.35.0 names rating exports from compact active filters instead of the UTC export date", async () => {
+test("v0.35.1 names rating exports from compact active filters instead of the UTC export date", async () => {
   const [page, packageJson] = await Promise.all([read("app/page.tsx"), read("package.json")]);
   assert.match(page, /const abbreviatedOfficialName =/);
   assert.match(page, /filenameSegments\.push\(`dt-\$\{historyDateRange\.from/);
@@ -1857,10 +1857,22 @@ test("v0.35.0 names rating exports from compact active filters instead of the UT
   assert.match(page, /filenameSegments\.push\(`ref-\$\{compactValues\(historyFilters\.referees, abbreviatedOfficialName\)\}`\)/);
   assert.match(page, /link\.download = `\$\{filenameSegments\.join\("_"\)\.slice\(0, 180\)\}\.csv`/);
   assert.doesNotMatch(page, /law18ref-ratings-\$\{ratingExportMode\}-\$\{new Date\(\)\.toISOString/);
-  assert.equal(JSON.parse(packageJson).version, "0.35.0");
+  assert.equal(JSON.parse(packageJson).version, "0.35.1");
 });
 
-test("v0.35.0 automatically activates new deployments for installed and reopened apps", async () => {
+test("v0.35.1 confirms crew-rating writes and refreshes saved data before closing", async () => {
+  const [page, client, packageJson] = await Promise.all([read("app/page.tsx"), read("app/supabase-client.ts"), read("package.json")]);
+  assert.match(client, /if \(!saved\?\.id\) throw new Error\("The rating was not confirmed by the database/);
+  assert.match(page, /const savingCrewRef = useRef\(false\)/);
+  assert.match(page, /if \(!organizationId \|\| !gameId \|\| !gameAssignments\.length \|\| savingCrewRef\.current\) return/);
+  assert.match(page, /const savedRatings = await Promise\.all\(gameAssignments\.map/);
+  assert.match(page, /ratingsConfirmed = true;\s+await onSaved\(\);\s+setMessage/);
+  assert.match(page, /if \(modal\) onClose\?\.\(\)/);
+  assert.match(page, /The ratings were saved, but the latest data could not be reloaded/);
+  assert.equal(JSON.parse(packageJson).version, "0.35.1");
+});
+
+test("v0.35.1 automatically activates new deployments for installed and reopened apps", async () => {
   const [page, worker, versionFile, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("public/sw.js"),
@@ -1873,9 +1885,9 @@ test("v0.35.0 automatically activates new deployments for installed and reopened
   assert.match(page, /document\.addEventListener\("visibilitychange", becameVisible\)/);
   assert.match(page, /window\.setInterval\(checkForLatestVersion, 5 \* 60 \* 1000\)/);
   assert.match(page, /navigator\.serviceWorker\.addEventListener\("controllerchange", controllerChanged\)/);
-  assert.match(worker, /law18referee-v0\.35\.0/);
+  assert.match(worker, /law18referee-v0\.35\.1/);
   assert.match(worker, /pathname === "\/version\.json"/);
   assert.match(worker, /new Request\(event\.request, \{ cache: "no-store" \}\)/);
-  assert.equal(JSON.parse(versionFile).version, "0.35.0");
-  assert.equal(JSON.parse(packageJson).version, "0.35.0");
+  assert.equal(JSON.parse(versionFile).version, "0.35.1");
+  assert.equal(JSON.parse(packageJson).version, "0.35.1");
 });

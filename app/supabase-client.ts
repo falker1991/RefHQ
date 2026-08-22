@@ -1841,7 +1841,9 @@ export async function saveAssessment(
     },
     "resolution=merge-duplicates,return=representation",
   );
-  return rows[0];
+  const saved = rows[0];
+  if (!saved?.id) throw new Error("The rating was not confirmed by the database. Please try saving again.");
+  return saved;
 }
 
 export async function importTournament(

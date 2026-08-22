@@ -17,6 +17,17 @@ export type ScheduleExportRow = {
   breakBefore?: boolean;
 };
 
+export type SchedulePdfOptions = {
+  density: "standard" | "compact" | "ultra";
+  paperSize: "letter" | "legal";
+  nameFormat: "full" | "abbreviated";
+  includeSeparators: boolean;
+  includeSite: boolean;
+  includeAgeGender: boolean;
+  includeCompetition: boolean;
+  includeGameType: boolean;
+};
+
 function filenamePart(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "event";
 }
@@ -47,44 +58,109 @@ export async function exportScheduleExcel(event: EventRecord, rows: ScheduleExpo
   XLSX.writeFile(workbook, `${filenamePart(event.name)}-schedule.xlsx`, { compression: true });
 }
 
-export async function exportSchedulePdf(event: EventRecord, rows: ScheduleExportRow[]) {
+function abbreviatedName(value: string) {
+  if (!value || value === "Open") return value;
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  return parts.length > 1 ? `${parts[0][0]}. ${parts.slice(1).join(" ")}` : parts[0] || value;
+}
+
+function crewSlot(position: string, occurrence: number) {
+  const normalized = position.trim().toLowerCase();
+  if (/^(center |centre )?referee$|^r$/.test(normalized)) return { key: "referee", label: "R", priority: 0 };
+  const assistant = normalized.match(/^(?:ar|assistant referee|asst\.? referee)(?:\s*#?\s*(\d+))?$/);
+  if (assistant) {
+    const assistantNumber = Number(assistant[1] || occurrence);
+    return { key: `assistant-${assistantNumber}`, label: `AR${assistantNumber}`, priority: 10 + assistantNumber };
+  }
+  if (/^(4th|fourth) official$/.test(normalized)) return { key: "fourth", label: "4th", priority: 30 };
+  const base = normalized.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "official";
+  return { key: `${base}-${occurrence}`, label: occurrence > 1 ? `${position} ${occurrence}` : position, priority: 40 };
+}
+
+function crewColumns(rows: ScheduleExportRow[]) {
+  const columns = new Map<string, { key: string; label: string; priority: number; firstSeen: number }>();
+  let firstSeen = 0;
+  rows.forEach((row) => {
+    const occurrences = new Map<string, number>();
+    row.crew.forEach((member) => {
+      const normalized = member.position.trim().toLowerCase();
+      const occurrence = (occurrences.get(normalized) || 0) + 1;
+      occurrences.set(normalized, occurrence);
+      const slot = crewSlot(member.position, occurrence);
+      if (!columns.has(slot.key)) columns.set(slot.key, { ...slot, firstSeen: firstSeen++ });
+    });
+  });
+  return [...columns.values()].sort((left, right) => left.priority - right.priority || left.firstSeen - right.firstSeen);
+}
+
+export async function exportSchedulePdf(event: EventRecord, rows: ScheduleExportRow[], options: SchedulePdfOptions) {
   const [{ jsPDF }, { default: autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
-  const document = new jsPDF({ orientation: "landscape", unit: "pt", format: "letter" });
+  const document = new jsPDF({ orientation: "landscape", unit: "pt", format: options.paperSize });
+  const positionColumns = crewColumns(rows);
+  const density = {
+    standard: { fontSize: 7.2, padding: 3.25, lineWidth: 0.5 },
+    compact: { fontSize: 6.3, padding: 2.25, lineWidth: 0.35 },
+    ultra: { fontSize: 5.5, padding: 1.5, lineWidth: 0.25 },
+  }[options.density];
+  const formatName = options.nameFormat === "abbreviated" ? abbreviatedName : (value: string) => value;
   document.setFont("helvetica", "bold");
-  document.setFontSize(16);
+  document.setFontSize(14);
   document.setTextColor(24, 53, 83);
-  document.text(event.name, 36, 35);
+  document.text(event.name, 20, 24);
   document.setFont("helvetica", "normal");
-  document.setFontSize(9);
+  document.setFontSize(7.5);
   document.setTextColor(104, 119, 138);
-  document.text(`Law18Referee Management schedule · ${rows.length} game${rows.length === 1 ? "" : "s"}`, 36, 50);
+  document.text(`Law18Referee Management schedule - ${rows.length} game${rows.length === 1 ? "" : "s"}`, 20, 36);
+  const baseHeadings = ["Date / Time"];
+  if (options.includeSite) baseHeadings.push("Site");
+  baseHeadings.push("Field", "Match");
+  const includeDetails = options.includeAgeGender || options.includeCompetition || options.includeGameType;
+  if (includeDetails) baseHeadings.push("Details");
+  const headings = [...baseHeadings, ...positionColumns.map((column) => column.label)];
   const body: string[][] = [];
   rows.forEach((row, index) => {
-    if (index > 0 && row.breakBefore) body.push(["", "", "", "", "", "", "", "", ""]);
-    body.push([
-      row.date,
-      row.time,
-      [row.site, row.field].filter(Boolean).join(" · "),
-      row.homeTeam,
-      row.awayTeam,
-      row.ageGroup,
-      row.gender,
-      row.competition,
-      row.crew.map((member) => `${member.position}: ${member.name}`).join("\n"),
-    ]);
+    if (options.includeSeparators && index > 0 && row.breakBefore) body.push(headings.map(() => ""));
+    const cells = [`${row.date}\n${row.time}`];
+    if (options.includeSite) cells.push(row.site);
+    cells.push(row.field, `${row.homeTeam}\nvs. ${row.awayTeam}`);
+    if (includeDetails) cells.push([
+      options.includeAgeGender ? [row.ageGroup, row.gender].filter(Boolean).join(" ") : "",
+      options.includeCompetition ? row.competition : "",
+      options.includeGameType ? row.gameType : "",
+    ].filter(Boolean).join("\n"));
+    const occurrences = new Map<string, number>();
+    const crewBySlot = new Map<string, string>();
+    row.crew.forEach((member) => {
+      const normalized = member.position.trim().toLowerCase();
+      const occurrence = (occurrences.get(normalized) || 0) + 1;
+      occurrences.set(normalized, occurrence);
+      crewBySlot.set(crewSlot(member.position, occurrence).key, formatName(member.name));
+    });
+    positionColumns.forEach((column) => cells.push(crewBySlot.get(column.key) || ""));
+    body.push(cells);
   });
+  const pageWidth = document.internal.pageSize.getWidth();
+  const availableWidth = pageWidth - 40;
+  const fixedWidths: number[] = [options.density === "ultra" ? 52 : 60];
+  if (options.includeSite) fixedWidths.push(options.density === "ultra" ? 42 : 52);
+  fixedWidths.push(options.density === "ultra" ? 34 : 42, options.density === "ultra" ? 150 : 170);
+  if (includeDetails) fixedWidths.push(options.density === "ultra" ? 60 : 76);
+  const crewWidth = Math.max(42, (availableWidth - fixedWidths.reduce((sum, width) => sum + width, 0)) / Math.max(1, positionColumns.length));
+  const columnStyles = Object.fromEntries([...fixedWidths, ...positionColumns.map(() => crewWidth)].map((cellWidth, index) => [index, { cellWidth }]));
   autoTable(document, {
-    startY: 62,
-    head: [["Date", "Time", "Site / Field", "Home Team", "Away Team", "Age", "Gender", "Competition", "Crew"]],
+    startY: 44,
+    margin: { top: 20, right: 20, bottom: 22, left: 20 },
+    head: [headings],
     body,
     theme: "grid",
-    styles: { font: "helvetica", fontSize: 6.8, cellPadding: 3.5, textColor: [24, 53, 83], valign: "middle", overflow: "linebreak" },
+    styles: { font: "helvetica", fontSize: density.fontSize, cellPadding: density.padding, lineWidth: density.lineWidth, textColor: [24, 53, 83], valign: "middle", overflow: "linebreak" },
     headStyles: { fillColor: [36, 74, 115], textColor: 255, fontStyle: "bold" },
     alternateRowStyles: { fillColor: [245, 247, 250] },
-    columnStyles: { 0: { cellWidth: 58 }, 1: { cellWidth: 43 }, 2: { cellWidth: 78 }, 5: { cellWidth: 34 }, 6: { cellWidth: 38 }, 7: { cellWidth: 65 }, 8: { cellWidth: 120 } },
+    columnStyles,
+    rowPageBreak: "avoid",
     didParseCell: (hook) => {
       if (hook.section === "body" && Array.isArray(hook.row.raw) && hook.row.raw.every((value) => value === "")) {
-        hook.cell.styles.minCellHeight = 8;
+        hook.cell.styles.minCellHeight = options.density === "ultra" ? 4 : 6;
         hook.cell.styles.fillColor = [255, 255, 255];
         hook.cell.styles.lineColor = [255, 255, 255];
       }
@@ -93,7 +169,7 @@ export async function exportSchedulePdf(event: EventRecord, rows: ScheduleExport
       const page = document.getCurrentPageInfo().pageNumber;
       document.setFontSize(7);
       document.setTextColor(104, 119, 138);
-      document.text(`Page ${page}`, document.internal.pageSize.getWidth() - 55, document.internal.pageSize.getHeight() - 16);
+      document.text(`Page ${page}`, document.internal.pageSize.getWidth() - 42, document.internal.pageSize.getHeight() - 10);
     },
   });
   document.save(`${filenamePart(event.name)}-schedule.pdf`);

@@ -2,6 +2,10 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.35.0
+
+- Schedule PDFs use a paper-efficient position-column layout with dynamic R/AR1/AR2/4th and nonstandard crew columns, compact presets, abbreviated names, Letter/Legal sizing, optional details, and optional group separators.
+
 ## v0.34.5
 
 - The installed web app now checks for a newer deployment on startup, focus, visibility changes, and every five minutes, activates versioned service-worker caches, and reloads once into the latest release.

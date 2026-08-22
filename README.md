@@ -2,6 +2,10 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.35.2
+
+- Freezes the field header row and time header column while scrolling the Assignment Board grid in either direction.
+
 ## v0.35.1
 
 - Makes crew-rating saves wait for both database confirmation and refreshed event data before reporting success or closing the rating form.

@@ -133,7 +133,7 @@ import {
 import { exportScheduleExcel, exportSchedulePdf, type ScheduleExportRow, type SchedulePdfOptions } from "./schedule-export";
 import { normalizePhoneNumber, phoneCallHref } from "./phone";
 
-const APP_VERSION = "0.35.1";
+const APP_VERSION = "0.35.2";
 
 type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups";
 const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups"];
@@ -491,9 +491,9 @@ function AssignmentBoard({ session, data, event, profile, ratingHistory, showRat
       <div className="board-view-tools panel"><label className="board-day-picker"><span>Event Day</span><select value={boardDate} onChange={(change) => { setBoardDate(change.target.value); setCollapsedFields(new Set()); setCollapsedFirstTimes(new Set()); setVenueFilters([]); }}>{availableDates.map((date) => <option value={date} key={date}>{formatDate(date)}</option>)}</select></label><AssignmentFilterMenu label="Venues" options={availableVenues.map((venue) => ({ id: venue, name: venue }))} selected={venueFilters} onChange={setVenueFilters} /><div className="board-view-choice"><span>View</span><div className="segmented"><button className={boardView === "grid" ? "active" : ""} onClick={() => setBoardView("grid")}>Time and Field Grid</button><button className={boardView === "field" ? "active" : ""} onClick={() => setBoardView("field")}>By Field</button><button className={boardView === "first_assignment" ? "active" : ""} onClick={() => setBoardView("first_assignment")}>First Assignment</button></div></div></div>
       {boardView === "grid" && <div className="board-wrap panel">
         <table className="assignment-board">
-          <thead><tr><th>Time</th>{fields.map((field) => <th key={field}>{field}</th>)}</tr></thead>
+          <thead><tr><th scope="col">Time</th>{fields.map((field) => <th scope="col" key={field}>{field}</th>)}</tr></thead>
           <tbody>{times.map((time) => (
-            <tr key={time}><th>{time}</th>{fields.map((field) => {
+            <tr key={time}><th scope="row">{time}</th>{fields.map((field) => {
               const game = visibleGames.find((item) => item.field_name === field && formatTime(item.starts_at) === time);
               if (!game) return <td key={field} className="board-empty">—</td>;
               return <td key={field}>

@@ -77,6 +77,8 @@ test("parses an actual Assignr users export layout", () => {
   const rows = parseAssignrOfficialsCsv(csv);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].full_name, "Olivia Official");
+  assert.equal(rows[0].first_name, "Olivia");
+  assert.equal(rows[0].last_name, "Official");
   assert.equal(rows[0].primary_email, "olivia@example.com");
   assert.equal(rows[0].source_official_id, "2171650");
 });
@@ -111,6 +113,8 @@ test("round trips exported Law18Ref official details with stable record IDs", ()
   const rows = parseAssignrOfficialsCsv(csv.replace(",,guardian@example.com", ",alex@example.com,guardian@example.com"));
   assert.equal(rows.length, 1);
   assert.equal(rows[0].law18ref_official_id, "official-123");
+  assert.equal(rows[0].first_name, "Alex");
+  assert.equal(rows[0].last_name, "Example");
   assert.equal(rows[0].primary_email, "alex@example.com");
   assert.equal(rows[0].source_official_id, "assignr-9");
   assert.equal(rows[0].date_of_birth, "2010-05-01");

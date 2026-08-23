@@ -2,6 +2,12 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.38.0
+
+- Separates referee first and last names in account and official records while preserving combined-name displays across schedules and reports.
+- Sorts referee, coach, merge, rating, filter, and assignment selectors by last name and presents choices as `Last, First`.
+- Adds first/last-name columns to official imports and exports, including safe backfill and synchronization for existing records.
+
 ## v0.37.1
 
 - Splits the post-event summary's full schedule into a separate worksheet for every game date, making each day's assignments easier to print, distribute, and review.

@@ -8,6 +8,8 @@ export type Profile = {
   id: string;
   organization_id: string | null;
   full_name: string;
+  first_name?: string | null;
+  last_name?: string | null;
   email: string;
   primary_email?: string | null;
   secondary_email?: string | null;
@@ -172,6 +174,8 @@ export type OfficialRecord = {
   id: string;
   organization_id: string;
   full_name: string;
+  first_name?: string | null;
+  last_name?: string | null;
   email: string | null;
   secondary_email?: string | null;
   date_of_birth?: string | null;
@@ -774,7 +778,7 @@ export async function deleteAppearanceTheme(session: Law18Session, themeId: stri
 
 export async function updateOwnProfile(
   session: Law18Session,
-  changes: Pick<Profile, "full_name" | "phone" | "secondary_email" | "date_of_birth" | "preferred_name" | "personal_contact_locked">,
+  changes: Pick<Profile, "full_name" | "first_name" | "last_name" | "phone" | "secondary_email" | "date_of_birth" | "preferred_name" | "personal_contact_locked">,
 ) {
   const rows = await rest<Profile[]>(
     session,
@@ -1329,6 +1333,8 @@ export type ImportRow = {
 export type OfficialImportRow = {
   law18ref_official_id: string | null;
   full_name: string;
+  first_name: string;
+  last_name: string;
   primary_email: string | null;
   secondary_email: string | null;
   phone: string | null;
@@ -1448,6 +1454,16 @@ export function zonedLocalDateTimeToIso(date: string, time: string, timeZone: st
 function displayName(value: string) {
   const parts = value.split(",").map((part) => part.trim()).filter(Boolean);
   return parts.length === 2 ? `${parts[1]} ${parts[0]}` : value.trim();
+}
+
+export function splitOfficialName(value: string) {
+  const parts = displayName(value).split(/\s+/).filter(Boolean);
+  const suffixes = new Set(["jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"]);
+  const lastNameStart = parts.length > 2 && suffixes.has(parts.at(-1)!.toLowerCase()) ? parts.length - 2 : Math.max(1, parts.length - 1);
+  return {
+    first_name: parts.slice(0, lastNameStart).join(" ") || parts[0] || "",
+    last_name: parts.slice(lastNameStart).join(" "),
+  };
 }
 
 export function normalizeOfficialName(value: string) {
@@ -1599,9 +1615,12 @@ export function parseAssignrOfficialsCsv(text: string): OfficialImportRow[] {
       const officialId = cell(record, headers, "law18ref official id");
       const fullName = cell(record, headers, "full name");
       if (!officialId || !fullName) throw new Error(`Law18Ref officials row ${rowIndex + 2} is missing its Official ID or full name.`);
+      const parsedName = splitOfficialName(fullName);
       return {
         law18ref_official_id: officialId,
         full_name: fullName,
+        first_name: cell(record, headers, "first name") || parsedName.first_name,
+        last_name: cell(record, headers, "last name") || parsedName.last_name,
         primary_email: cell(record, headers, "primary email").toLowerCase() || null,
         secondary_email: cell(record, headers, "secondary email").toLowerCase() || null,
         phone: normalizePhoneNumber(cell(record, headers, "phone")) || null,
@@ -1625,6 +1644,8 @@ export function parseAssignrOfficialsCsv(text: string): OfficialImportRow[] {
       return {
         law18ref_official_id: null,
         full_name: `${first} ${last}`.trim(),
+        first_name: first,
+        last_name: last,
         primary_email: cell(record, headers, "primary email").toLowerCase() || null,
         secondary_email: cell(record, headers, "secondary email").toLowerCase() || null,
         phone: normalizePhoneNumber(cell(record, headers, "mobile phone") || cell(record, headers, "home phone")) || null,
@@ -1645,12 +1666,14 @@ function csvExportCell(value: unknown) {
 
 export function createOfficialsExportCsv(officials: OfficialRecord[]) {
   const headers = [
-    "Law18Ref Official ID", "Full Name", "Primary Email", "Secondary Email", "Phone",
+    "Law18Ref Official ID", "First Name", "Last Name", "Full Name", "Primary Email", "Secondary Email", "Phone",
     "Date of Birth", "Badge or Level", "USSF ID", "External Check-In Identifier",
     "Assignr Database ID", "Account Status", "Group Roles",
   ];
   const rows = officials.map((official) => [
     official.id,
+    official.first_name || splitOfficialName(official.full_name).first_name,
+    official.last_name || splitOfficialName(official.full_name).last_name,
     official.full_name,
     official.email || "",
     official.secondary_email || "",
@@ -1688,7 +1711,7 @@ export function normalizePosition(position: string): AssignmentRecord["position"
 export async function loadOrganizationOfficials(session: Law18Session, organizationId: string, includeMerged = false) {
   return rest<OfficialRecord[]>(
     session,
-    `officials?organization_id=eq.${enc(organizationId)}${includeMerged ? "" : "&merged_into_official_id=is.null&identity_status=neq.removed&archived_at=is.null"}&select=*&order=full_name.asc`,
+    `officials?organization_id=eq.${enc(organizationId)}${includeMerged ? "" : "&merged_into_official_id=is.null&identity_status=neq.removed&archived_at=is.null"}&select=*&order=last_name.asc.nullslast,first_name.asc.nullslast,full_name.asc`,
   );
 }
 
@@ -1769,6 +1792,8 @@ export async function importOfficials(
     const personalDetailsLocked = Boolean(match?.linked_user_id && match.personal_contact_locked);
     const changes = {
       full_name: match?.linked_user_id ? match.full_name : row.full_name,
+      first_name: match?.linked_user_id ? match.first_name : row.first_name,
+      last_name: match?.linked_user_id ? match.last_name : row.last_name,
       source_display_name: row.full_name,
       email: match?.linked_user_id ? match.email : email,
       secondary_email: personalDetailsLocked ? match?.secondary_email : row.secondary_email,
@@ -2129,13 +2154,16 @@ export async function importTournament(
 export async function createOfficial(
   session: Law18Session,
   organizationId: string,
-  values: { full_name: string; email?: string | null; secondary_email?: string | null; date_of_birth?: string | null; phone?: string | null; badge_level?: string | null; ussf_id?: string | null; external_check_in_other?: string | null; pending_org_roles?: MembershipRole[] },
+  values: { first_name: string; last_name: string; email?: string | null; secondary_email?: string | null; date_of_birth?: string | null; phone?: string | null; badge_level?: string | null; ussf_id?: string | null; external_check_in_other?: string | null; pending_org_roles?: MembershipRole[] },
 ) {
+  const fullName = `${values.first_name.trim()} ${values.last_name.trim()}`.trim();
   const rows = await rest<OfficialRecord[]>(session, "officials", {
     method: "POST",
     body: JSON.stringify({
       organization_id: organizationId,
-      full_name: values.full_name.trim(),
+      first_name: values.first_name.trim(),
+      last_name: values.last_name.trim(),
+      full_name: fullName,
       email: values.email?.trim().toLowerCase() || null,
       secondary_email: values.secondary_email?.trim().toLowerCase() || null,
       date_of_birth: values.date_of_birth || null,
@@ -2146,7 +2174,7 @@ export async function createOfficial(
       pending_org_role: values.pending_org_roles?.[0] || "referee",
       pending_org_roles: values.pending_org_roles?.length ? values.pending_org_roles : ["referee"],
       source: "manual",
-      source_display_name: values.full_name.trim(),
+      source_display_name: fullName,
       identity_status: "provisional",
     }),
   }, "return=representation");
@@ -2156,7 +2184,7 @@ export async function createOfficial(
 export async function updateOfficial(
   session: Law18Session,
   official: OfficialRecord,
-  values: { full_name: string; email?: string | null; secondary_email?: string | null; date_of_birth?: string | null; phone?: string | null; badge_level?: string | null; ussf_id?: string | null; external_check_in_other?: string | null; pending_org_roles?: MembershipRole[] },
+  values: { first_name: string; last_name: string; email?: string | null; secondary_email?: string | null; date_of_birth?: string | null; phone?: string | null; badge_level?: string | null; ussf_id?: string | null; external_check_in_other?: string | null; pending_org_roles?: MembershipRole[] },
   syncMembershipRoles = false,
 ) {
   const email = values.email?.trim().toLowerCase() || null;
@@ -2179,7 +2207,9 @@ export async function updateOfficial(
       updated_at: new Date().toISOString(),
     }
     : {
-      full_name: values.full_name.trim(),
+      first_name: values.first_name.trim(),
+      last_name: values.last_name.trim(),
+      full_name: `${values.first_name.trim()} ${values.last_name.trim()}`.trim(),
       email,
       secondary_email: values.secondary_email?.trim().toLowerCase() || null,
       date_of_birth: values.date_of_birth || null,

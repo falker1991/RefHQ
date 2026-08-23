@@ -2,6 +2,11 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.39.2
+
+- Authorized Assignment Board users can open the Game Info editor by selecting a matchup in the grid or By Field view.
+- The Game Info editor now presents all editable fields in one vertical column.
+
 ## v0.39.1
 
 - Game-detail swaps can optionally move each full staffed crew with its matchup when games switch schedule slots. The combined operation is atomic, permission checked, audited, sends no notifications, and leaves existing ratings unchanged.

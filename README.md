@@ -2,6 +2,15 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.37.1
+
+- Splits the post-event summary's full schedule into a separate worksheet for every game date, making each day's assignments easier to print, distribute, and review.
+
+## v0.37.0
+
+- Adds an authorized Post-Event Summary Excel export with coordinated worksheets for event metrics, dated schedules, full-game ratings, individual ratings, event officials, and daily check-ins.
+- Includes position-specific rating counts and averages, complete account/contact details, full evaluation content, crew assignments, and check-in time and method.
+
 ## v0.36.0
 
 - Adds first-assignment-time check-in filtering and changed-assignment schedule filtering.

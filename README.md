@@ -2,6 +2,10 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.39.4
+
+- Event Admins and higher can confirm pending schedule changes directly from updated Assignment Board game tiles, clearing the orange marker without leaving the board.
+
 ## v0.39.3
 
 - External referee schedule confirmation and completion cards show each partner's most recent earlier assignment that day, including position, time, and field, or identify the assignment as their first game.

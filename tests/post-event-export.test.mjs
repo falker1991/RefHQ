@@ -54,6 +54,6 @@ test("authorized schedule users can download the v0.38.1 post-event workbook", a
   assert.match(page, /import \{ exportPostEventSummary \}/);
   assert.match(page, /Post-Event Summary/);
   assert.match(page, /canEdit && <button className="secondary" disabled=\{postEventExportBusy\}/);
-  assert.match(page, /const APP_VERSION = "0\.39\.3"/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.3");
+  assert.match(page, /const APP_VERSION = "0\.39\.4"/);
+  assert.equal(JSON.parse(packageJson).version, "0.39.4");
 });

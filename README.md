@@ -2,6 +2,10 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.38.3
+
+- Adds an atomic full-crew swap option for two filtered Schedule games with matching staffed crew sizes, preserving each game's position structure and imported crew order.
+
 ## v0.38.2
 
 - Limits the Schedule assignment-swap game selectors to games matching the Schedule's current filters.

@@ -2,6 +2,12 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.38.1
+
+- Adds an atomic schedule action for swapping two staffed assignments between games in the same event.
+- Preserves each game's position slot, leaves existing ratings unchanged, audits the operation, and marks both games as updated without sending notifications.
+- Applies the same game-management permissions used by direct assignment editing, including scoped Site Supervisor access.
+
 ## v0.38.0
 
 - Separates referee first and last names in account and official records while preserving combined-name displays across schedules and reports.

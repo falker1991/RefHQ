@@ -2293,6 +2293,20 @@ export async function replaceGameAssignments(
   });
 }
 
+export async function swapGameAssignments(
+  session: Law18Session,
+  firstAssignmentId: string,
+  secondAssignmentId: string,
+) {
+  return rest<{ event_id: string; first_game_id: string; second_game_id: string }>(session, "rpc/swap_game_assignments", {
+    method: "POST",
+    body: JSON.stringify({
+      first_assignment_uuid: firstAssignmentId,
+      second_assignment_uuid: secondAssignmentId,
+    }),
+  });
+}
+
 export async function confirmGameScheduleChange(session: Law18Session, gameId: string) {
   return rest<GameRecord>(session, "rpc/confirm_game_schedule_change", {
     method: "POST",

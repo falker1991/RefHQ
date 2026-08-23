@@ -2,6 +2,14 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.36.0
+
+- Adds first-assignment-time check-in filtering and changed-assignment schedule filtering.
+- Sorts assignment-editor officials by last name and expands directory phone search.
+- Shows overall, Referee, and AR rating averages plus rating count in the directory.
+- Adds admin event-rating access to the official schedule modal and Collapse All controls.
+- Improves mobile rating submission spacing and makes the full account/navigation tray scroll safely in landscape.
+
 ## v0.35.5
 
 - Lets authorized staff remove all access from a coach in one action or remove a selected coach from every selected/filtered game in bulk.

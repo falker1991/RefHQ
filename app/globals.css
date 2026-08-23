@@ -331,3 +331,18 @@ input,select,textarea{max-width:100%}
 .rating-summary-criteria label{display:flex;align-items:center;gap:8px}
 .rating-summary-criteria input{width:auto;min-height:0}
 @media(max-width:620px){.rating-summary-criteria>div{grid-template-columns:1fr}.rating-export-dialog>footer{position:sticky;bottom:0;padding-top:12px;background:var(--panel);flex-wrap:wrap}.rating-export-dialog>footer button{flex:1}}
+/* v0.36.0 responsive workflow refinements */
+.directory-row{grid-template-columns:1.2fr 1fr .65fr .9fr 1.35fr .72fr .55fr}
+.directory-rating-score{font:800 11px/1.35 Inter,Arial,Helvetica,sans-serif;white-space:nowrap}
+.official-modal-ratings{display:grid;gap:8px;margin:0 26px 16px;padding:14px;border:1px solid var(--line);border-radius:10px;background:var(--navy-soft)}
+.official-modal-ratings-heading,.official-modal-ratings article{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.official-modal-ratings-heading small,.official-modal-ratings article small{display:block;margin-top:3px;color:var(--muted);font-size:10px}
+.official-modal-ratings article{padding:10px;border-radius:8px;background:#fff}
+.official-modal-ratings article b{color:var(--green);font-size:18px}
+.collapse-all-row{display:flex;justify-content:flex-end;padding:12px 20px;border-top:1px solid var(--line)}
+.rating-modal .assessment-actions{bottom:0;padding-bottom:calc(28px + env(safe-area-inset-bottom))}
+.account-tray-scroll{min-height:0;flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-bottom:env(safe-area-inset-bottom)}
+.account-tray-scroll>.account-roles{padding:13px 20px;border-bottom:1px solid var(--line)}
+.account-tray-account-actions{overflow:visible}
+@media(max-width:700px){.directory-row{grid-template-columns:minmax(0,1fr) auto}.directory-rating-score{white-space:normal}.crew-rating-workspace{padding-bottom:calc(56px + env(safe-area-inset-bottom))}.assessment-actions{padding-bottom:calc(28px + env(safe-area-inset-bottom))}.official-modal-ratings{margin-inline:14px}}
+@media(max-height:520px) and (orientation:landscape){.account-popover.account-tray{height:100dvh}.account-tray-header{padding-block:10px}.account-tray-navigation{padding-block:7px!important}.account-tray-navigation button{min-height:38px;padding-block:8px!important}}

@@ -89,8 +89,10 @@ import {
   splitOfficialName,
   swapGameAssignments,
   swapGameCrews,
+  swapGameDetails,
   syncCalendarFeed,
   updateOrganizationSettings,
+  updateGameDetails,
   updateOfficial,
   updateEventRatingSettings,
   updateEventSettings,
@@ -137,7 +139,7 @@ import { exportScheduleExcel, exportSchedulePdf, type ScheduleExportRow, type Sc
 import { exportPostEventSummary } from "./post-event-export";
 import { normalizePhoneNumber, phoneCallHref } from "./phone";
 
-const APP_VERSION = "0.38.3";
+const APP_VERSION = "0.39.1";
 
 type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups";
 const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups"];
@@ -240,6 +242,12 @@ const organizationRoleChoices: MembershipRole[] = ["organization_director", "org
 
 function formatTime(value: string) {
   return new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" }).format(new Date(value));
+}
+
+function dateTimeLocalValue(value: string, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(value));
+  const part = (type: string) => parts.find((item) => item.type === type)?.value || "";
+  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
 }
 
 function checkInMethodLabel(method: string) {
@@ -1150,9 +1158,12 @@ function ScheduleView({ session, event, data, availableOfficials, canEdit, canEd
   const [exportBusy, setExportBusy] = useState(false);
   const [postEventExportBusy, setPostEventExportBusy] = useState(false);
   const [editingAssignmentsFor, setEditingAssignmentsFor] = useState<GameRecord | null>(null);
+  const [editingGameInfo, setEditingGameInfo] = useState<GameRecord | null>(null);
+  const [gameInfoDraft, setGameInfoDraft] = useState({ starts_at: "", venue_name: "", field_name: "", home_team: "", away_team: "", division: "", age_group: "", gender: "", game_type: "", operational: false });
   const [assignmentDrafts, setAssignmentDrafts] = useState<Array<{ official_id: string; position: AssignmentRecord["position"]; position_title: string; source_position_title: string }>>([]);
   const [swappingAssignments, setSwappingAssignments] = useState(false);
-  const [assignmentSwapMode, setAssignmentSwapMode] = useState<"assignment" | "crew">("assignment");
+  const [assignmentSwapMode, setAssignmentSwapMode] = useState<"assignment" | "crew" | "details">("assignment");
+  const [moveCrewsWithGameDetails, setMoveCrewsWithGameDetails] = useState(false);
   const [firstSwapGameId, setFirstSwapGameId] = useState("");
   const [secondSwapGameId, setSecondSwapGameId] = useState("");
   const [firstSwapAssignmentId, setFirstSwapAssignmentId] = useState("");
@@ -1287,6 +1298,48 @@ function ScheduleView({ session, event, data, availableOfficials, canEdit, canEd
       setPostEventExportBusy(false);
     }
   }
+  function openGameInfoEditor(targetGame: GameRecord) {
+    setEditingGameInfo(targetGame);
+    setGameInfoDraft({
+      starts_at: dateTimeLocalValue(targetGame.starts_at, event.timezone),
+      venue_name: targetGame.venue_name || "",
+      field_name: targetGame.field_name,
+      home_team: targetGame.home_team,
+      away_team: targetGame.away_team,
+      division: targetGame.division || "",
+      age_group: targetGame.age_group || "",
+      gender: targetGame.gender || "",
+      game_type: targetGame.game_type || "",
+      operational: targetGame.operational,
+    });
+  }
+  async function saveGameInfo() {
+    if (!editingGameInfo || !gameInfoDraft.starts_at || !gameInfoDraft.field_name.trim() || !gameInfoDraft.home_team.trim() || !gameInfoDraft.away_team.trim()) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const [date, time] = gameInfoDraft.starts_at.split("T");
+      await updateGameDetails(session, editingGameInfo.id, {
+        ...gameInfoDraft,
+        starts_at: zonedLocalDateTimeToIso(date, time, event.timezone),
+        venue_name: gameInfoDraft.venue_name.trim() || null,
+        field_name: gameInfoDraft.field_name.trim(),
+        home_team: gameInfoDraft.home_team.trim(),
+        away_team: gameInfoDraft.away_team.trim(),
+        division: gameInfoDraft.division.trim(),
+        age_group: gameInfoDraft.age_group.trim() || null,
+        gender: gameInfoDraft.gender.trim() || null,
+        game_type: gameInfoDraft.game_type.trim() || null,
+      });
+      setEditingGameInfo(null);
+      await onCreated();
+      setMessage("Game information updated. No notification was sent. The game remains marked as updated until an Event Admin confirms the change.");
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to update this game.");
+    } finally {
+      setBusy(false);
+    }
+  }
   function openAssignmentEditor(targetGame: GameRecord) {
     setEditingAssignmentsFor(targetGame);
     setAssignmentDrafts(sortGameCrew(data.assignments.filter((assignment) => assignment.game_id === targetGame.id)).map((assignment) => ({ official_id: assignment.official_id, position: assignment.position, position_title: assignment.position_title || "", source_position_title: assignment.source_position_title || assignment.position_title || "" })));
@@ -1309,6 +1362,7 @@ function ScheduleView({ session, event, data, availableOfficials, canEdit, canEd
   function closeAssignmentSwap() {
     setSwappingAssignments(false);
     setAssignmentSwapMode("assignment");
+    setMoveCrewsWithGameDetails(false);
     setFirstSwapGameId("");
     setSecondSwapGameId("");
     setFirstSwapAssignmentId("");
@@ -1321,10 +1375,11 @@ function ScheduleView({ session, event, data, availableOfficials, canEdit, canEd
     setMessage("");
     try {
       if (assignmentSwapMode === "crew") await swapGameCrews(session, firstSwapGameId, secondSwapGameId);
+      else if (assignmentSwapMode === "details") await swapGameDetails(session, firstSwapGameId, secondSwapGameId, moveCrewsWithGameDetails);
       else await swapGameAssignments(session, firstSwapAssignmentId, secondSwapAssignmentId);
       closeAssignmentSwap();
       await onCreated();
-      setMessage(`${assignmentSwapMode === "crew" ? "Full crews" : "Assignments"} swapped. No notification was sent. Both games remain marked as updated until an Event Admin confirms the changes.`);
+      setMessage(`${assignmentSwapMode === "crew" ? "Full crews" : assignmentSwapMode === "details" ? moveCrewsWithGameDetails ? "Game details and crews" : "Game details" : "Assignments"} swapped. No notification was sent. Both games remain marked as updated until an Event Admin confirms the changes.`);
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "Unable to swap these assignments.");
     } finally {
@@ -1347,21 +1402,23 @@ function ScheduleView({ session, event, data, availableOfficials, canEdit, canEd
     {swappingAssignments && <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) closeAssignmentSwap(); }}>
       <section className="confirmation-dialog assignment-swap-dialog" role="dialog" aria-modal="true" aria-labelledby="assignment-swap-title">
         <header><div><p className="eyebrow">SCHEDULE CORRECTION</p><h2 id="assignment-swap-title">Swap Assignments</h2><p>Choose two games from the currently filtered schedule, then exchange one assignment or the entire staffed crew.</p></div><button className="modal-close-button" aria-label="Close assignment swap" onClick={closeAssignmentSwap}>×</button></header>
-        <fieldset className="assignment-swap-mode"><legend>Swap</legend><label><input type="radio" name="assignment-swap-mode" checked={assignmentSwapMode === "assignment"} onChange={() => setAssignmentSwapMode("assignment")} />One assignment</label><label><input type="radio" name="assignment-swap-mode" checked={assignmentSwapMode === "crew"} onChange={() => { setAssignmentSwapMode("crew"); setFirstSwapAssignmentId(""); setSecondSwapAssignmentId(""); }} />Entire staffed crew</label></fieldset>
+        <fieldset className="assignment-swap-mode"><legend>Swap</legend><label><input type="radio" name="assignment-swap-mode" checked={assignmentSwapMode === "assignment"} onChange={() => setAssignmentSwapMode("assignment")} />One assignment</label><label><input type="radio" name="assignment-swap-mode" checked={assignmentSwapMode === "crew"} onChange={() => { setAssignmentSwapMode("crew"); setFirstSwapAssignmentId(""); setSecondSwapAssignmentId(""); }} />Entire staffed crew</label><label><input type="radio" name="assignment-swap-mode" checked={assignmentSwapMode === "details"} onChange={() => { setAssignmentSwapMode("details"); setFirstSwapAssignmentId(""); setSecondSwapAssignmentId(""); }} />Game matchup and details</label></fieldset>
         <div className="assignment-swap-grid">
           <fieldset><legend>First Game</legend><label>Game<select value={firstSwapGameId} onChange={(change) => { setFirstSwapGameId(change.target.value); setFirstSwapAssignmentId(""); if (change.target.value === secondSwapGameId) { setSecondSwapGameId(""); setSecondSwapAssignmentId(""); } }}><option value="">Choose a game</option>{orderedSwapGames.map((item) => <option value={item.id} key={item.id}>{swapGameLabel(item)}</option>)}</select></label>{assignmentSwapMode === "assignment" && <label>Official and position<select value={firstSwapAssignmentId} disabled={!firstSwapGameId} onChange={(change) => setFirstSwapAssignmentId(change.target.value)}><option value="">Choose an assignment</option>{firstSwapAssignments.map((assignment) => <option value={assignment.id} key={assignment.id}>{swapAssignmentLabel(assignment)}</option>)}</select></label>}</fieldset>
           <fieldset><legend>Second Game</legend><label>Game<select value={secondSwapGameId} onChange={(change) => { setSecondSwapGameId(change.target.value); setSecondSwapAssignmentId(""); }}><option value="">Choose a different game</option>{orderedSwapGames.filter((item) => item.id !== firstSwapGameId).map((item) => <option value={item.id} key={item.id}>{swapGameLabel(item)}</option>)}</select></label>{assignmentSwapMode === "assignment" && <label>Official and position<select value={secondSwapAssignmentId} disabled={!secondSwapGameId} onChange={(change) => setSecondSwapAssignmentId(change.target.value)}><option value="">Choose an assignment</option>{secondSwapAssignments.map((assignment) => <option value={assignment.id} key={assignment.id}>{swapAssignmentLabel(assignment)}</option>)}</select></label>}</fieldset>
         </div>
-        <p className="import-note">{assignmentSwapMode === "crew" ? "Full crews must have the same number of staffed assignments. Officials exchange slots in imported crew order; each game's position structure stays in place. " : "The selected officials exchange game slots; each position stays with its original game. "}No notification or acceptance request is sent. Existing ratings are not changed. Both games will be marked as updated.</p>
-        <div className="assignment-swap-actions"><button className="secondary" disabled={busy} onClick={closeAssignmentSwap}>Cancel</button><button className="primary" disabled={busy || !firstSwapGameId || !secondSwapGameId || (assignmentSwapMode === "assignment" && (!firstSwapAssignmentId || !secondSwapAssignmentId))} onClick={() => void saveAssignmentSwap()}>{busy ? "Swapping…" : assignmentSwapMode === "crew" ? "Swap Full Crews" : "Swap Assignments"}</button></div>
+        {assignmentSwapMode === "details" && <label className="game-operational-toggle"><input type="checkbox" checked={moveCrewsWithGameDetails} onChange={(change) => setMoveCrewsWithGameDetails(change.target.checked)} /><span><strong>Move crews with games</strong><small>Use when the matchups switch fields or times and each staffed crew should stay with its matchup.</small></span></label>}
+        <p className="import-note">{assignmentSwapMode === "crew" ? "Full crews must have the same number of staffed assignments. Officials exchange slots in imported crew order; each game's position structure stays in place. " : assignmentSwapMode === "details" ? moveCrewsWithGameDetails ? "Teams and competition details exchange schedule slots, and the full staffed crews move with their games. Both games must have the same number of staffed assignments. Time, venue, field, and source identifiers stay in place. " : "Teams, division, age group, gender, game type, and operational status exchange schedule slots. Time, venue, field, crew, and source identifiers stay in place. " : "The selected officials exchange game slots; each position stays with its original game. "}No notification or acceptance request is sent. Existing ratings are not changed. Both games will be marked as updated.</p>
+        <div className="assignment-swap-actions"><button className="secondary" disabled={busy} onClick={closeAssignmentSwap}>Cancel</button><button className="primary" disabled={busy || !firstSwapGameId || !secondSwapGameId || (assignmentSwapMode === "assignment" && (!firstSwapAssignmentId || !secondSwapAssignmentId))} onClick={() => void saveAssignmentSwap()}>{busy ? "Swapping…" : assignmentSwapMode === "crew" ? "Swap Full Crews" : assignmentSwapMode === "details" ? "Swap Game Details" : "Swap Assignments"}</button></div>
       </section>
     </div>}
+    {editingGameInfo && <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) setEditingGameInfo(null); }}><section className="confirmation-dialog game-info-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="game-info-editor-title"><header><div><p className="eyebrow">GAME INFORMATION</p><h2 id="game-info-editor-title">Edit Game</h2><p>Source and import identifiers remain unchanged.</p></div><button className="modal-close-button" aria-label="Close game editor" onClick={() => setEditingGameInfo(null)}>×</button></header><div className="game-info-editor-grid"><label>Date and time<input type="datetime-local" value={gameInfoDraft.starts_at} onChange={(change) => setGameInfoDraft({ ...gameInfoDraft, starts_at: change.target.value })} /></label><label>Venue or site<input value={gameInfoDraft.venue_name} onChange={(change) => setGameInfoDraft({ ...gameInfoDraft, venue_name: change.target.value })} /></label><label>Field<input value={gameInfoDraft.field_name} onChange={(change) => setGameInfoDraft({ ...gameInfoDraft, field_name: change.target.value })} /></label><label>Home team<input value={gameInfoDraft.home_team} onChange={(change) => setGameInfoDraft({ ...gameInfoDraft, home_team: change.target.value })} /></label><label>Away team<input value={gameInfoDraft.away_team} onChange={(change) => setGameInfoDraft({ ...gameInfoDraft, away_team: change.target.value })} /></label><label>Division or competition<input value={gameInfoDraft.division} onChange={(change) => setGameInfoDraft({ ...gameInfoDraft, division: change.target.value })} /></label><label>Age group<input value={gameInfoDraft.age_group} onChange={(change) => setGameInfoDraft({ ...gameInfoDraft, age_group: change.target.value })} /></label><label>Gender<input value={gameInfoDraft.gender} onChange={(change) => setGameInfoDraft({ ...gameInfoDraft, gender: change.target.value })} /></label><label>Game type<input value={gameInfoDraft.game_type} onChange={(change) => setGameInfoDraft({ ...gameInfoDraft, game_type: change.target.value })} /></label><label className="game-operational-toggle"><input type="checkbox" checked={gameInfoDraft.operational} onChange={(change) => setGameInfoDraft({ ...gameInfoDraft, operational: change.target.checked })} /><span><strong>Operational record</strong><small>Use for HQ, standby, coordinator, or similar non-match schedule records.</small></span></label></div><p className="import-note">No notification or acceptance request is sent. This game will be marked as updated.</p><div className="game-info-editor-actions"><button className="secondary" disabled={busy} onClick={() => setEditingGameInfo(null)}>Cancel</button><button className="primary" disabled={busy || !gameInfoDraft.starts_at || !gameInfoDraft.field_name.trim() || !gameInfoDraft.home_team.trim() || !gameInfoDraft.away_team.trim()} onClick={() => void saveGameInfo()}>{busy ? "Saving…" : "Save Game Information"}</button></div></section></div>}
     {editingAssignmentsFor && <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) setEditingAssignmentsFor(null); }}><section className="confirmation-dialog assignment-editor-dialog" role="dialog" aria-modal="true"><header><div><p className="eyebrow">POSTED SCHEDULE CORRECTION</p><h2>{editingAssignmentsFor.home_team} vs. {editingAssignmentsFor.away_team}</h2><p>{formatDate(editingAssignmentsFor.starts_at)} · {formatTime(editingAssignmentsFor.starts_at)} · {editingAssignmentsFor.field_name}</p></div><button className="modal-close-button" aria-label="Close assignment editor" onClick={() => setEditingAssignmentsFor(null)}>×</button></header><p className="import-note">Changes update Law18Ref immediately. Officials are not notified and no acceptance is requested.</p><div className="assignment-editor-rows">{assignmentDrafts.map((draft, index) => <div className="assignment-editor-row" key={index}><span className="assignment-row-number" aria-hidden="true">{index + 1}</span><label className="assignment-position-field">Position<select value={draft.position} onChange={(change) => setAssignmentDrafts((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, position: change.target.value as AssignmentRecord["position"] } : item))}>{(["referee", "assistant_referee", "fourth_official", "mentor", "referee_coach", "site_coordinator", "site_supervisor", "standby", "other"] as AssignmentRecord["position"][]).map((position) => <option value={position} key={position}>{positionLabel(position)}</option>)}</select></label><label className="assignment-official-field">Official<select value={draft.official_id} onChange={(change) => setAssignmentDrafts((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, official_id: change.target.value } : item))}><option value="">Open position</option>{availableOfficials.filter((official) => !official.archived_at && !official.merged_into_official_id).slice().sort(comparePeopleByLastName).map((official) => <option value={official.id} key={official.id}>{officialSelectorLabel(official)}</option>)}</select></label><button className="text-button assignment-remove-button" type="button" onClick={() => setAssignmentDrafts((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</button><label className="assignment-display-title">Display title (optional)<input value={draft.position_title} onChange={(change) => setAssignmentDrafts((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, position_title: change.target.value } : item))} placeholder={positionLabel(draft.position)} /></label></div>)}</div><button className="secondary add-assignment-row" type="button" onClick={() => setAssignmentDrafts((current) => [...current, { official_id: "", position: "other", position_title: "", source_position_title: "" }])}>Add Assignment</button><div className="assignment-editor-actions"><button className="secondary" disabled={busy} onClick={() => setEditingAssignmentsFor(null)}>Cancel</button><button className="primary" disabled={busy} onClick={() => void saveAssignmentChanges()}>{busy ? "Saving…" : "Update Posted Schedule"}</button></div></section></div>}
     {adding && <div className="confirmation-backdrop" role="presentation" onClick={(click) => { if (click.target === click.currentTarget) setAdding(false); }}><article className="panel manual-entry-form manual-entry-modal" role="dialog" aria-modal="true" aria-label="Add game manually"><header><h2>Add a game to {event.name}</h2><button className="modal-close-button" aria-label="Close" onClick={() => setAdding(false)}>×</button></header><div className="manual-form-grid"><label>Date and time<input type="datetime-local" value={game.starts_at} onChange={(e) => setGame({ ...game, starts_at: e.target.value })} /></label><label>Field<input value={game.field_name} onChange={(e) => setGame({ ...game, field_name: e.target.value })} /></label><label>Home team<input value={game.home_team} onChange={(e) => setGame({ ...game, home_team: e.target.value })} /></label><label>Away team<input value={game.away_team} onChange={(e) => setGame({ ...game, away_team: e.target.value })} /></label><label>Division or competition<input value={game.division} onChange={(e) => setGame({ ...game, division: e.target.value })} /></label></div><button className="primary" disabled={busy || !game.starts_at || !game.field_name.trim() || !game.home_team.trim() || !game.away_team.trim()} onClick={addGame}>{busy ? "Adding…" : "Add game"}</button></article></div>}
     {message && <p className="pilot-message">{message}</p>}
     <div className="schedule-groups">{Object.entries(groupedGames).map(([key, group]) => { const collapsed = collapsedScheduleGroups.has(key); return <article className="panel schedule-group" key={key}><button className="schedule-group-toggle" type="button" aria-expanded={!collapsed} onClick={() => setCollapsedScheduleGroups((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; })}><span>{group.label}</span><small>{group.games.length} game{group.games.length === 1 ? "" : "s"}</small><b>{collapsed ? "+" : "−"}</b></button>{!collapsed && <div className="schedule-list">{group.games.map((game) => {
       const crew = sortGameCrew(data.assignments.filter((assignment) => assignment.game_id === game.id));
-      return <article className={`schedule-card coach-schedule-card ${showScheduleChangeMarkers && game.schedule_changed_at ? "schedule-updated" : ""}`} key={game.id}><div className="timebox"><time>{formatDate(game.starts_at)}</time><strong>{formatTime(game.starts_at)}</strong><span>{game.field_name}</span>{showScheduleChangeMarkers && game.schedule_changed_at && <small>Updated</small>}</div><div className="schedule-game-details"><h2>{game.home_team} vs. {game.away_team}</h2><p>{[game.age_group, game.gender, game.division].filter(Boolean).join(" · ")}</p><div className="schedule-crew-list">{crew.map((assignment) => { const checked = data.checkIns.some((item) => item.official_id === assignment.official_id && item.event_date === game.starts_at.slice(0, 10) && item.status === "checked_in"); const official = officials.get(assignment.official_id); return <span className={checked ? "schedule-crew-checked" : ""} key={assignment.id}><b>{positionLabel(assignment.position, assignment.position_title)}</b>{official ? <button className="official-name-link" onClick={() => onSelectOfficial(official.id, game.starts_at.slice(0, 10))}>{official.full_name}{ratingLabel?.(official.id, assignment.position)}</button> : <strong>Open</strong>}</span>; })}{!crew.length && <small>No crew assignments are visible for this game.</small>}</div></div><div className="schedule-game-actions">{canEditAssignments && <button className="secondary" onClick={() => openAssignmentEditor(game)}>Edit Assignments</button>}{showScheduleChangeMarkers && game.schedule_changed_at && canConfirmChanges && <button className="primary" disabled={busy} onClick={() => void confirmScheduleChange(game.id)}>Change Confirmed</button>}{canRateGame(game) && <button className="primary rate-crew-button" onClick={() => onRateCrew(game.id)}>Rate Crew</button>}</div></article>;
+      return <article className={`schedule-card coach-schedule-card ${showScheduleChangeMarkers && game.schedule_changed_at ? "schedule-updated" : ""}`} key={game.id}><div className="timebox"><time>{formatDate(game.starts_at)}</time><strong>{formatTime(game.starts_at)}</strong><span>{game.field_name}</span>{showScheduleChangeMarkers && game.schedule_changed_at && <small>Updated</small>}</div><div className="schedule-game-details"><h2>{game.home_team} vs. {game.away_team}</h2><p>{[game.age_group, game.gender, game.division].filter(Boolean).join(" · ")}</p><div className="schedule-crew-list">{crew.map((assignment) => { const checked = data.checkIns.some((item) => item.official_id === assignment.official_id && item.event_date === game.starts_at.slice(0, 10) && item.status === "checked_in"); const official = officials.get(assignment.official_id); return <span className={checked ? "schedule-crew-checked" : ""} key={assignment.id}><b>{positionLabel(assignment.position, assignment.position_title)}</b>{official ? <button className="official-name-link" onClick={() => onSelectOfficial(official.id, game.starts_at.slice(0, 10))}>{official.full_name}{ratingLabel?.(official.id, assignment.position)}</button> : <strong>Open</strong>}</span>; })}{!crew.length && <small>No crew assignments are visible for this game.</small>}</div></div><div className="schedule-game-actions">{canEditAssignments && <button className="secondary" onClick={() => openGameInfoEditor(game)}>Edit Game Info</button>}{canEditAssignments && <button className="secondary" onClick={() => openAssignmentEditor(game)}>Edit Assignments</button>}{showScheduleChangeMarkers && game.schedule_changed_at && canConfirmChanges && <button className="primary" disabled={busy} onClick={() => void confirmScheduleChange(game.id)}>Change Confirmed</button>}{canRateGame(game) && <button className="primary rate-crew-button" onClick={() => onRateCrew(game.id)}>Rate Crew</button>}</div></article>;
     })}</div>}</article>; })}</div>
   </section>;
 }

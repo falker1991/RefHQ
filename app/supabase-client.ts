@@ -2282,6 +2282,17 @@ export async function createGame(
   return rows[0];
 }
 
+export async function updateGameDetails(
+  session: Law18Session,
+  gameId: string,
+  values: Pick<GameRecord, "starts_at" | "field_name" | "venue_name" | "home_team" | "away_team" | "division" | "age_group" | "gender" | "game_type" | "operational">,
+) {
+  return rest<GameRecord>(session, "rpc/update_game_details", {
+    method: "POST",
+    body: JSON.stringify({ game_uuid: gameId, requested_game: values }),
+  });
+}
+
 export async function replaceGameAssignments(
   session: Law18Session,
   gameId: string,
@@ -2318,6 +2329,13 @@ export async function swapGameCrews(
       first_game_uuid: firstGameId,
       second_game_uuid: secondGameId,
     }),
+  });
+}
+
+export async function swapGameDetails(session: Law18Session, firstGameId: string, secondGameId: string, moveCrewsWithGame = false) {
+  return rest<{ event_id: string; first_game_id: string; second_game_id: string; crews_moved_with_games: boolean; crew_size: number | null }>(session, "rpc/swap_game_details_with_options", {
+    method: "POST",
+    body: JSON.stringify({ first_game_uuid: firstGameId, second_game_uuid: secondGameId, move_crews_with_game: moveCrewsWithGame }),
   });
 }
 

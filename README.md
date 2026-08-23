@@ -2,6 +2,15 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.39.1
+
+- Game-detail swaps can optionally move each full staffed crew with its matchup when games switch schedule slots. The combined operation is atomic, permission checked, audited, sends no notifications, and leaves existing ratings unchanged.
+
+## v0.39.0
+
+- Adds permission-gated editing for game time, venue, field, matchup, competition details, and operational status while preserving source identifiers.
+- Adds an atomic filtered-game option to swap matchups and competition details between schedule slots without moving their time, field, crew, ratings, or import identity.
+
 ## v0.38.3
 
 - Adds an atomic full-crew swap option for two filtered Schedule games with matching staffed crew sizes, preserving each game's position structure and imported crew order.

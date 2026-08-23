@@ -2,6 +2,11 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.35.5
+
+- Lets authorized staff remove all access from a coach in one action or remove a selected coach from every selected/filtered game in bulk.
+- Converts full-event coaching access into game-specific access when only part of that access is removed, preserving all unselected games.
+
 ## v0.35.4
 
 - Highlights changed games throughout every Assignment Board view until an authorized administrator confirms the existing schedule-change marker.

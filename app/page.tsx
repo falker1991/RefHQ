@@ -133,7 +133,7 @@ import {
 import { exportScheduleExcel, exportSchedulePdf, type ScheduleExportRow, type SchedulePdfOptions } from "./schedule-export";
 import { normalizePhoneNumber, phoneCallHref } from "./phone";
 
-const APP_VERSION = "0.35.4";
+const APP_VERSION = "0.35.5";
 
 type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups";
 const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups"];
@@ -3266,6 +3266,55 @@ function CoachWorkspace({
       setBusy(false);
     }
   }
+  async function removeAllCoachAccess(coach: OfficialRecord | undefined, assignments: CoachAssignmentRecord[]) {
+    const coachName = coach?.full_name || "this coach";
+    if (!window.confirm(`Remove all coaching access for ${coachName} in ${event.name}?`)) return;
+    setBusy(true);
+    try {
+      await Promise.all(assignments.map((assignment) => deleteCoachAssignment(session, assignment.id)));
+      setMessage(`All coaching access for ${coachName} was removed.`);
+      onSaved();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to remove all coaching access.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function removeCoachFromSelectedGames() {
+    const coach = coachCandidates.find((official) => official.id === coachId);
+    if (!coach || !selectedGameIds.length) return;
+    const coachAssignments = data.coachAssignments.filter((assignment) =>
+      assignment.coach_official_id === coach.id || assignment.coach_id === coach.linked_user_id);
+    const selectedIds = new Set(selectedGameIds);
+    const directAssignments = coachAssignments.filter((assignment) => assignment.game_id && selectedIds.has(assignment.game_id));
+    const fullScheduleAssignments = coachAssignments.filter((assignment) => assignment.full_schedule);
+    if (!directAssignments.length && !fullScheduleAssignments.length) {
+      setMessage(`${coach.full_name} does not have access to the selected games.`);
+      return;
+    }
+    if (!window.confirm(`Remove ${coach.full_name}'s access to ${selectedGameIds.length} selected game${selectedGameIds.length === 1 ? "" : "s"}?`)) return;
+    setBusy(true);
+    try {
+      // A full-schedule row cannot exclude individual games. Preserve access to
+      // every unselected rateable game before removing that broad assignment.
+      if (fullScheduleAssignments.length) {
+        const remainingGameIds = scheduleGames.map((game) => game.id).filter((gameId) => !selectedIds.has(gameId));
+        const existingDirectGameIds = new Set(coachAssignments.map((assignment) => assignment.game_id).filter((gameId): gameId is string => Boolean(gameId)));
+        await Promise.all(remainingGameIds
+          .filter((gameId) => !existingDirectGameIds.has(gameId))
+          .map((gameId) => createCoachAssignment(session, event.id, coach, gameId)));
+      }
+      const removals = [...new Map([...directAssignments, ...fullScheduleAssignments].map((assignment) => [assignment.id, assignment])).values()];
+      await Promise.all(removals.map((assignment) => deleteCoachAssignment(session, assignment.id)));
+      setMessage(`${coach.full_name}'s access to ${selectedGameIds.length} selected game${selectedGameIds.length === 1 ? " was" : "s were"} removed.`);
+      setSelectedGameIds([]);
+      onSaved();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Unable to remove the coach from the selected games.");
+    } finally {
+      setBusy(false);
+    }
+  }
   return <section className="page-section"><div className="section-title"><div><p className="eyebrow">REFEREE DEVELOPMENT</p><h1>Coaching Assignments</h1><p>Assign coaches to the complete event schedule or selected games.</p></div></div>
     {canManage && <article className="panel coach-assignment-form bulk-coach-form"><label>Referee coach<select value={coachId} onChange={(event) => setCoachId(event.target.value)}><option value="">Select a linked organization member</option>{linkedOfficials.map((official) => <option value={official.linked_user_id!} key={official.id}>{official.full_name} — {official.email}</option>)}</select></label><label>Schedule scope<select value={scope} onChange={(event) => setScope(event.target.value as typeof scope)}><option value="full">Full event schedule</option><option value="games">Multiple selected games</option></select></label>{scope === "games" && <fieldset className="coach-game-picker"><legend>Select games</legend>{scheduleGames.map((game) => <label key={game.id}><input type="checkbox" checked={selectedGameIds.includes(game.id)} onChange={(event) => setSelectedGameIds((current) => event.target.checked ? [...current, game.id] : current.filter((id) => id !== game.id))} /><span><strong>{formatDate(game.starts_at)} · {formatTime(game.starts_at)} · {game.field_name}</strong><small>{game.home_team} vs. {game.away_team}</small></span></label>)}</fieldset>}<button className="primary" disabled={busy || !coachId || (scope === "games" && !selectedGameIds.length)} onClick={assignCoach}>{busy ? "Saving…" : scope === "games" ? `Assign Coach to ${selectedGameIds.length || ""} Game${selectedGameIds.length === 1 ? "" : "s"}` : "Assign Coach"}</button></article>}
     {message && <p className="pilot-message">{message}</p>}
@@ -3276,7 +3325,7 @@ function CoachWorkspace({
         .map((assignment) => ({ assignment, game: gameById.get(assignment.game_id!) }))
         .sort((left, right) => (left.game?.starts_at || "").localeCompare(right.game?.starts_at || "") || (left.game?.field_name || "").localeCompare(right.game?.field_name || "", undefined, { numeric: true }));
       return <details className="panel coach-access-card" key={coach?.id || assignments[0].id}>
-        <summary><span className="official-name-cell"><span className="avatar">{initials(coach?.full_name || "Coach")}</span><span><strong>{coach?.full_name || "Linked coach account"}</strong><small>{hasFullSchedule ? "Full event schedule access" : `${gameAssignments.length} assigned game${gameAssignments.length === 1 ? "" : "s"}`}</small></span></span><b aria-hidden="true" /></summary>
+        <summary><span className="official-name-cell"><span className="avatar">{initials(coach?.full_name || "Coach")}</span><span><strong>{coach?.full_name || "Linked coach account"}</strong><small>{hasFullSchedule ? "Full event schedule access" : `${gameAssignments.length} assigned game${gameAssignments.length === 1 ? "" : "s"}`}</small></span></span>{canManage && <button className="danger-button coach-remove-all" type="button" disabled={busy} onClick={(click) => { click.preventDefault(); click.stopPropagation(); void removeAllCoachAccess(coach, assignments); }}>Remove All Access</button>}<b aria-hidden="true" /></summary>
         <div className="coach-access-summary">
           {hasFullSchedule && <div className="coach-access-row"><div><strong>Full Rateable Schedule</strong><small>Access to every ratings-enabled game in this event</small></div>{canManage && assignments.filter((assignment) => assignment.full_schedule).map((assignment) => <button className="text-button" disabled={busy} onClick={() => removeAssignment(assignment.id)} key={assignment.id}>Remove</button>)}</div>}
           {!hasFullSchedule && gameAssignments.map(({ assignment, game }) => <div className="coach-access-row" key={assignment.id}><div><strong>{game ? `${formatDate(game.starts_at)} · ${formatTime(game.starts_at)} · ${game.field_name}` : "Selected game"}</strong>{game && <small>{game.home_team} vs. {game.away_team}</small>}</div>{canManage && <button className="text-button" disabled={busy} onClick={() => removeAssignment(assignment.id)}>Remove</button>}</div>)}
@@ -3286,7 +3335,7 @@ function CoachWorkspace({
     {canManage && <details className="panel coach-schedule-manager">
       <summary><span><span className="eyebrow">FULL SCHEDULE</span><strong>Assign Coaches by Game</strong><small>Filter the event schedule, then choose a coach for any game.</small></span><b aria-hidden="true" /></summary><div className="coach-schedule-manager-body">
       <div className="coach-schedule-filters"><AssignmentFilterMenu label="Day" options={scheduleDates.map((date) => ({ id: date, name: formatDate(date) }))} selected={scheduleDatesFilter} onChange={setScheduleDatesFilter} /><AssignmentFilterMenu label="Venue / Site" options={scheduleSites.map((site) => ({ id: site, name: site }))} selected={scheduleSitesFilter} onChange={setScheduleSitesFilter} /><AssignmentFilterMenu label="Field" options={scheduleFields.map((field) => ({ id: field, name: field }))} selected={scheduleFieldsFilter} onChange={setScheduleFieldsFilter} /><AssignmentFilterMenu label="Time" options={scheduleTimes.map((time) => ({ id: time, name: time }))} selected={scheduleTimesFilter} onChange={setScheduleTimesFilter} /><label>Teams, age group, or division<input type="search" value={scheduleQuery} onChange={(event) => setScheduleQuery(event.target.value)} placeholder="Search schedule…" /></label><SavedFilterControls filterKey={`coaching:${event.id}`} value={{ scheduleDatesFilter, scheduleSitesFilter, scheduleFieldsFilter, scheduleTimesFilter, scheduleQuery }} onApply={(saved) => { setScheduleDatesFilter(saved.scheduleDatesFilter || []); setScheduleSitesFilter(saved.scheduleSitesFilter || []); setScheduleFieldsFilter(saved.scheduleFieldsFilter || []); setScheduleTimesFilter(saved.scheduleTimesFilter || []); setScheduleQuery(saved.scheduleQuery || ""); }} /></div>
-      <div className="coach-bulk-selection-bar"><label><input type="checkbox" checked={allFilteredGamesSelected} disabled={!filteredScheduleGames.length} onChange={toggleFilteredGames} /><span>{allFilteredGamesSelected ? "Clear Filtered Games" : `Select All Filtered Games (${filteredScheduleGames.length})`}</span></label><strong>{selectedGameIds.length} game{selectedGameIds.length === 1 ? "" : "s"} selected</strong><select aria-label="Coach for selected games" value={coachId} onChange={(event) => setCoachId(event.target.value)}><option value="">Choose coach</option>{linkedOfficials.map((official) => <option value={official.linked_user_id!} key={official.id}>{official.full_name}</option>)}</select><button className="primary" disabled={busy || !coachId || !selectedGameIds.length} onClick={assignCoachToSelectedGames}>{busy ? "Saving…" : `Assign Coach to ${selectedGameIds.length || "Selected"} Game${selectedGameIds.length === 1 ? "" : "s"}`}</button></div>
+      <div className="coach-bulk-selection-bar"><label><input type="checkbox" checked={allFilteredGamesSelected} disabled={!filteredScheduleGames.length} onChange={toggleFilteredGames} /><span>{allFilteredGamesSelected ? "Clear Filtered Games" : `Select All Filtered Games (${filteredScheduleGames.length})`}</span></label><strong>{selectedGameIds.length} game{selectedGameIds.length === 1 ? "" : "s"} selected</strong><select aria-label="Coach for selected games" value={coachId} onChange={(event) => setCoachId(event.target.value)}><option value="">Choose coach</option>{linkedOfficials.map((official) => <option value={official.linked_user_id!} key={official.id}>{official.full_name}</option>)}</select><div className="coach-bulk-actions"><button className="primary" disabled={busy || !coachId || !selectedGameIds.length} onClick={assignCoachToSelectedGames}>{busy ? "Saving…" : `Assign to ${selectedGameIds.length || "Selected"} Game${selectedGameIds.length === 1 ? "" : "s"}`}</button><button className="danger-button" disabled={busy || !coachId || !selectedGameIds.length} onClick={removeCoachFromSelectedGames}>{busy ? "Saving…" : `Remove from ${selectedGameIds.length || "Selected"} Game${selectedGameIds.length === 1 ? "" : "s"}`}</button></div></div>
       <div className="coach-schedule-list">{filteredScheduleGames.map((game) => {
         const assigned = data.coachAssignments.filter((assignment) => assignment.game_id === game.id).map((assignment) => assignmentCoach(assignment)?.full_name).filter(Boolean);
         return <div className={`coach-schedule-row${selectedGameIds.includes(game.id) ? " selected" : ""}`} key={game.id}><input className="coach-game-checkbox" type="checkbox" aria-label={`Select ${game.home_team} versus ${game.away_team}`} checked={selectedGameIds.includes(game.id)} onChange={(event) => setSelectedGameIds((current) => event.target.checked ? [...new Set([...current, game.id])] : current.filter((id) => id !== game.id))} /><time><strong>{formatTime(game.starts_at)}</strong><small>{formatDate(game.starts_at)}</small></time><div><strong>{game.home_team} vs. {game.away_team}</strong><small>{game.field_name}{game.division ? ` · ${game.division}` : ""}</small><span>{assigned.length ? `Assigned: ${assigned.join(", ")}` : "No coach assigned"}</span></div><select aria-label={`Coach for ${game.home_team} versus ${game.away_team}`} value={gameCoachSelections[game.id] || ""} onChange={(event) => setGameCoachSelections((current) => ({ ...current, [game.id]: event.target.value }))}><option value="">Choose coach</option>{linkedOfficials.map((official) => <option value={official.linked_user_id!} key={official.id}>{official.full_name}</option>)}</select><button className="secondary" disabled={busy || !gameCoachSelections[game.id]} onClick={() => assignScheduleGame(game.id)}>Assign</button></div>;

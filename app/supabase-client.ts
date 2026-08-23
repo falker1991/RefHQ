@@ -365,6 +365,8 @@ export type AssessmentRecord = {
   retained_for_referee?: boolean;
   rated_position?: AssignmentRecord["position"] | null;
   rated_position_title?: string | null;
+  edited_at?: string | null;
+  edited_by?: string | null;
 };
 
 export type RatingHistory = {
@@ -1861,21 +1863,19 @@ export async function saveAssessment(
   session: Law18Session,
   organizationId: string,
   values: Omit<AssessmentRecord, "id" | "coach_id" | "submitted_at">,
+  targetAssessmentId?: string | null,
 ) {
   const rows = await rest<AssessmentRecord[]>(
     session,
-    "assessments?on_conflict=game_id,official_id,coach_id",
+    "rpc/save_rating",
     {
       method: "POST",
       body: JSON.stringify({
-        ...values,
-        organization_id: organizationId,
-        coach_id: session.user.id,
-        submitted_at: values.status === "draft" ? null : new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        payload: { ...values, organization_id: organizationId },
+        target_assessment: targetAssessmentId || null,
       }),
     },
-    "resolution=merge-duplicates,return=representation",
+    "return=representation",
   );
   const saved = rows[0];
   if (!saved?.id) throw new Error("The rating was not confirmed by the database. Please try saving again.");

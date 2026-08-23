@@ -2,6 +2,14 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.40.0
+
+- Separated official first and last names while preserving full-name displays and standardized selectors as `Last, First`.
+- Replaced the administrative dashboard's active-event panels with compact account, group, role, check-in, and role-accessible navigation controls.
+- Locked submitted coach ratings, added administrator-only audited corrections with retained revisions, and identified the submitting and editing users.
+- Added per-user and administrative crew-rating markers to Schedule and Assignment Board games.
+- Corrected Assignment Board confirmation-button state styling and reviewed save-path performance.
+
 ## v0.39.4
 
 - Event Admins and higher can confirm pending schedule changes directly from updated Assignment Board game tiles, clearing the orange marker without leaving the board.

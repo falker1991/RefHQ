@@ -22,7 +22,7 @@ test("Version 0.35.4 uses the dashboard loading label, favicon metadata, and pre
   assert.match(manifest, /law18ref-icon-192\.png/);
   assert.match(manifest, /"name": "Law18Referee Management"/);
   assert.doesNotMatch(manifest, /Law18Referee Management by FalkSports/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
   assert.match(viteConfig, /keep_vars: true/);
 });
 
@@ -877,12 +877,12 @@ test("all users have active-group role-aware help", async () => {
 
 test("v0.35.4 shows the application version beside Help for the Site Owner only", async () => {
   const [page, css, packageJson] = await Promise.all([read("app/page.tsx"), read("app/globals.css"), read("package.json")]);
-  assert.match(page, /const APP_VERSION = "0\.39\.2"/);
+  assert.match(page, /const APP_VERSION = "0\.39\.3"/);
   assert.match(page, /profile\?\.is_site_owner && <span className="owner-version"/);
   assert.match(page, /<button className="help-button"/);
   assert.match(page, /Version \{APP_VERSION\}/);
   assert.match(css, /\.owner-version\{/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("assessment upsert uses a non-partial matching unique index", async () => {
@@ -899,7 +899,7 @@ test("v0.35.4 gives combined Site Supervisor and Referee Coach users the Ratings
   const [page, packageJson] = await Promise.all([read("app/page.tsx"), read("package.json")]);
   assert.match(page, /: isSiteCoordinator[\s\S]*canAssess && eventFeatureEnabled\(event, "ratings"\)[\s\S]*\["assessments", "Ratings"\]/);
   assert.match(page, /const canAssess = isCoach/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("rating drafts are readable only by their creator", async () => {
@@ -1060,7 +1060,7 @@ test("v0.35.4 creates paper-efficient schedule PDFs with one dynamic column per 
   assert.match(page, /Group Separator Rows/);
   assert.match(page, /Each crew position receives its own column/);
   assert.match(css, /\.schedule-pdf-options/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("assignment board exposes all three Phase 1 views", async () => {
@@ -1118,7 +1118,7 @@ test("v0.34.0 retains ratings that administrators exclude from scoring averages"
   assert.match(page, /assessment\.include_in_averages !== false\s+&& assessment\.visibility === "public"/);
   assert.match(page, /Official \$\{index\} Counted in Averages/);
   assert.match(css, /\.excluded-from-average\{/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("roadmap records organization capability and check-in method controls", async () => {
@@ -1738,7 +1738,7 @@ test("v0.28.1 keeps schedule crew columns aligned without range-query support", 
   assert.match(styles, /\.schedule-crew-list>span\{box-sizing:border-box;flex:0 0 calc\(\(100% - 21px\)\/4\)\}/);
   assert.match(styles, /@media\(max-width:900px\)\{\.schedule-crew-list>span\{flex-basis:calc\(\(100% - 7px\)\/2\)\}\}/);
   assert.match(styles, /@media\(max-width:700px\)\{\.schedule-crew-list>span\{flex-basis:100%\}\}/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("v0.31.9 edits board assignments through the permission-gated game detail line", async () => {
@@ -1751,7 +1751,7 @@ test("v0.31.9 edits board assignments through the permission-gated game detail l
   assert.match(page, /<small>\{game\.division \|\| "Tournament match"\}<\/small>/);
   assert.match(styles, /Version 0\.31\.9 assignment-board edit trigger/);
   assert.match(styles, /\.board-game-details-link:hover/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("v0.32.0 makes ratings durable, position-aware, and swappable within a game", async () => {
@@ -1776,7 +1776,7 @@ test("v0.32.0 makes ratings durable, position-aware, and swappable within a game
   assert.match(page, /await swapSameGameRatings\(session, firstSwapRatingId, secondSwapRatingId\)/);
   assert.match(page, /assessment\.rated_position_title/);
   assert.match(styles, /Version 0\.32\.0 durable rating ownership and same-game swaps/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("v0.31.10 preserves imported order for matching crew positions", async () => {
@@ -1795,7 +1795,7 @@ test("v0.31.10 preserves imported order for matching crew positions", async () =
   assert.match(migration, /with ordinality as item\(value, ordinality\)/);
   assert.match(migration, /item\.ordinality - 1, true/);
   assert.match(migration, /order by crew_order, id/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("v0.32.1 skips assignment writes when an updated import crew is unchanged", async () => {
@@ -1806,7 +1806,7 @@ test("v0.32.1 skips assignment writes when an updated import crew is unchanged",
   assert.match(client, /assignmentsToWrite = assignmentPayload\.filter\(\(assignment\) => changedGameIds\.has\(assignment\.game_id\)\)/);
   assert.match(client, /if \(assignmentsToWrite\.length\)/);
   assert.doesNotMatch(client, /await Promise\.all\(importedGameIds\.map\(\(gameId\) => rest/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("v0.34.0 makes coach history private and expands draft filtering and exports", async () => {
@@ -1828,7 +1828,7 @@ test("v0.34.0 makes coach history private and expands draft filtering and export
   assert.match(page, /Duplicate Submission/);
   assert.match(page, /Summarize By/);
   assert.match(styles, /\.rating-export-dialog/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("v0.35.4 omits Skills Eval-only columns from Basic Eval-only exports", async () => {
@@ -1838,7 +1838,7 @@ test("v0.35.4 omits Skills Eval-only columns from Basic Eval-only exports", asyn
   assert.match(page, /else headings\.push\("Notes"\)/);
   assert.match(page, /if \(includesSkillsEvals\) headings\.push\(`Official \$\{index\} Positive Areas`/);
   assert.match(page, /else headings\.push\(`Official \$\{index\} Notes`\)/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("v0.35.4 keeps duplicate game-rating submissions adjacent in deterministic export order", async () => {
@@ -1848,7 +1848,7 @@ test("v0.35.4 keeps duplicate game-rating submissions adjacent in deterministic 
   assert.match(page, /\|\| left\.game_id\.localeCompare\(right\.game_id\)/);
   assert.match(page, /const exportedAssessments = \[\.\.\.sortedAssessments\]\.sort/);
   assert.match(page, /values\(\)\]\.sort\(\(a, b\) => compareExportGames\(a\[0\], b\[0\]\)/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("v0.35.4 names rating exports from compact active filters instead of the UTC export date", async () => {
@@ -1859,7 +1859,7 @@ test("v0.35.4 names rating exports from compact active filters instead of the UT
   assert.match(page, /filenameSegments\.push\(`ref-\$\{compactValues\(historyFilters\.referees, abbreviatedOfficialName\)\}`\)/);
   assert.match(page, /link\.download = `\$\{filenameSegments\.join\("_"\)\.slice\(0, 180\)\}\.csv`/);
   assert.doesNotMatch(page, /law18ref-ratings-\$\{ratingExportMode\}-\$\{new Date\(\)\.toISOString/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("v0.35.4 confirms crew-rating writes and refreshes saved data before closing", async () => {
@@ -1871,7 +1871,7 @@ test("v0.35.4 confirms crew-rating writes and refreshes saved data before closin
   assert.match(page, /ratingsConfirmed = true;\s+await onSaved\(\);\s+setMessage/);
   assert.match(page, /if \(modal\) onClose\?\.\(\)/);
   assert.match(page, /The ratings were saved, but the latest data could not be reloaded/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("v0.35.4 freezes assignment-grid field and time headers on both scroll axes", async () => {
@@ -1882,7 +1882,7 @@ test("v0.35.4 freezes assignment-grid field and time headers on both scroll axes
   assert.match(css, /\.board-wrap\{position:relative;width:min\(1680px,calc\(100vw - 24px\)\);max-width:none;max-height:min\(84dvh,900px\);margin-left:50%;overflow:auto;overscroll-behavior:auto/);
   assert.match(css, /\.assignment-board tbody>tr>th\{position:sticky;left:0;z-index:1/);
   assert.match(css, /\.assignment-board thead th:first-child\{left:0;z-index:3/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("v0.35.4 highlights unconfirmed assignment changes in every board view", async () => {
@@ -1893,7 +1893,7 @@ test("v0.35.4 highlights unconfirmed assignment changes in every board view", as
   assert.match(page, /game\.schedule_changed_at \? " · Updated" : ""/);
   assert.match(css, /\.board-game-updated\{/);
   assert.match(css, /\.first-assignment-row\.assignment-updated\{/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("v0.35.4 automatically activates new deployments for installed and reopened apps", async () => {
@@ -1909,11 +1909,11 @@ test("v0.35.4 automatically activates new deployments for installed and reopened
   assert.match(page, /document\.addEventListener\("visibilitychange", becameVisible\)/);
   assert.match(page, /window\.setInterval\(checkForLatestVersion, 5 \* 60 \* 1000\)/);
   assert.match(page, /navigator\.serviceWorker\.addEventListener\("controllerchange", controllerChanged\)/);
-  assert.match(worker, /law18referee-v0\.39\.2/);
+  assert.match(worker, /law18referee-v0\.39\.3/);
   assert.match(worker, /pathname === "\/version\.json"/);
   assert.match(worker, /new Request\(event\.request, \{ cache: "no-store" \}\)/);
-  assert.equal(JSON.parse(versionFile).version, "0.39.2");
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(versionFile).version, "0.39.3");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("v0.36.0 removes coach access in bulk while preserving unselected full-schedule games", async () => {
@@ -1928,7 +1928,7 @@ test("v0.36.0 removes coach access in bulk while preserving unselected full-sche
   assert.match(page, />Remove All Access</);
   assert.match(page, /Remove from \$\{selectedGameIds\.length/);
   assert.match(css, /\.coach-bulk-actions\{/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("v0.36.0 improves operational filters, directory ratings, modals, and mobile navigation", async () => {
@@ -1945,7 +1945,7 @@ test("v0.36.0 improves operational filters, directory ratings, modals, and mobil
   assert.match(page, /className="account-tray-scroll"/);
   assert.match(styles, /\.account-tray-scroll\{[^}]*overflow-y:auto/);
   assert.match(styles, /\.rating-modal \.assessment-actions\{bottom:0/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("v0.38.1 separates referee names and uses last-name-first selectors", async () => {
@@ -1964,7 +1964,7 @@ test("v0.38.1 separates referee names and uses last-name-first selectors", async
   assert.match(page, /`\$\{lastName\}, \$\{firstName\}`/);
   assert.match(page, /<label>First name<input autoComplete="given-name"/);
   assert.match(page, /<label>Last name<input autoComplete="family-name"/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("v0.38.1 atomically swaps staffed assignments between permitted event games", async () => {
@@ -1989,7 +1989,7 @@ test("v0.38.1 atomically swaps staffed assignments between permitted event games
   assert.match(migration, /'ratings_changed', false/);
   assert.match(migration, /revoke all on function public\.swap_game_assignments\(uuid, uuid\) from public, anon/);
   assert.match(styles, /\.assignment-swap-grid/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("v0.38.2 limits assignment swap choices to the currently filtered schedule", async () => {
@@ -1999,7 +1999,7 @@ test("v0.38.2 limits assignment swap choices to the currently filtered schedule"
   ]);
   assert.match(page, /const orderedSwapGames = \[\.\.\.visibleGames\]\.sort/);
   assert.doesNotMatch(page, /const orderedSwapGames = \[\.\.\.baseVisibleGames\]\.sort/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
 test("v0.38.3 atomically swaps entire matching staffed crews in imported order", async () => {
@@ -2022,10 +2022,10 @@ test("v0.38.3 atomically swaps entire matching staffed crews in imported order",
   assert.match(migration, /'ratings_changed', false/);
   assert.match(migration, /revoke all on function public\.swap_game_crews\(uuid, uuid\) from public, anon/);
   assert.match(styles, /\.assignment-swap-mode/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
-test("v0.39.2 edits game information and swaps game details without moving schedule slots", async () => {
+test("v0.39.3 edits game information and swaps game details without moving schedule slots", async () => {
   const [page, client, styles, migration, packageJson] = await Promise.all([
     read("app/page.tsx"), read("app/supabase-client.ts"), read("app/globals.css"),
     read("supabase/migrations/20260823120334_game_information_management.sql"), read("package.json"),
@@ -2041,10 +2041,10 @@ test("v0.39.2 edits game information and swaps game details without moving sched
   assert.match(migration, /crews_changed', false/);
   assert.doesNotMatch(migration, /external_id =/);
   assert.match(styles, /\.game-info-editor-grid/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
-test("v0.39.2 can atomically move full crews with swapped game details", async () => {
+test("v0.39.3 can atomically move full crews with swapped game details", async () => {
   const [page, client, migration, packageJson] = await Promise.all([
     read("app/page.tsx"),
     read("app/supabase-client.ts"),
@@ -2059,10 +2059,10 @@ test("v0.39.2 can atomically move full crews with swapped game details", async (
   assert.match(migration, /detail_result := public\.swap_game_details/);
   assert.match(migration, /crew_result := public\.swap_game_crews/);
   assert.match(migration, /revoke all on function public\.swap_game_details_with_options\(uuid, uuid, boolean\) from public, anon/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });
 
-test("v0.39.2 opens a vertical game editor from assignment-board matchups", async () => {
+test("v0.39.3 opens a vertical game editor from assignment-board matchups", async () => {
   const [page, styles, packageJson] = await Promise.all([
     read("app/page.tsx"), read("app/globals.css"), read("package.json"),
   ]);
@@ -2071,5 +2071,23 @@ test("v0.39.2 opens a vertical game editor from assignment-board matchups", asyn
   assert.match(page, /onEditGameInfo=\{canEditAssignments \? setEditingGameInfo : undefined\}/);
   assert.match(styles, /\.game-info-editor-grid\{display:grid;grid-template-columns:minmax\(0,1fr\)/);
   assert.match(styles, /\.board-game-matchup-link\{/);
-  assert.equal(JSON.parse(packageJson).version, "0.39.2");
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
+});
+
+test("v0.39.3 shows referees where their next crew is coming from", async () => {
+  const [page, client, styles, migration, packageJson] = await Promise.all([
+    read("app/page.tsx"), read("app/supabase-client.ts"), read("app/globals.css"),
+    read("supabase/migrations/20260823131846_referee_crew_prior_location.sql"), read("package.json"),
+  ]);
+  assert.match(page, /function CrewArrivalNote/);
+  assert.match(page, />Where your crew is coming from</);
+  assert.match(page, /"First game"/);
+  assert.match(page, /<CrewArrivalNote crew=\{assignment\.crew_arrivals\} \/>/);
+  assert.match(client, /crew_arrivals: Array/);
+  assert.match(migration, /'crew_arrivals'/);
+  assert.match(migration, /earlier_game\.starts_at < game\.starts_at/);
+  assert.match(migration, /crew_assignment\.official_id <> selected_official\.id/);
+  assert.match(migration, /revoke all on function public\.find_external_check_in\(text, date, jsonb\) from public/);
+  assert.match(styles, /\.crew-arrival-note\{/);
+  assert.equal(JSON.parse(packageJson).version, "0.39.3");
 });

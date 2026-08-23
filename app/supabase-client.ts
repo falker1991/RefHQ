@@ -308,6 +308,17 @@ export type ExternalCheckInLookup = {
     gender: string | null;
     position: AssignmentRecord["position"];
     position_title: string | null;
+    crew_arrivals: Array<{
+      official_id: string;
+      official_name: string;
+      position: AssignmentRecord["position"];
+      position_title: string | null;
+      prior_starts_at: string | null;
+      prior_field_name: string | null;
+      prior_position: AssignmentRecord["position"] | null;
+      prior_position_title: string | null;
+      first_game: boolean;
+    }>;
   }>;
 };
 

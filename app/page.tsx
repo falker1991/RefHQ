@@ -136,7 +136,7 @@ import { exportScheduleExcel, exportSchedulePdf, type ScheduleExportRow, type Sc
 import { exportPostEventSummary } from "./post-event-export";
 import { normalizePhoneNumber, phoneCallHref } from "./phone";
 
-const APP_VERSION = "0.38.1";
+const APP_VERSION = "0.38.2";
 
 type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups";
 const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups"];
@@ -1215,7 +1215,7 @@ function ScheduleView({ session, event, data, availableOfficials, canEdit, canEd
     && (!officialFilters.length || data.assignments.some((assignment) => assignment.game_id === item.id && officialFilters.includes(assignment.official_id)))
     && `${item.home_team} ${item.away_team} ${item.field_name} ${item.venue_name || ""} ${item.division || ""} ${item.age_group || ""} ${item.gender || ""}`.toLowerCase().includes(scheduleSearch.trim().toLowerCase()));
   const visibleGames = [...filteredGames].sort(compareGames);
-  const orderedSwapGames = [...baseVisibleGames].sort((a, b) => a.starts_at.localeCompare(b.starts_at) || a.field_name.localeCompare(b.field_name, undefined, { numeric: true }) || a.id.localeCompare(b.id));
+  const orderedSwapGames = [...visibleGames].sort((a, b) => a.starts_at.localeCompare(b.starts_at) || a.field_name.localeCompare(b.field_name, undefined, { numeric: true }) || a.id.localeCompare(b.id));
   const swapOfficialMap = new Map([...availableOfficials, ...data.officials].map((official) => [official.id, official]));
   const firstSwapAssignments = sortGameCrew(data.assignments.filter((assignment) => assignment.game_id === firstSwapGameId && assignment.official_id));
   const secondSwapAssignments = sortGameCrew(data.assignments.filter((assignment) => assignment.game_id === secondSwapGameId && assignment.official_id));

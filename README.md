@@ -2,6 +2,10 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.38.2
+
+- Limits the Schedule assignment-swap game selectors to games matching the Schedule's current filters.
+
 ## v0.38.1
 
 - Adds an atomic schedule action for swapping two staffed assignments between games in the same event.

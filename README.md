@@ -2,6 +2,11 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.40.4
+
+- Replaced separate crew-rating and report controls with one permission-scoped **View Reports** marker: green for the viewer's submission, blue for other authorized submissions, and diagonally split when both exist.
+- Fixed administrative rating edits when the current game crew differs from the officials contained in the original saved rating submission.
+
 ## v0.40.3
 
 - Added a View My Eval control to a referee's Law18Ref games in My Assignments when that referee has a shared public evaluation.

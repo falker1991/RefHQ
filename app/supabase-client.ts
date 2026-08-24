@@ -428,6 +428,11 @@ export type UnifiedAssignment = {
   organization_name?: string | null;
 };
 
+export type AssignmentSharedRating = {
+  assignment_id: string;
+  rating: AssessmentRecord;
+};
+
 function configuration() {
   if (!baseUrl || !anonKey) throw new Error("Supabase is not configured.");
   return { baseUrl, anonKey };
@@ -862,6 +867,10 @@ export async function loadUnifiedAssignments(session: Law18Session) {
   const byEvent = new Map(context.map((item) => [item.event_id, item]));
   const enrichedLaw18ref = law18ref.map((item) => ({ ...item, ...byEvent.get(item.source_id) }));
   return [...enrichedLaw18ref, ...external].sort((left, right) => left.starts_at.localeCompare(right.starts_at));
+}
+
+export function loadMyAssignmentSharedRatings(session: Law18Session) {
+  return rest<AssignmentSharedRating[]>(session, "rpc/my_assignment_shared_ratings", { method: "POST", body: "{}" });
 }
 
 export async function leaveCurrentOrganization(session: Law18Session) {

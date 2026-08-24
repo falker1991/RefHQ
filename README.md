@@ -2,6 +2,18 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.40.3
+
+- Added a View My Eval control to a referee's Law18Ref games in My Assignments when that referee has a shared public evaluation.
+- Restricted the personal assignment lookup to the signed-in referee's own evaluation, even when that account also holds an administrative role.
+- Kept private coach/admin notes and the other officials' evaluations out of the referee-facing modal.
+
+## v0.40.2
+
+- Fixed the mobile navigation tray so navigation and account actions remain separated and scroll normally.
+- Consolidated Assignment Board views into Schedule: list, time-and-field grid, by field, and first assignment.
+- Added a compact View Reports action to schedule games with submitted, visible ratings reports.
+
 ## v0.40.1
 
 - Consolidated an event workspace into one permission-aware database request, while retaining a deployment-safe compatibility fallback.

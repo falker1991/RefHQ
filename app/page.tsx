@@ -68,7 +68,7 @@ import {
   markUserNotificationsRead,
   parseAssignrCsv,
   parseAssignrOfficialsCsv,
-  saveAssessment,
+  saveAssessmentsBatch,
   submitDraftRating,
   swapSameGameRatings,
   saveProvisionalEventAccess,
@@ -135,11 +135,10 @@ import {
   type UserNotification,
 } from "./supabase-client";
 
-import { exportScheduleExcel, exportSchedulePdf, type ScheduleExportRow, type SchedulePdfOptions } from "./schedule-export";
-import { exportPostEventSummary } from "./post-event-export";
+import type { ScheduleExportRow, SchedulePdfOptions } from "./schedule-export";
 import { normalizePhoneNumber, phoneCallHref } from "./phone";
 
-const APP_VERSION = "0.40.0";
+const APP_VERSION = "0.40.1";
 
 type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups";
 const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups"];
@@ -1324,6 +1323,7 @@ function ScheduleView({ session, event, data, availableOfficials, canEdit, canEd
     setExportBusy(true);
     try {
       const rows = makeExportRows(games);
+      const { exportScheduleExcel, exportSchedulePdf } = await import("./schedule-export");
       if (exportFormat === "xlsx") await exportScheduleExcel(event, rows);
       else await exportSchedulePdf(event, rows, pdfOptions);
       await logScheduleExport(session, event, rows.length, exportFormat, exportScope).catch(() => undefined);
@@ -1338,6 +1338,7 @@ function ScheduleView({ session, event, data, availableOfficials, canEdit, canEd
     setPostEventExportBusy(true);
     setMessage("");
     try {
+      const { exportPostEventSummary } = await import("./post-event-export");
       await exportPostEventSummary(event, data);
       await logScheduleExport(session, event, data.games.length, "xlsx", "all").catch(() => undefined);
       setMessage("Post-event summary downloaded.");
@@ -2620,7 +2621,7 @@ function AssessmentCenter({
   canSubmit: boolean;
   canConfigure: boolean;
   canApprovePublic: boolean;
-  onSaved: () => Promise<void> | void;
+  onSaved: (ratings: AssessmentRecord[]) => Promise<void> | void;
   onEventUpdated: (event: EventRecord) => void;
   initialGameId?: string;
   initialAssessmentId?: string;
@@ -2658,7 +2659,19 @@ function AssessmentCenter({
   const refreshRatingHistory = useCallback(() => loadAuthorizedRatingHistory(session, organizationId).then(setHistory), [organizationId, session]);
   useEffect(() => {
     refreshRatingHistory().catch(() => undefined);
-  }, [refreshRatingHistory, data.assessments.length]);
+  }, [refreshRatingHistory]);
+  useEffect(() => {
+    setHistory((current) => {
+      const eventAssessmentIds = new Set(data.assessments.map((assessment) => assessment.id));
+      return {
+        ...current,
+        assessments: [...current.assessments.filter((assessment) => !eventAssessmentIds.has(assessment.id)), ...data.assessments],
+        games: [...new Map([...current.games, ...data.games].map((game) => [game.id, game])).values()],
+        assignments: [...new Map([...current.assignments, ...data.assignments].map((assignment) => [assignment.id, assignment])).values()],
+        officials: [...new Map([...current.officials, ...data.officials].map((official) => [official.id, official])).values()],
+      };
+    });
+  }, [data.assessments, data.assignments, data.games, data.officials]);
   useEffect(() => {
     const closeDropdowns = (event: PointerEvent) => {
       filterDropdownsRef.current?.querySelectorAll<HTMLDetailsElement>("details[open]").forEach((dropdown) => {
@@ -3065,7 +3078,7 @@ function AssessmentCenter({
     setBusy(true);
     setMessage("");
     try {
-      const savedRatings = await Promise.all(gameAssignments.map((assignment) => {
+      const ratingPayloads = gameAssignments.map((assignment) => {
         const rating = drafts[assignment.official_id] || blankCrewRating();
         const skillValues = skillValuesForAssignment(assignment, rating);
         const existingRating = (data.assessments.find((assessment) => assessment.game_id === gameId && assessment.official_id === assignment.official_id && assessment.coach_id === ratingAuthorId)
@@ -3073,28 +3086,32 @@ function AssessmentCenter({
         if (initialAssessmentId && !existingRating?.id) {
           throw new Error("This rating set changed while it was open. Close it and reopen Edit before saving.");
         }
-        return saveAssessment(session, organizationId, {
-          game_id: gameId,
-          official_id: assignment.official_id,
-          visibility: event.ratings_admin_only ? "private" : visibility,
-          status,
-          evaluation_type: event.rating_type,
-          overall_rating: event.rating_type === "basic_eval" ? rating.overall_rating : null,
-          positioning: event.rating_type === "skills_eval" ? skillValues.positioning : null,
-          decision_making: event.rating_type === "skills_eval" ? skillValues.decision_making : null,
-          communication: event.rating_type === "skills_eval" ? skillValues.communication : null,
-          match_control: event.rating_type === "skills_eval" ? skillValues.match_control : null,
-          strengths: event.rating_type === "skills_eval" ? rating.strengths || null : null,
-          development_focus: event.rating_type === "skills_eval" ? rating.development_focus || null : null,
-          additional_comments: event.rating_type === "skills_eval" ? rating.additional_comments || null : null,
-          coach_notes: rating.coach_notes || null,
-        }, initialAssessmentId ? existingRating?.id : null);
-      }));
+        return {
+          values: {
+            game_id: gameId,
+            official_id: assignment.official_id,
+            visibility: event.ratings_admin_only ? "private" as const : visibility,
+            status,
+            evaluation_type: event.rating_type,
+            overall_rating: event.rating_type === "basic_eval" ? rating.overall_rating : null,
+            positioning: event.rating_type === "skills_eval" ? skillValues.positioning : null,
+            decision_making: event.rating_type === "skills_eval" ? skillValues.decision_making : null,
+            communication: event.rating_type === "skills_eval" ? skillValues.communication : null,
+            match_control: event.rating_type === "skills_eval" ? skillValues.match_control : null,
+            strengths: event.rating_type === "skills_eval" ? rating.strengths || null : null,
+            development_focus: event.rating_type === "skills_eval" ? rating.development_focus || null : null,
+            additional_comments: event.rating_type === "skills_eval" ? rating.additional_comments || null : null,
+            coach_notes: rating.coach_notes || null,
+          },
+          targetAssessmentId: initialAssessmentId ? existingRating?.id : null,
+        };
+      });
+      const savedRatings = await saveAssessmentsBatch(session, organizationId, ratingPayloads);
       if (savedRatings.length !== gameAssignments.length || savedRatings.some((rating) => !rating?.id)) {
         throw new Error("Not every crew rating was confirmed. Please try saving again.");
       }
       ratingsConfirmed = true;
-      await onSaved();
+      await onSaved(savedRatings);
       setMessage(initialAssessmentId ? `The existing crew rating was updated for ${gameAssignments.length} officials.` : status === "draft" ? `Draft ratings saved for ${gameAssignments.length} officials.` : `Ratings submitted for ${gameAssignments.length} officials.`);
       if (status === "submitted") {
         if (modal) onClose?.();
@@ -4240,6 +4257,16 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     ]);
     setData((current) => ({ ...current, checkIns, attendanceOverrides }));
   }, [eventId, session]);
+  const applySavedRatings = useCallback((savedRatings: AssessmentRecord[]) => {
+    const savedById = new Map(savedRatings.map((rating) => [rating.id, rating]));
+    setData((current) => ({
+      ...current,
+      assessments: [
+        ...current.assessments.map((rating) => savedById.get(rating.id) || rating),
+        ...savedRatings.filter((rating) => !current.assessments.some((existing) => existing.id === rating.id)),
+      ],
+    }));
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -4544,7 +4571,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       {event && profile && view === "schedule" && (isStaff || isCoach) && <ScheduleView session={session} event={event} data={data} availableOfficials={organizationOfficials.length ? organizationOfficials : data.officials} canEdit={isAdministrativeStaff} canEditAssignments={canEditAssignments} canConfirmChanges={canConfigureEvent} canManageCheckIns={isStaff && eventFeatureEnabled(event, "check_in")} showScheduleChangeMarkers={isStaff} canRateCrew={canAssess} coachView={isCoach && !isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onRateCrew={(gameId) => { setRatingEditAssessmentId(null); setRatingModalGameId(gameId); }} onCreated={() => refresh(event.id)} onRefreshCheckIns={refreshCheckIns} profile={profile} ratingHistory={administrativeRatingHistory} showRatingAverages={isAdministrativeStaff} onSelectOfficial={selectScheduleOfficial} />}
       {isAdministrativeStaff && profile && organization && view === "officials" && <OfficialsDirectory session={session} profile={profile} organizationRoles={organizationRoles} eventRoles={eventRoles} canManageOrganizationRoles={Boolean(profile.is_site_owner || organizationRoles.includes("organization_director") || organizationRoles.includes("organization_admin"))} canManageOfficials={Boolean(profile.is_site_owner || organizationRoles.some((role) => ["organization_director", "organization_admin", "assignor"].includes(role)) || eventRoles.some((role) => ["event_admin", "assignor"].includes(role)))} organizationId={organization.id} officials={organizationOfficials} data={data} event={event} events={events} openOfficialId={officialToEditId} onOpenOfficialHandled={() => setOfficialToEditId(null)} onCreated={() => loadOrganizationOfficials(session, organization.id).then(setOrganizationOfficials)} />}
       {event && profile && view === "coaching" && isAdministrativeStaff && eventFeatureEnabled(event, "coaching") && <CoachWorkspace session={session} profile={profile} event={event} data={data} organizationOfficials={organizationOfficials} canManage onSaved={() => refresh(event.id)} />}
-      {event && organization && view === "assessments" && eventFeatureEnabled(event, "ratings") && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={canConfigureRatings} canApprovePublic={canApprovePublicRatings} hideWorkspace={canAssess} onOpenRating={() => { setRatingEditAssessmentId(null); setRatingModalGameId(""); }} onEditRating={async (gameId, targetEventId, assessmentId) => { if (targetEventId !== event.id) await switchEvent(targetEventId); setRatingEditAssessmentId(assessmentId); setRatingModalGameId(gameId); }} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
+      {event && organization && view === "assessments" && eventFeatureEnabled(event, "ratings") && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={canConfigureRatings} canApprovePublic={canApprovePublicRatings} hideWorkspace={canAssess} onOpenRating={() => { setRatingEditAssessmentId(null); setRatingModalGameId(""); }} onEditRating={async (gameId, targetEventId, assessmentId) => { if (targetEventId !== event.id) await switchEvent(targetEventId); setRatingEditAssessmentId(assessmentId); setRatingModalGameId(gameId); }} onSaved={applySavedRatings} onEventUpdated={handleEventUpdated} />}
       {isAdministrativeStaff && organization && view === "import" && profile && <ImportView session={session} profile={profile} organizationId={organization.id} organization={organization} events={events} activeEvent={event} canCreateEvent={Boolean(profile.is_site_owner || organizationRoles.includes("organization_director") || organizationRoles.includes("organization_admin") || organizationRoles.includes("event_admin"))} canManageLifecycle={Boolean(profile.is_site_owner || organizationRoles.includes("organization_director") || organizationRoles.includes("organization_admin") || eventRoles.includes("event_admin"))} canConfigureAliases={canConfigureRatings} onEventsChanged={handleEventsChanged} onImported={handleImported} />}
       {event && organization && view === "event_settings" && canConfigureEvent && <><EventSettingsPanel session={session} organization={organization} event={event} events={events} onChanged={handleEventsChanged} /><EventLifecyclePanel session={session} event={event} onChanged={handleEventsChanged} /></>}
       {organization && view === "activity" && Boolean(profile?.is_site_owner || organizationRoles.includes("organization_director") || organizationRoles.includes("organization_admin")) && <OrganizationActivity session={session} organization={organization} events={events} onEventsChanged={handleEventsChanged} />}
@@ -4555,7 +4582,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
-    {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} initialAssessmentId={ratingEditAssessmentId || undefined} modal onClose={() => { setRatingModalGameId(null); setRatingEditAssessmentId(null); }} onSaved={() => refresh(event.id)} onEventUpdated={handleEventUpdated} />}
+    {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} initialAssessmentId={ratingEditAssessmentId || undefined} modal onClose={() => { setRatingModalGameId(null); setRatingEditAssessmentId(null); }} onSaved={applySavedRatings} onEventUpdated={handleEventUpdated} />}
       <footer><div className="brand footer-brand"><Mark /></div><div className="footer-legal"><span>© 2026 Law18Ref · Version {APP_VERSION}</span><small>by FalkSports</small></div></footer>
   </main>;
 }

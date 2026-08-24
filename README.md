@@ -2,6 +2,13 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.40.1
+
+- Consolidated an event workspace into one permission-aware database request, while retaining a deployment-safe compatibility fallback.
+- Saved complete crew ratings atomically in one request instead of sending one request per official.
+- Updated saved ratings locally instead of reloading every part of the selected event after submission.
+- Deferred Excel and PDF export code until an export is requested, reducing the normal application download.
+
 ## v0.40.0
 
 - Separated official first and last names while preserving full-name displays and standardized selectors as `Last, First`.
@@ -566,3 +573,8 @@ The hosted pilot uses Supabase as its source of truth. Do not use it as the sole
 - Map imported venues and fields to event sites, with an administrator review screen for unmatched or ambiguous locations.
 - Allow an authorized administrator to move a game, official, or coordinator between sites while preserving an audit trail.
 - Ensure database access policies enforce site scope rather than relying only on hidden interface controls.
+# v0.40.1 performance update
+
+- Event workspaces now load through one permission-aware database request, with a compatibility fallback during deployment.
+- Complete crew ratings now save atomically in one request instead of one request per official.
+- Successful rating submissions update the active workspace directly rather than reloading the entire event.

@@ -51,9 +51,9 @@ test("post-event workbook contains one schedule worksheet per event date", () =>
 
 test("authorized schedule users can download the v0.38.1 post-event workbook", async () => {
   const [page, packageJson] = await Promise.all([readFile(new URL("../app/page.tsx", import.meta.url), "utf8"), readFile(new URL("../package.json", import.meta.url), "utf8")]);
-  assert.match(page, /import \{ exportPostEventSummary \}/);
+  assert.match(page, /await import\("\.\/post-event-export"\)/);
   assert.match(page, /Post-Event Summary/);
   assert.match(page, /canEdit && <button className="secondary" disabled=\{postEventExportBusy\}/);
-  assert.match(page, /const APP_VERSION = "0\.40\.0"/);
-  assert.equal(JSON.parse(packageJson).version, "0.40.0");
+  assert.match(page, /const APP_VERSION = "0\.40\.1"/);
+  assert.equal(JSON.parse(packageJson).version, "0.40.1");
 });

@@ -1043,7 +1043,19 @@ export async function openEventDocument(session: Law18Session, document: EventDo
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
 }
 
-export async function loadEventData(session: Law18Session, eventId: string) {
+type EventWorkspace = {
+  games: GameRecord[];
+  assignments: AssignmentRecord[];
+  officials: OfficialRecord[];
+  checkIns: CheckInRecord[];
+  attendanceOverrides: AttendanceExpectationOverride[];
+  assessments: AssessmentRecord[];
+  coachAssignments: CoachAssignmentRecord[];
+  documents: EventDocumentRecord[];
+  provisionalAccess: ProvisionalEventAccess[];
+};
+
+async function loadEventDataLegacy(session: Law18Session, eventId: string): Promise<EventWorkspace> {
   const [games, coachAssignments, eventMembers, eventRows, documents, provisionalAccess] = await Promise.all([
     rest<GameRecord[]>(session, `games?event_id=eq.${enc(eventId)}&select=*&order=starts_at.asc`),
     rest<CoachAssignmentRecord[]>(session, `coach_assignments?event_id=eq.${enc(eventId)}&select=*`),
@@ -1082,6 +1094,20 @@ export async function loadEventData(session: Law18Session, eventId: string) {
     ? await rest<AssessmentRecord[]>(session, `assessments?game_id=in.(${gameIds})&select=*`)
     : [];
   return { games, assignments, officials, checkIns, attendanceOverrides, assessments, coachAssignments, documents, provisionalAccess };
+}
+
+export async function loadEventData(session: Law18Session, eventId: string): Promise<EventWorkspace> {
+  try {
+    const workspace = await rest<EventWorkspace>(session, "rpc/load_event_workspace", {
+      method: "POST",
+      body: JSON.stringify({ target_event: eventId }),
+    });
+    if (workspace && Array.isArray(workspace.games) && Array.isArray(workspace.assignments)) return workspace;
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : "";
+    if (!message.includes("load_event_workspace") && !message.includes("schema cache") && !message.includes("could not find the function")) throw error;
+  }
+  return loadEventDataLegacy(session, eventId);
 }
 
 export async function createCoachAssignment(
@@ -1880,6 +1906,32 @@ export async function saveAssessment(
   const saved = rows[0];
   if (!saved?.id) throw new Error("The rating was not confirmed by the database. Please try saving again.");
   return saved;
+}
+
+export async function saveAssessmentsBatch(
+  session: Law18Session,
+  organizationId: string,
+  ratings: Array<{
+    values: Omit<AssessmentRecord, "id" | "coach_id" | "submitted_at">;
+    targetAssessmentId?: string | null;
+  }>,
+) {
+  const items = ratings.map(({ values, targetAssessmentId }) => ({
+    payload: { ...values, organization_id: organizationId },
+    target_assessment: targetAssessmentId || null,
+  }));
+  try {
+    const saved = await rest<AssessmentRecord[]>(session, "rpc/save_ratings_batch", {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    }, "return=representation");
+    if (saved.length !== ratings.length || saved.some((rating) => !rating?.id)) throw new Error("Not every crew rating was confirmed by the database.");
+    return saved;
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : "";
+    if (!message.includes("save_ratings_batch") && !message.includes("schema cache") && !message.includes("could not find the function")) throw error;
+    return Promise.all(ratings.map(({ values, targetAssessmentId }) => saveAssessment(session, organizationId, values, targetAssessmentId)));
+  }
 }
 
 export async function importTournament(

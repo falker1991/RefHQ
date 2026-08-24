@@ -2,7 +2,7 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
-## v0.40.5
+## v0.40.6
 
 - Reworked the submitted-reports modal into equal-width, variable-height cards stacked vertically in imported crew order: Referee, AR1, AR2, Fourth Official, then other positions.
 

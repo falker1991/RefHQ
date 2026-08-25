@@ -30,9 +30,9 @@ export function TurnstileChallenge({ action, onToken }: { action: string; onToke
         sitekey: siteKey,
         action,
         appearance: "interaction-only",
-        callback: (token: string) => onToken(token),
-        "expired-callback": () => onToken(""),
-        "error-callback": () => onToken(""),
+        callback: (token: string) => { if (!cancelled) onToken(token); },
+        "expired-callback": () => { if (!cancelled) onToken(""); },
+        "error-callback": () => { if (!cancelled) onToken(""); },
       });
     };
     const existing = document.querySelector<HTMLScriptElement>('script[data-law18ref-turnstile="true"]');
@@ -50,6 +50,7 @@ export function TurnstileChallenge({ action, onToken }: { action: string; onToke
     }
     return () => {
       cancelled = true;
+      existing?.removeEventListener("load", render);
       if (widgetId && window.turnstile) window.turnstile.remove(widgetId);
     };
   }, [action, onToken]);

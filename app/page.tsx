@@ -141,7 +141,7 @@ import type { ScheduleExportRow, SchedulePdfOptions } from "./schedule-export";
 import { normalizePhoneNumber, phoneCallHref } from "./phone";
 import { TurnstileChallenge, turnstileEnabled } from "./turnstile";
 
-const APP_VERSION = "0.40.8";
+const APP_VERSION = "0.40.9";
 
 type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups";
 const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups"];
@@ -4031,6 +4031,7 @@ function SiteGroupsAdmin({ session, ownerEmail, onOpen, onUpdated }: { session: 
   const [password, setPassword] = useState("");
   const [confirmName, setConfirmName] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaAttempt, setCaptchaAttempt] = useState(0);
   const [editing, setEditing] = useState<OrganizationRecord | null>(null);
   const [editingName, setEditingName] = useState("");
   const [editingLogoUrl, setEditingLogoUrl] = useState("");
@@ -4110,6 +4111,8 @@ function SiteGroupsAdmin({ session, ownerEmail, onOpen, onUpdated }: { session: 
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "Unable to complete the action.");
     } finally {
+      setCaptchaToken("");
+      setCaptchaAttempt((attempt) => attempt + 1);
       setBusy(false);
     }
   }
@@ -4160,7 +4163,7 @@ function SiteGroupsAdmin({ session, ownerEmail, onOpen, onUpdated }: { session: 
           : "Members will lose access and event operations will stop. All data remains stored and the group can be reactivated."}</p>
         {pending.action === "delete" && <label>Type the group name<input value={confirmName} onChange={(event) => setConfirmName(event.target.value)} /></label>}
         <label>Confirm your password<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-        <TurnstileChallenge action="privileged_action" onToken={setCaptchaToken} />
+        <TurnstileChallenge key={captchaAttempt} action="privileged_action" onToken={setCaptchaToken} />
         <p className="verification-note">Your password confirms this action directly during the beta phase.</p>
         <div><button className="secondary" disabled={busy} onClick={() => { setPending(null); setPassword(""); setConfirmName(""); setCaptchaToken(""); }}>Cancel</button><button className="danger-button" disabled={busy || !password || (turnstileEnabled() && !captchaToken)} onClick={requestVerification}>{busy ? "Verifying…" : pending.action === "delete" ? "Permanently Delete" : "Deactivate Group"}</button></div>
       </section>

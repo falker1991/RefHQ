@@ -2,6 +2,11 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.40.9
+
+- Refreshes Turnstile verification after login, signup, password-reset, and privileged password-verification attempts, so retries never reuse a consumed token.
+- Cloudflare builds use pnpm 11.19.0 to match the project lockfile.
+
 ## v0.40.8
 
 - Hardened production dependencies, replaced the vulnerable spreadsheet exporter, added compatibility-safe browser security headers, added optional Supabase-compatible Cloudflare Turnstile verification, and tightened elevated database-function execution and search paths.

@@ -20,7 +20,13 @@ export function AuthPanel({ onSession, recovery = false, initialMessage = "" }: 
   const [message, setMessage] = useState(initialMessage);
   const [busy, setBusy] = useState(false);
   const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaAttempt, setCaptchaAttempt] = useState(0);
   const captchaRequired = turnstileEnabled() && mode !== "recovery";
+
+  function refreshChallenge() {
+    setCaptchaToken("");
+    setCaptchaAttempt((attempt) => attempt + 1);
+  }
 
   // Recovery is an external authentication state transition.
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -38,6 +44,7 @@ export function AuthPanel({ onSession, recovery = false, initialMessage = "" }: 
 
   async function signIn(event: FormEvent) {
     event.preventDefault();
+    if (captchaRequired && !captchaToken) return;
     setBusy(true);
     setMessage("");
     try {
@@ -45,12 +52,14 @@ export function AuthPanel({ onSession, recovery = false, initialMessage = "" }: 
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to sign in.");
     } finally {
+      refreshChallenge();
       setBusy(false);
     }
   }
 
   async function sendRecovery() {
     if (!email) return setMessage("Enter your email address first.");
+    if (captchaRequired && !captchaToken) return setMessage("Please complete the security verification first.");
     setBusy(true);
     setMessage("");
     try {
@@ -59,6 +68,7 @@ export function AuthPanel({ onSession, recovery = false, initialMessage = "" }: 
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to send the email.");
     } finally {
+      refreshChallenge();
       setBusy(false);
     }
   }
@@ -83,6 +93,7 @@ export function AuthPanel({ onSession, recovery = false, initialMessage = "" }: 
   async function createAccount(event: FormEvent) {
     event.preventDefault();
     if (password.length < 8) return setMessage("Use at least 8 characters.");
+    if (captchaRequired && !captchaToken) return;
     setBusy(true);
     setMessage("");
     try {
@@ -92,6 +103,7 @@ export function AuthPanel({ onSession, recovery = false, initialMessage = "" }: 
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to create the account.");
     } finally {
+      refreshChallenge();
       setBusy(false);
     }
   }
@@ -120,15 +132,15 @@ export function AuthPanel({ onSession, recovery = false, initialMessage = "" }: 
           {mode === "recovery" && (
             <label>Confirm new password<input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" minLength={8} required /></label>
           )}
-          {mode !== "recovery" && <TurnstileChallenge action={mode === "signup" ? "signup" : "login"} onToken={setCaptchaToken} />}
+          {mode !== "recovery" && <TurnstileChallenge key={`${mode}-${captchaAttempt}`} action={mode === "signup" ? "signup" : "login"} onToken={setCaptchaToken} />}
           {message && <p className="auth-message" role="status">{message}</p>}
           <button className="primary wide" disabled={busy || (captchaRequired && !captchaToken)}>{busy ? "Please wait…" : mode === "recovery" ? "Save password" : mode === "signup" ? "Create account" : "Sign in"}</button>
         </form>
         {mode === "login" && <>
-          <button className="auth-link" onClick={() => setMode("signup")} disabled={busy}>New referee? Create an account</button>
-          <button className="auth-link compact-link" onClick={sendRecovery} disabled={busy}>Set or reset your password</button>
+          <button className="auth-link" onClick={() => { refreshChallenge(); setMode("signup"); }} disabled={busy}>New referee? Create an account</button>
+          <button className="auth-link compact-link" onClick={sendRecovery} disabled={busy || (captchaRequired && !captchaToken)}>Set or reset your password</button>
         </>}
-        {mode === "signup" && <button className="auth-link" onClick={() => setMode("login")} disabled={busy}>Already have an account? Sign in</button>}
+        {mode === "signup" && <button className="auth-link" onClick={() => { refreshChallenge(); setMode("login"); }} disabled={busy}>Already have an account? Sign in</button>}
       </section>
     </main>
   );

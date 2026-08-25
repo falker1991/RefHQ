@@ -16,6 +16,6 @@ When you create your account, you will confirm your name and primary email, crea
 If you were not expecting this invitation, ignore this email. No account will be created unless you open the secure link and complete setup.
 
 Law18Referee Management
-Provided by FalkSports
+Provided by FalkSport91
 
 Need help? Contact {{support_email}}.

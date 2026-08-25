@@ -1,4 +1,5 @@
 import type { EventRecord } from "./supabase-client";
+import { downloadExcelWorkbook } from "./excel-export.ts";
 
 export type ScheduleExportCrewMember = { position: string; name: string };
 export type ScheduleExportRow = {
@@ -48,14 +49,13 @@ function workbookRows(rows: ScheduleExportRow[]) {
 }
 
 export async function exportScheduleExcel(event: EventRecord, rows: ScheduleExportRow[]) {
-  const XLSX = await import("xlsx");
   const { headings, output } = workbookRows(rows);
-  const sheet = XLSX.utils.aoa_to_sheet(output);
-  sheet["!cols"] = headings.map((heading) => ({ wch: heading.includes("Team") ? 28 : heading.includes("Official") ? 24 : heading === "Competition" ? 22 : 15 }));
-  sheet["!freeze"] = { xSplit: 0, ySplit: 1 };
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, sheet, "Schedule");
-  XLSX.writeFile(workbook, `${filenamePart(event.name)}-schedule.xlsx`, { compression: true });
+  await downloadExcelWorkbook(`${filenamePart(event.name)}-schedule.xlsx`, [{
+    name: "Schedule",
+    rows: output,
+    widths: headings.map((heading) => heading.includes("Team") ? 28 : heading.includes("Official") ? 24 : heading === "Competition" ? 22 : 15),
+    freezeRow: 1,
+  }]);
 }
 
 function abbreviatedName(value: string) {

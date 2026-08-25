@@ -2,6 +2,14 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.40.8
+
+- Hardened production dependencies, replaced the vulnerable spreadsheet exporter, added compatibility-safe browser security headers, added optional Supabase-compatible Cloudflare Turnstile verification, and tightened elevated database-function execution and search paths.
+
+## v0.40.7
+
+- Keeps referee-facing and referee-coach schedules in the standard list view. Time-and-field, by-field, and first-assignment staffing views are available only to event staff.
+
 ## v0.40.6
 
 - Reworked the submitted-reports modal into equal-width, variable-height cards stacked vertically in imported crew order: Referee, AR1, AR2, Fourth Official, then other positions.
@@ -378,7 +386,7 @@ Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](AS
 
 - Consolidates the Coaching tab's access summary into one card per referee coach, with all assigned game access listed inside that card.
 
-Law18Referee Management is a responsive tournament referee operations MVP provided by FalkSports. It complements Assignr with QR check-in, live attendance, coach assignments, structured assessments, and development history.
+Law18Referee Management is a responsive tournament referee operations MVP provided by FalkSport91. It complements Assignr with QR check-in, live attendance, coach assignments, structured assessments, and development history.
 
 The pilot is hosted at `law18ref.com` on Cloudflare. The approved Law18Ref logo is stored at `public/logo-draft-law18referee-management-v4.png`.
 
@@ -478,6 +486,25 @@ The expected CSV template is downloadable inside Law18Referee Management and is 
 ## Cloudflare deployment
 
 The project is configured for Cloudflare-compatible ESM output through vinext.
+
+### Optional login abuse protection
+
+Law18Ref supports Cloudflare Turnstile without changing the login or account-creation workflow when it is not configured. To enable it in production:
+
+1. Create a Turnstile widget in Cloudflare for `law18ref.com`.
+2. Add its public site key as `NEXT_PUBLIC_TURNSTILE_SITE_KEY` in the Cloudflare deployment settings.
+3. In Supabase, open **Authentication > Bot and Abuse Protection**, select Cloudflare Turnstile, enter the widget secret, and enable CAPTCHA.
+4. Redeploy and confirm login, account creation, password recovery, and password-confirmed Site Owner actions before relying on it.
+
+Leave `NEXT_PUBLIC_TURNSTILE_SITE_KEY` unset until Supabase is configured. In that state the site behaves exactly as it does today and no challenge is shown.
+
+### Security deployment checklist
+
+- Apply every migration in `supabase/migrations`, including the current security-hardening migration.
+- Keep `SUPABASE_SERVICE_ROLE_KEY`, `CALENDAR_FEED_ENCRYPTION_KEY`, and any Turnstile secret in encrypted Cloudflare secrets, never public variables or browser code.
+- Run `pnpm audit --prod`, `pnpm test`, and Supabase Security Advisor before each production release.
+- Keep Cloudflare proxying enabled for `law18ref.com`, and review WAF and rate-limit events during pilots.
+- Restrict Supabase dashboard and Cloudflare account access to business-controlled accounts with MFA.
 
 ```bash
 pnpm build

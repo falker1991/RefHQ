@@ -1,6 +1,6 @@
 {
   "name": "law18referee-management",
-  "version": "0.40.6",
+  "version": "0.40.8",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -15,14 +15,14 @@
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
+    "exceljs": "4.4.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "jsqr": "^1.4.0",
-    "next": "16.2.6",
+    "next": "16.2.11",
     "qrcode.react": "4.2.0",
     "react": "19.2.6",
-    "react-dom": "19.2.6",
-    "xlsx": "^0.18.5"
+    "react-dom": "19.2.6"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
@@ -34,7 +34,7 @@
     "@vitejs/plugin-rsc": "0.5.26",
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.2.11",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",

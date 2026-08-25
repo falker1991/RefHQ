@@ -5,7 +5,7 @@ import "./admin-features.css";
 export async function generateMetadata(): Promise<Metadata> {
   const title = "Tournament referee operations";
   const fullTitle = "Law18Referee Management - Tournament referee operations";
-  const description = "Referee check-in, coaching, ratings, and tournament operations. Provided by FalkSports.";
+  const description = "Referee check-in, coaching, ratings, and tournament operations. Provided by FalkSport91.";
   return {
     title,
     description,

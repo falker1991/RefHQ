@@ -193,36 +193,37 @@ export const auth = {
       listeners.delete(listener);
     };
   },
-  async signIn(email: string, password: string) {
+  async signIn(email: string, password: string, captchaToken?: string) {
     const session = await request("/token?grant_type=password", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, gotrue_meta_security: { captcha_token: captchaToken } }),
     }) as Law18Session;
     save(session);
     return session;
   },
-  async verifyPassword(email: string, password: string) {
+  async verifyPassword(email: string, password: string, captchaToken?: string) {
     const session = await request("/token?grant_type=password", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, gotrue_meta_security: { captcha_token: captchaToken } }),
     }) as Law18Session;
     save(session);
     return session;
   },
-  async signUp(email: string, password: string, fullName: string) {
+  async signUp(email: string, password: string, fullName: string, captchaToken?: string) {
     return request("/signup", {
       method: "POST",
       body: JSON.stringify({
         email,
         password,
         data: { full_name: fullName },
+        gotrue_meta_security: { captcha_token: captchaToken },
       }),
     }) as Promise<Law18Session>;
   },
-  async sendRecovery(email: string) {
+  async sendRecovery(email: string, captchaToken?: string) {
     await request("/recover", {
       method: "POST",
-      body: JSON.stringify({ email, redirect_to: window.location.origin }),
+      body: JSON.stringify({ email, redirect_to: window.location.origin, gotrue_meta_security: { captcha_token: captchaToken } }),
     });
   },
   async updatePassword(session: Law18Session, password: string) {

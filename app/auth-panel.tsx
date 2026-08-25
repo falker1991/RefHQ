@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { auth, type Law18Session } from "./auth-client";
+import { TurnstileChallenge, turnstileEnabled } from "./turnstile";
 
 type AuthPanelProps = {
   onSession: (session: Law18Session) => void;
@@ -18,6 +19,8 @@ export function AuthPanel({ onSession, recovery = false, initialMessage = "" }: 
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState(initialMessage);
   const [busy, setBusy] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const captchaRequired = turnstileEnabled() && mode !== "recovery";
 
   // Recovery is an external authentication state transition.
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -38,7 +41,7 @@ export function AuthPanel({ onSession, recovery = false, initialMessage = "" }: 
     setBusy(true);
     setMessage("");
     try {
-      onSession(await auth.signIn(email, password));
+      onSession(await auth.signIn(email, password, captchaToken));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to sign in.");
     } finally {
@@ -51,7 +54,7 @@ export function AuthPanel({ onSession, recovery = false, initialMessage = "" }: 
     setBusy(true);
     setMessage("");
     try {
-      await auth.sendRecovery(email);
+      await auth.sendRecovery(email, captchaToken);
       setMessage("Password setup email sent. Check your inbox.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to send the email.");
@@ -83,7 +86,7 @@ export function AuthPanel({ onSession, recovery = false, initialMessage = "" }: 
     setBusy(true);
     setMessage("");
     try {
-      const result = await auth.signUp(email, password, fullName);
+      const result = await auth.signUp(email, password, fullName, captchaToken);
       if (result.access_token) onSession(result);
       else setMessage("Your account was created. Sign in to continue.");
     } catch (error) {
@@ -117,8 +120,9 @@ export function AuthPanel({ onSession, recovery = false, initialMessage = "" }: 
           {mode === "recovery" && (
             <label>Confirm new password<input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" minLength={8} required /></label>
           )}
+          {mode !== "recovery" && <TurnstileChallenge action={mode === "signup" ? "signup" : "login"} onToken={setCaptchaToken} />}
           {message && <p className="auth-message" role="status">{message}</p>}
-          <button className="primary wide" disabled={busy}>{busy ? "Please wait…" : mode === "recovery" ? "Save password" : mode === "signup" ? "Create account" : "Sign in"}</button>
+          <button className="primary wide" disabled={busy || (captchaRequired && !captchaToken)}>{busy ? "Please wait…" : mode === "recovery" ? "Save password" : mode === "signup" ? "Create account" : "Sign in"}</button>
         </form>
         {mode === "login" && <>
           <button className="auth-link" onClick={() => setMode("signup")} disabled={busy}>New referee? Create an account</button>

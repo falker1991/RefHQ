@@ -1,4 +1,5 @@
 import type { AssignmentRecord, AssessmentRecord, AttendanceExpectationOverride, CheckInRecord, CoachAssignmentRecord, EventRecord, GameRecord, OfficialRecord } from "./supabase-client";
+import { downloadExcelWorkbook } from "./excel-export.ts";
 
 export type PostEventExportData = {
   games: GameRecord[];
@@ -200,17 +201,5 @@ export function buildPostEventSummarySheets(event: EventRecord, data: PostEventE
 }
 
 export async function exportPostEventSummary(event: EventRecord, data: PostEventExportData) {
-  const XLSX = await import("xlsx");
-  const workbook = XLSX.utils.book_new();
-  buildPostEventSummarySheets(event, data).forEach((definition) => {
-    const sheet = XLSX.utils.aoa_to_sheet(definition.rows);
-    sheet["!cols"] = definition.widths.map((wch) => ({ wch }));
-    sheet["!freeze"] = { xSplit: 0, ySplit: definition.freezeRow };
-    if (definition.autoFilterRow && definition.rows[definition.autoFilterRow - 1]?.length) {
-      const lastColumn = XLSX.utils.encode_col(definition.rows[definition.autoFilterRow - 1].length - 1);
-      sheet["!autofilter"] = { ref: `A${definition.autoFilterRow}:${lastColumn}${Math.max(definition.autoFilterRow, definition.rows.length)}` };
-    }
-    XLSX.utils.book_append_sheet(workbook, sheet, definition.name);
-  });
-  XLSX.writeFile(workbook, `${filenamePart(event.name)}-post-event-summary.xlsx`, { compression: true });
+  await downloadExcelWorkbook(`${filenamePart(event.name)}-post-event-summary.xlsx`, buildPostEventSummarySheets(event, data));
 }

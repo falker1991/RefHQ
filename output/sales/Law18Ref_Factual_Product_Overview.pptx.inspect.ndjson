@@ -1,0 +1,84 @@
+{"kind":"deck","id":"pr/fm977z","name":"Deck"}
+{"kind":"layout","layoutId":"532f132f-8e1f-49a1-8855-1f462363f3e4","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"1ab62b13-b5ca-463e-a246-e364deb60b46","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/xgf0gc","slide":1,"title":"Product overview","textShapes":3}
+{"kind":"shape","id":"sh/ih4b258n","slide":1,"bbox":[72,190,108,8]}
+{"kind":"textbox","id":"sh/jidsbap8","slide":1,"text":"Product overview","textPreview":"Product overview","textChars":16,"textLines":1,"bbox":[72,246,770,100]}
+{"kind":"textbox","id":"sh/sn6t8fqp","slide":1,"text":"Tournament check-in, schedule visibility, referee coaching, and ratings.","textPreview":"Tournament check-in, schedule visibility, referee coaching, and ratings.","textChars":72,"textLines":1,"bbox":[76,396,770,94]}
+{"kind":"shape","id":"sh/tofuhk7a","slide":1,"bbox":[940,184,230,230]}
+{"kind":"textbox","id":"sh/7mxsfap4","slide":1,"text":"Current web platform","textPreview":"Current web platform","textChars":20,"textLines":1,"bbox":[900,446,310,36]}
+{"kind":"image","id":"im/4vmlc7e5","slide":1,"name":"","alt":"Law18Referee Management logo","bbox":[72,54,470,104]}
+{"kind":"image","id":"im/f6tkzix8","slide":1,"name":"","alt":"Law18Referee icon","bbox":[980,224,150,150]}
+{"kind":"notes","id":"nt/xgf0gc","slide":1,"text":""}
+{"kind":"slide","id":"sl/vhvsqu","slide":2,"title":"Current platform functions","textShapes":12}
+{"kind":"textbox","id":"sh/zatcj6dg","slide":2,"text":"Current platform functions","textPreview":"Current platform functions","textChars":26,"textLines":1,"bbox":[72,56,930,70]}
+{"kind":"shape","id":"sh/0b2tcbe1","slide":2,"bbox":[72,144,1136,2]}
+{"kind":"textbox","id":"sh/lcbulgvm","slide":2,"text":"CHECK-IN","textPreview":"CHECK-IN","textChars":8,"textLines":1,"bbox":[72,180,460,38]}
+{"kind":"shape","id":"sh/mdkvelw7","slide":2,"bbox":[88,246,14,14]}
+{"kind":"textbox","id":"sh/nydcnqds","slide":2,"text":"Check-in methods","textPreview":"Check-in methods","textChars":16,"textLines":1,"bbox":[120,238,430,34]}
+{"kind":"textbox","id":"sh/8zmdgved","slide":2,"text":"Account-based QR check-in, external check-in without an account, and manual staff check-in.","textPreview":"Account-based QR check-in, external check-in without an account, and manual staff check-in.","textChars":91,"textLines":1,"bbox":[120,276,430,62]}
+{"kind":"shape","id":"sh/90vup0vy","slide":2,"bbox":[88,362,14,14]}
+{"kind":"textbox","id":"sh/2h0b2hw3","slide":2,"text":"Attendance records","textPreview":"Attendance records","textChars":18,"textLines":1,"bbox":[120,354,430,34]}
+{"kind":"textbox","id":"sh/3i9cbmdo","slide":2,"text":"Displays expected officials, check-in status, check-in time, and check-in method.","textPreview":"Displays expected officials, check-in status, check-in time, and check-in method.","textChars":81,"textLines":1,"bbox":[120,392,430,62]}
+{"kind":"shape","id":"sh/r6ho7e50","slide":2,"bbox":[88,466,14,14]}
+{"kind":"textbox","id":"sh/q587y94f","slide":2,"text":"Event access","textPreview":"Event access","textChars":12,"textLines":1,"bbox":[120,458,430,34]}
+{"kind":"textbox","id":"sh/d8zq9onq","slide":2,"text":"Responsive rosters, schedule views, filters, and printable daily QR sheets.","textPreview":"Responsive rosters, schedule views, filters, and printable daily QR sheets.","textChars":75,"textLines":1,"bbox":[120,496,430,62]}
+{"kind":"shape","id":"sh/c7qp0jm5","slide":2,"bbox":[624,178,2,410]}
+{"kind":"textbox","id":"sh/32xo3u5o","slide":2,"text":"COACHING + RATINGS","textPreview":"COACHING + RATINGS","textChars":18,"textLines":1,"bbox":[674,180,470,38]}
+{"kind":"textbox","id":"sh/i1o7u943","slide":2,"text":"Assign referee coaches by game, site, date, or time.","textPreview":"Assign referee coaches by game, site, date, or time.","textChars":52,"textLines":1,"bbox":[674,244,470,68]}
+{"kind":"textbox","id":"sh/p4z654nu","slide":2,"text":"Basic Eval and Skills Eval forms support visibility controls, rating history, filters, and spreadsheet exports.","textPreview":"Basic Eval and Skills Eval forms support visibility controls, rating history, filters, and spreadsheet exports.","textChars":111,"textLines":1,"bbox":[674,348,470,120]}
+{"kind":"textbox","id":"sh/43qpwzm9","slide":2,"text":"Access is controlled by group, event, and user role.","textPreview":"Access is controlled by group, event, and user role.","textChars":52,"textLines":1,"bbox":[674,492,470,58]}
+{"kind":"notes","id":"nt/vhvsqu","slide":2,"text":""}
+{"kind":"slide","id":"sl/q9t3h3","slide":3,"title":"Schedule and check-in screens","textShapes":4}
+{"kind":"textbox","id":"sh/w7ydgbqh","slide":3,"text":"Schedule and check-in screens","textPreview":"Schedule and check-in screens","textChars":29,"textLines":1,"bbox":[72,46,900,58]}
+{"kind":"textbox","id":"sh/v65w769w","slide":3,"text":"SCHEDULE AND CREW VIEW","textPreview":"SCHEDULE AND CREW VIEW","textChars":22,"textLines":1,"bbox":[72,124,520,32]}
+{"kind":"textbox","id":"sh/a5wvelsb","slide":3,"text":"CHECK-IN ATTENDANCE GRID","textPreview":"CHECK-IN ATTENDANCE GRID","textChars":24,"textLines":1,"bbox":[688,124,520,32]}
+{"kind":"shape","id":"sh/94ne5grq","slide":3,"bbox":[64,164,536,341]}
+{"kind":"shape","id":"sh/n25w3690","slide":3,"bbox":[680,164,536,341]}
+{"kind":"textbox","id":"sh/l0ne1wru","slide":3,"text":"The schedule displays games and assigned crews. The check-in screen displays attendance status for expected officials.","textPreview":"The schedule displays games and assigned crews. The check-in screen displays attendance status for expected officials.","textChars":118,"textLines":1,"bbox":[150,548,980,66]}
+{"kind":"image","id":"im/x4zylwb6","slide":3,"name":"","alt":"Law18Ref schedule page showing games and assigned crews","bbox":[72,172,520,325]}
+{"kind":"image","id":"im/vihgjmtg","slide":3,"name":"","alt":"Law18Ref check-in page showing the attendance grid","bbox":[688,172,520,325]}
+{"kind":"notes","id":"nt/q9t3h3","slide":3,"text":""}
+{"kind":"slide","id":"sl/qs6o3i","slide":4,"title":"External check-in screens","textShapes":4}
+{"kind":"textbox","id":"sh/7qdcr2to","slide":4,"text":"External check-in screens","textPreview":"External check-in screens","textChars":25,"textLines":1,"bbox":[72,38,990,60]}
+{"kind":"textbox","id":"sh/8rmtk7u9","slide":4,"text":"Officials enter required information. A successful match displays confirmation and the official's daily assignments.","textPreview":"Officials enter required information. A successful match displays confirmation and the official's daily assignments.","textChars":116,"textLines":1,"bbox":[72,104,1080,42]}
+{"kind":"textbox","id":"sh/9sfutcbu","slide":4,"text":"1  FIND THE IMPORTED SCHEDULE","textPreview":"1  FIND THE IMPORTED SCHEDULE","textChars":29,"textLines":1,"bbox":[154,166,420,32]}
+{"kind":"textbox","id":"sh/utobmhcz","slide":4,"text":"2  SEE THE CONFIRMATION + ASSIGNMENTS","textPreview":"2  SEE THE CONFIRMATION + ASSIGNMENTS","textChars":37,"textLines":1,"bbox":[706,166,420,32]}
+{"kind":"shape","id":"sh/vuxcvmtk","slide":4,"bbox":[186,208,356,466]}
+{"kind":"shape","id":"sh/gv6doru5","slide":4,"bbox":[738,208,356,466]}
+{"kind":"image","id":"im/gnq98zmt","slide":4,"name":"","alt":"Mobile external check-in identification form","bbox":[198,220,332,442]}
+{"kind":"image","id":"im/bqd83a54","slide":4,"name":"","alt":"Mobile external check-in confirmation with the referee's daily schedule","bbox":[750,220,332,442]}
+{"kind":"notes","id":"nt/qs6o3i","slide":4,"text":""}
+{"kind":"slide","id":"sl/s43bsz","slide":5,"title":"Ratings database screen","textShapes":2}
+{"kind":"textbox","id":"sh/fqlcbmlw","slide":5,"text":"Ratings database screen","textPreview":"Ratings database screen","textChars":23,"textLines":1,"bbox":[72,44,990,62]}
+{"kind":"textbox","id":"sh/grutkr2h","slide":5,"text":"The full-game view displays all submitted ratings for a game, rating scores, submitters, filters, and export controls.","textPreview":"The full-game view displays all submitted ratings for a game, rating scores, submitters, filters, and export controls.","textChars":118,"textLines":1,"bbox":[72,112,1100,42]}
+{"kind":"shape","id":"sh/hs3udw32","slide":5,"bbox":[78,176,1124,448]}
+{"kind":"image","id":"im/vm5sf2tk","slide":5,"name":"","alt":"Law18Ref ratings page in full-game view","bbox":[86,184,1108,432]}
+{"kind":"notes","id":"nt/s43bsz","slide":5,"text":""}
+{"kind":"slide","id":"sl/cysjea","slide":6,"title":"Evaluation form screens","textShapes":6}
+{"kind":"textbox","id":"sh/3qpsv2dc","slide":6,"text":"Evaluation form screens","textPreview":"Evaluation form screens","textChars":23,"textLines":1,"bbox":[72,42,920,62]}
+{"kind":"textbox","id":"sh/4ry947ux","slide":6,"text":"BASIC EVAL","textPreview":"BASIC EVAL","textChars":10,"textLines":1,"bbox":[72,124,520,30]}
+{"kind":"textbox","id":"sh/5s7axcv2","slide":6,"text":"SKILLS EVAL","textPreview":"SKILLS EVAL","textChars":11,"textLines":1,"bbox":[688,124,520,30]}
+{"kind":"shape","id":"sh/qtgr6xcn","slide":6,"bbox":[64,160,536,341]}
+{"kind":"shape","id":"sh/sfy987ut","slide":6,"bbox":[680,160,536,341]}
+{"kind":"textbox","id":"sh/6xwrudcj","slide":6,"text":"One 1-5 rating and notes for each official","textPreview":"One 1-5 rating and notes for each official","textChars":42,"textLines":1,"bbox":[100,522,464,34]}
+{"kind":"textbox","id":"sh/7y58nid4","slide":6,"text":"Position-specific categories and written fields","textPreview":"Position-specific categories and written fields","textChars":47,"textLines":1,"bbox":[716,522,464,34]}
+{"kind":"shape","id":"sh/3apoj6tw","slide":6,"bbox":[384,594,512,2]}
+{"kind":"textbox","id":"sh/29gnalcb","slide":6,"text":"Custom evaluation formats can be made available for a group's workflow.","textPreview":"Custom evaluation formats can be made available for a group's workflow.","textChars":71,"textLines":1,"bbox":[250,616,780,36]}
+{"kind":"image","id":"im/at0fuhof","slide":6,"name":"","alt":"Basic Eval form with one rating and notes per official","bbox":[72,168,520,325]}
+{"kind":"image","id":"im/cfixwr6l","slide":6,"name":"","alt":"Skills Eval form with role-specific categories and written feedback","bbox":[688,168,520,325]}
+{"kind":"notes","id":"nt/cysjea","slide":6,"text":""}
+{"kind":"slide","id":"sl/ysvsw4","slide":7,"title":"Current and potential functions","textShapes":8}
+{"kind":"textbox","id":"sh/6hsr6tcz","slide":7,"text":"Current and potential functions","textPreview":"Current and potential functions","textChars":31,"textLines":1,"bbox":[72,70,940,70]}
+{"kind":"textbox","id":"sh/tk3qh8bq","slide":7,"text":"Functions available in the current tournament pilot:","textPreview":"Functions available in the current tournament pilot:","textChars":52,"textLines":1,"bbox":[72,170,760,54]}
+{"kind":"textbox","id":"sh/sju983u5","slide":7,"text":"Import schedules and officials","textPreview":"Import schedules and officials","textChars":30,"textLines":1,"bbox":[104,282,410,38]}
+{"kind":"textbox","id":"sh/fml8jytw","slide":7,"text":"Run check-in and attendance","textPreview":"Run check-in and attendance","textChars":27,"textLines":1,"bbox":[104,358,410,38]}
+{"kind":"textbox","id":"sh/elcradcb","slide":7,"text":"Coordinate coaches and ratings","textPreview":"Coordinate coaches and ratings","textChars":30,"textLines":1,"bbox":[104,434,440,38]}
+{"kind":"shape","id":"sh/1o3al8bm","slide":7,"bbox":[72,292,14,14]}
+{"kind":"shape","id":"sh/gnu9c3uh","slide":7,"bbox":[72,368,14,14]}
+{"kind":"shape","id":"sh/3alsnits","slide":7,"bbox":[72,444,14,14]}
+{"kind":"shape","id":"sh/29credc7","slide":7,"bbox":[690,260,500,260]}
+{"kind":"textbox","id":"sh/wfu9kj2d","slide":7,"text":"Potential future functions","textPreview":"Potential future functions","textChars":26,"textLines":1,"bbox":[734,302,410,42]}
+{"kind":"textbox","id":"sh/xg3qt43y","slide":7,"text":"Messaging and full assignment tools are potential future additions being explored - not committed product promises.","textPreview":"Messaging and full assignment tools are potential future additions being explored - not committed product promises.","textChars":115,"textLines":1,"bbox":[734,372,410,110]}
+{"kind":"textbox","id":"sh/adcri9k7","slide":7,"text":"Law18Referee Management","textPreview":"Law18Referee Management","textChars":23,"textLines":1,"bbox":[72,642,520,28]}
+{"kind":"notes","id":"nt/ysvsw4","slide":7,"text":""}

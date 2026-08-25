@@ -163,7 +163,7 @@ def create_guide(slug, guide):
     c = canvas.Canvas(str(path), pagesize=letter)
     W, H = letter
     c.setTitle(f"Law18Ref {guide['role'].title()} Quick Guide")
-    c.setAuthor("Law18Ref by FalkSports")
+    c.setAuthor("Law18Ref by FalkSport91")
     c.setFillColor(PAPER)
     c.rect(0, 0, W, H, fill=1, stroke=0)
 
@@ -220,7 +220,7 @@ def create_guide(slug, guide):
     c.drawCentredString(W - 54, footer_y + 16.5, "?")
     c.setFillColor(MUTED)
     c.setFont("Helvetica", 6.2)
-    c.drawRightString(W - 34, 13, "Law18Referee Management | by FalkSports")
+    c.drawRightString(W - 34, 13, "Law18Referee Management | by FalkSport91")
     c.save()
     return path
 
@@ -233,4 +233,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

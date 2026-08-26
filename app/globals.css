@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Calendar menus must escape the card, not be clipped by its rounded boundary. */
+.panel.connected-schedules-card{overflow:visible}
+@media(min-width:521px){.connected-schedules-card .assignment-filter-menu>.filter-menu-panel{left:auto;right:0;max-width:calc(100vw - 40px)}}
+
 @font-face{font-family:Inter;font-style:normal;font-weight:400;font-display:swap;src:url("/fonts/inter/inter-latin-400.woff2") format("woff2")}
 @font-face{font-family:Inter;font-style:normal;font-weight:700;font-display:swap;src:url("/fonts/inter/inter-latin-700.woff2") format("woff2")}
 @font-face{font-family:Inter;font-style:normal;font-weight:800;font-display:swap;src:url("/fonts/inter/inter-latin-800.woff2") format("woff2")}

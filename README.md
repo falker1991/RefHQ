@@ -2,6 +2,11 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.40.11
+
+- Fixed Personal Calendar Feeds color-display dropdowns being clipped by the card boundary; desktop menus open inward and mobile menus retain their existing layout.
+- No database migration required.
+
 ## v0.40.10
 
 - Moved Leave Group under collapsed Membership Options, with password confirmation and Turnstile verification.

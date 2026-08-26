@@ -31,9 +31,10 @@ test('documentation restricts file IDs and methods', async () => {
   assert.equal((await documentationDownload(request('unknown'), env)).status,404);
   assert.equal((await documentationDownload(new Request(request(),{method:'POST'}),env)).status,405);
 });
-test('all ten packaged documentation assets match their canonical source files', async () => {
+test('all packaged documentation assets match their canonical source files', async () => {
   const catalog = JSON.parse(await readFile(new URL('../docs/documentation-catalog.json',import.meta.url),'utf8'));
-  assert.equal(catalog.length,10);
+  assert.equal(catalog.length,11);
+  assert.ok(catalog.some((doc) => doc.id === 'future-plans'));
   for (const doc of catalog) assert.deepEqual(await readFile(new URL(`../dist/client/api/owner-documents/${doc.id}`,import.meta.url)),await readFile(new URL(`../${doc.source}`,import.meta.url)));
   const config=JSON.parse(await readFile(new URL('../dist/server/wrangler.json',import.meta.url),'utf8'));
   assert.ok(config.assets.run_worker_first.includes('/api/owner-documents/*'));

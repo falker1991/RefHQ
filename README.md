@@ -2,6 +2,11 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.41.1
+
+- Added the owner-only Future Development Plans PDF to Documentation, distinguishing exploratory features, proposals, and explicitly held work from delivered capabilities.
+- Edit `docs/FUTURE_DEVELOPMENT.md` and regenerate the PDF with `build/create-future-development.py` in the document runtime before committing changes. The normal build packages the updated PDF. No migration required.
+
 ## v0.41.0
 
 - Added a site-owner Documentation page with PDF/PPTX overviews, the update workbook, and five role guides.

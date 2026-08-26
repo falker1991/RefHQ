@@ -2,6 +2,12 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.40.10
+
+- Moved Leave Group under collapsed Membership Options, with password confirmation and Turnstile verification.
+- Group departure now archives only the selected membership, preserves the account and historical records, and records an activity entry. The site owner and last group administrator are protected.
+- Apply `20260826000707_password_confirmed_group_leave.sql` before using the new leave action.
+
 ## v0.40.9
 
 - Refreshes Turnstile verification after login, signup, password-reset, and privileged password-verification attempts, so retries never reuse a consumed token.

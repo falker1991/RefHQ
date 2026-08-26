@@ -873,11 +873,11 @@ export function loadMyAssignmentSharedRatings(session: Law18Session) {
   return rest<AssignmentSharedRating[]>(session, "rpc/my_assignment_shared_ratings", { method: "POST", body: "{}" });
 }
 
-export async function leaveCurrentOrganization(session: Law18Session) {
+export async function leaveCurrentOrganization(session: Law18Session, organizationId: string) {
   await rest<null>(
     session,
-    "rpc/leave_current_organization",
-    { method: "POST", body: "{}" },
+    "rpc/leave_group_membership",
+    { method: "POST", body: JSON.stringify({ target_organization: organizationId }) },
   );
 }
 

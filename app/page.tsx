@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent } from "react";
 import jsQR from "jsqr";
 import { QRCodeSVG } from "qrcode.react";
 import { AuthPanel } from "./auth-panel";
@@ -141,7 +141,7 @@ import type { ScheduleExportRow, SchedulePdfOptions } from "./schedule-export";
 import { normalizePhoneNumber, phoneCallHref } from "./phone";
 import { TurnstileChallenge, turnstileEnabled } from "./turnstile";
 
-const APP_VERSION = "0.40.9";
+const APP_VERSION = "0.40.10";
 
 type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups";
 const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups"];
@@ -3971,6 +3971,11 @@ function GroupsSettings({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [organizationName, setOrganizationName] = useState(organization?.name || "");
+  const [leavePassword, setLeavePassword] = useState("");
+  const [leaveCaptchaToken, setLeaveCaptchaToken] = useState("");
+  const [leaveAttempt, setLeaveAttempt] = useState(0);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  useEffect(() => { setLeaveOpen(false); setLeavePassword(""); setLeaveCaptchaToken(""); }, [organization?.id]);
   const [logoUrl, setLogoUrl] = useState(organization?.logo_url || "");
   const [approvalRole, setApprovalRole] = useState<NonNullable<OrganizationRecord["public_rating_approval_role"]>>(organization?.public_rating_approval_role || "none");
   useEffect(() => {
@@ -3992,14 +3997,22 @@ function GroupsSettings({
       setBusy(false);
     }
   }
-  async function leave() {
-    if (!window.confirm(`Leave ${organization?.name || "this group"}? You will lose access to its events and schedules.`)) return;
+  async function leave(event: FormEvent) {
+    event.preventDefault();
+    if (!organization || busy || !leavePassword || (turnstileEnabled() && !leaveCaptchaToken)) return;
     setBusy(true);
+    setMessage("");
     try {
-      await leaveCurrentOrganization(session);
-      auth.signOut();
+      const verified = await auth.verifyPassword(session.user.email || "", leavePassword, leaveCaptchaToken);
+      if (verified.user.id !== session.user.id) throw new Error("Password verification did not match your account.");
+      await leaveCurrentOrganization(verified, organization.id);
+      window.location.reload();
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "Unable to leave this group.");
+    } finally {
+      setLeavePassword("");
+      setLeaveCaptchaToken("");
+      setLeaveAttempt((attempt) => attempt + 1);
       setBusy(false);
     }
   }
@@ -4016,7 +4029,16 @@ function GroupsSettings({
     <article className="panel group-card">
       {organization?.logo_url ? <img className="group-logo" src={organization.logo_url} alt="" /> : <span className="group-mark">{organization?.name?.[0] || "L"}</span>}
       <div><h2>{organization?.name || "Current group"}</h2><p>Your events and assignments from this group appear in Law18Ref.</p></div>
-      <button className="danger-button" disabled={busy} onClick={leave}>{busy ? "Leaving…" : "Leave group"}</button>
+      {organization && <details className="group-membership-options" open={leaveOpen} onToggle={(event) => { setLeaveOpen(event.currentTarget.open); if (!event.currentTarget.open) { setLeavePassword(""); setLeaveCaptchaToken(""); } }}>
+        <summary>Membership Options</summary>
+        {leaveOpen && <form className="group-leave-form" onSubmit={leave}>
+          <h3>Leave {organization.name}</h3>
+          <p>You will lose access to this group’s events and schedules. Your account, other group memberships, and historical records will be kept.</p>
+          <label>Confirm your password<input type="password" autoComplete="current-password" required value={leavePassword} disabled={busy} onChange={(event) => setLeavePassword(event.target.value)} /></label>
+          <TurnstileChallenge key={`${organization.id}-${leaveAttempt}`} action="leave_group" onToken={setLeaveCaptchaToken} />
+          <div className="group-leave-actions"><button type="button" className="secondary" disabled={busy} onClick={() => { setLeaveOpen(false); setLeavePassword(""); setLeaveCaptchaToken(""); }}>Cancel</button><button type="submit" className="danger-button" disabled={busy || !leavePassword || (turnstileEnabled() && !leaveCaptchaToken)}>{busy ? "Leaving…" : "Confirm and Leave Group"}</button></div>
+        </form>}
+      </details>}
       {message && <p className="group-message">{message}</p>}
     </article>
   </section>;
@@ -4607,6 +4629,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     </header>
     {helpOpen && <div className="confirmation-backdrop help-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setHelpOpen(false); }}><section className="confirmation-dialog role-help-dialog" role="dialog" aria-modal="true" aria-labelledby="role-help-title">
       <header><div><p className="eyebrow">HELP & HOW-TO</p><h2 id="role-help-title">How to Navigate Law18Ref</h2><p>Follow the directions below for your role in {organization?.name || "the active group"}.</p></div><button className="modal-close-button" aria-label="Close help" onClick={() => setHelpOpen(false)}>×</button></header>
+      <p>To leave a group, open your initials menu → Groups → Membership Options. Enter your password and select Confirm and Leave Group. Your account and historical records are kept; the site owner and last group administrator cannot leave through this option.</p>
       <aside className="role-help-roles" aria-label="Active group roles">{activeGroupRoles.map((role) => <span className="role-badge" key={role}>{roleNames[role]}</span>)}</aside>
       <main className="role-help-content">{activeQuickGuides.length > 0 && <section className="role-quick-guides"><h3>Quick Guides</h3><p>Open or download guides for your active roles and the roles you oversee.</p><div>{activeQuickGuides.map((guide) => <a href={guide.href} target="_blank" rel="noreferrer" key={guide.href}><span><strong>{guide.title}</strong><small>{guide.description}</small></span><b>Open PDF ↗</b></a>)}</div></section>}{helpVisibleRoles.map((role) => <section key={role}><h3>{helpByRole[role].title}</h3><ol>{helpByRole[role].items.map((item) => <li key={item}>{item}</li>)}</ol></section>)}{!activeGroupRoles.length && <EmptyState>No active role is assigned in this group.</EmptyState>}</main>
       <footer className="role-help-actions"><button className="primary" onClick={() => setHelpOpen(false)}>Close Help</button></footer>

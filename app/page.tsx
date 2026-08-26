@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import jsQR from "jsqr";
 import { QRCodeSVG } from "qrcode.react";
 import { AuthPanel } from "./auth-panel";
+import { Documentation } from "./documentation";
 import { auth, isSessionExpiredError, type Law18Session } from "./auth-client";
 import {
   archiveEvent,
@@ -141,10 +142,10 @@ import type { ScheduleExportRow, SchedulePdfOptions } from "./schedule-export";
 import { normalizePhoneNumber, phoneCallHref } from "./phone";
 import { TurnstileChallenge, turnstileEnabled } from "./turnstile";
 
-const APP_VERSION = "0.40.11";
+const APP_VERSION = "0.41.0";
 
-type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups";
-const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups"];
+type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups" | "documentation";
+const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups", "documentation"];
 type EventData = {
   games: GameRecord[];
   assignments: AssignmentRecord[];
@@ -4250,7 +4251,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
     ...eventRoles,
   ])];
   const helpByRole: Record<MembershipRole, { title: string; items: string[] }> = {
-    site_owner: { title: "Site Owner Navigation", items: ["Use the group selector below the header to open the group you want to manage.", "Open Groups from your initials menu to create, open, archive, restore, rename, upload a logo, or configure features for a group.", "Open Site Appearance from your initials menu to edit, save, schedule, or restore site themes.", "Open Officials and use Copy Join Link to invite members to the active group.", "Open Activity within a group to review its audit log and event archive.", "After selecting a group and event, use the same event tabs described for Group Admins."] },
+    site_owner: { title: "Site Owner Navigation", items: ["Use the group selector below the header to open the group you want to manage.", "Open Groups from your initials menu to create, open, archive, restore, rename, upload a logo, or configure features for a group.", "Open Site Appearance from your initials menu to edit, save, schedule, or restore site themes.", "Open Documentation from your initials menu to download product and basic overviews, the platform update spreadsheet, and user guides. Updated source documents become available with the next site deployment.", "Open Officials and use Copy Join Link to invite members to the active group.", "Open Activity within a group to review its audit log and event archive.", "After selecting a group and event, use the same event tabs described for Group Admins."] },
     organization_director: { title: "Group Director Navigation", items: ["Use the group and event selectors below the header to choose your working scope.", "Open Officials to appoint Group Admins and lower group roles, or open Event Access to appoint Event Admins and lower event roles.", "Use Groups, Activity, Import, Schedule, Check-In, Coaching, and Ratings for complete group administration. Schedule includes list, time-and-field, by-field, and first-assignment views.", "Only the Site Owner can appoint or remove a Group Director."] },
     organization_admin: { title: "Group Admin Navigation", items: ["Choose the group and active event from the selectors below the header.", "Open Groups from your initials menu to update the active group's name or logo.", "Open Officials to copy the group join link, add or edit people, review last activity, set group roles, remove a member, merge accounts, or open Event Access. Use the selection boxes for bulk archive or deletion.", "Open Activity to review meaningful changes or bulk archive, restore, and delete events.", "Open Import to add officials, upload an Assignr schedule, configure automatic archiving, or archive the selected event now.", "Open Schedule to filter games by date, field, site, official, time, age group, gender, or competition. Switch between list, time-and-field, by-field, and first-assignment views; save filters; or export games.", "Open Check-In to manage arrivals and Coaching to assign coaches.", "Open Ratings to configure evaluations; filter All, Submitted, or Draft history; switch between individual and full-game views; submit a saved draft; or export filtered ratings as individual rows, full-game rows, or a grouped summary. Archived-event ratings remain available here."] },
     event_admin: { title: "Event Admin Navigation", items: ["Select an assigned event from the Active Event menu below the header.", "Open Officials, then Event Access, to add or update event staff and set a Site Supervisor’s dates, sites, and assignment-editing access.", "Open Import for event schedule data and Event Lifecycle controls, including automatic archiving or Archive Now.", "Open Schedule to correct posted crews. Updated games remain orange until you use Change Confirmed after updating any outside records.", "Open Check-In for arrivals, Coaching for coach assignments, and Ratings for evaluation settings and history."] },
@@ -4621,6 +4622,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
               <button onClick={() => { setView("account"); setAccountOpen(false); }}><span>⚙</span><div><strong>Account Settings</strong><small>Personal information</small></div></button>
               <button onClick={() => { setView("groups"); setAccountOpen(false); }}><span>♙</span><div><strong>Groups</strong><small>Group membership</small></div></button>
               {allRoles.has("site_owner") && <button onClick={() => { setView("appearance"); setAccountOpen(false); }}><span>◐</span><div><strong>Site Appearance</strong><small>Theme and schedule</small></div></button>}
+              {allRoles.has("site_owner") && <button onClick={() => { setView("documentation"); setAccountOpen(false); }}><span aria-hidden="true">▤</span><div><strong>Documentation</strong><small>Overviews, updates, and user guides</small></div></button>}
               <button className="signout-menu" onClick={() => auth.signOut()}><span>↪</span><div><strong>Sign Out</strong></div></button>
             </div></div>
           </aside></div>}
@@ -4655,6 +4657,7 @@ function Dashboard({ session, onSessionExpired }: { session: Law18Session; onSes
         ? <SiteGroupsAdmin session={session} ownerEmail={profile?.primary_email || profile?.email || session.user.email || ""} onOpen={(organizationId) => switchOrganization(organizationId, "dashboard")} onUpdated={(updated) => { setOrganizations((current) => current.map((item) => item.id === updated.id ? updated : item)); if (organization?.id === updated.id) setOrganization(updated); }} />
         : <GroupsSettings session={session} organization={organization} canManage={organizationRoles.includes("organization_director") || organizationRoles.includes("organization_admin")} onUpdated={(updated) => { setOrganization(updated); setOrganizations((current) => current.map((item) => item.id === updated.id ? updated : item)); }} />)}
       {view === "appearance" && allRoles.has("site_owner") && <AppearanceSettings session={session} />}
+      {view === "documentation" && allRoles.has("site_owner") && <Documentation session={session} />}
     </div>
     {event && scheduleOfficialId && (() => { const official = data.officials.find((item) => item.id === scheduleOfficialId) || organizationOfficials.find((item) => item.id === scheduleOfficialId); return official ? <OfficialEventScheduleModal session={session} official={official} event={event} data={data} initialDate={scheduleOfficialDate || undefined} canEdit={isAdministrativeStaff} siteSupervisorView={isSiteCoordinator && !isAdministrativeStaff} onClose={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); }} onEdit={() => { setScheduleOfficialId(null); setScheduleOfficialDate(null); setOfficialToEditId(official.id); setView("officials"); }} /> : null; })()}
     {event && organization && ratingModalGameId !== null && <AssessmentCenter session={session} event={event} events={events} organizationId={organization.id} data={data} canSubmit={canAssess} canConfigure={false} canApprovePublic={false} initialGameId={ratingModalGameId || undefined} initialAssessmentId={ratingEditAssessmentId || undefined} modal onClose={() => { setRatingModalGameId(null); setRatingEditAssessmentId(null); }} onSaved={applySavedRatings} onEventUpdated={handleEventUpdated} />}

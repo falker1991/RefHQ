@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+.owner-documentation{max-width:1000px;margin-inline:auto;min-width:0}.documentation-category{padding:20px;margin-bottom:20px}.documentation-category h2{margin:0 0 14px}.documentation-row{display:flex;align-items:center;justify-content:space-between;gap:16px;border-top:1px solid var(--line);padding:14px 0;min-width:0}.documentation-row strong{min-width:0;overflow-wrap:anywhere}.documentation-row button{flex:0 0 auto;width:auto}@media(max-width:520px){.documentation-row{align-items:stretch;flex-direction:column;gap:8px}.documentation-row button{align-self:flex-start}}
+
 /* Calendar menus must escape the card, not be clipped by its rounded boundary. */
 .panel.connected-schedules-card{overflow:visible}
 @media(min-width:521px){.connected-schedules-card .assignment-filter-menu>.filter-menu-panel{left:auto;right:0;max-width:calc(100vw - 40px)}}

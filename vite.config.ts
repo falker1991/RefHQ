@@ -16,6 +16,7 @@ const localBindingConfig = {
   // Production secrets are managed in the Cloudflare dashboard. Preserve
   // those bindings when GitHub/Wrangler publishes a new Worker version.
   keep_vars: true,
+  assets: { binding: "ASSETS", run_worker_first: ["/api/owner-documents/*"] },
   compatibility_flags: ["nodejs_compat"],
   d1_databases: d1
     ? [

@@ -1,0 +1,12 @@
+[
+  {"id":"product-pdf","title":"Product Overview","category":"Overviews","format":"PDF","source":"output/sales/Law18Ref_Product_Overview.pdf"},
+  {"id":"product-ppt","title":"Product Overview","category":"Overviews","format":"PPTX","source":"output/sales/Law18Ref_Product_Overview.pptx"},
+  {"id":"basic-pdf","title":"Basic Overview","category":"Overviews","format":"PDF","source":"output/sales/Law18Ref_Factual_Product_Overview.pdf"},
+  {"id":"basic-ppt","title":"Basic Overview","category":"Overviews","format":"PPTX","source":"output/sales/Law18Ref_Factual_Product_Overview.pptx"},
+  {"id":"updates","title":"Platform Update History","category":"Platform Updates","format":"XLSX","source":"docs/Law18Ref_Update_History.xlsx"},
+  {"id":"referee-guide","title":"Referee Quick Guide","category":"User Guides","format":"PDF","source":"public/guides/Law18Ref-Referee-Quick-Guide.pdf"},
+  {"id":"coach-guide","title":"Referee Coach Quick Guide","category":"User Guides","format":"PDF","source":"public/guides/Law18Ref-Referee-Coach-Quick-Guide.pdf"},
+  {"id":"supervisor-guide","title":"Site Supervisor Quick Guide","category":"User Guides","format":"PDF","source":"public/guides/Law18Ref-Site-Supervisor-Quick-Guide.pdf"},
+  {"id":"event-admin-guide","title":"Event Admin Quick Guide","category":"User Guides","format":"PDF","source":"public/guides/Law18Ref-Event-Admin-Quick-Guide.pdf"},
+  {"id":"group-admin-guide","title":"Group Admin / Director Quick Guide","category":"User Guides","format":"PDF","source":"public/guides/Law18Ref-Group-Admin-Quick-Guide.pdf"}
+]

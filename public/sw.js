@@ -1,4 +1,4 @@
-const CACHE = "law18referee-v0.40.11";
+const CACHE = "law18referee-v0.41.0";
 const SHELL = ["/", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -13,6 +13,10 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+  if (new URL(event.request.url).pathname.startsWith("/api/owner-documents/")) {
+    event.respondWith(fetch(event.request, { cache: "no-store" }));
+    return;
+  }
   if (new URL(event.request.url).pathname === "/version.json") {
     event.respondWith(fetch(event.request, { cache: "no-store" }));
     return;

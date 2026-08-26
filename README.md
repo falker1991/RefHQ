@@ -2,6 +2,12 @@
 
 Future Assignment Core planning is maintained in [ASSIGNMENT_CORE_ROADMAP.md](ASSIGNMENT_CORE_ROADMAP.md).
 
+## v0.41.0
+
+- Added a site-owner Documentation page with PDF/PPTX overviews, the update workbook, and five role guides.
+- Downloads verify the signed-in site owner's database permissions and bypass offline/browser caching. No migration required.
+- Document sources are registered in `docs/documentation-catalog.json`. Update the original source files and commit them; every production build packages the current files automatically. Add new documents to this catalog when creating them. Never place private sales/history documents in `public/`.
+
 ## v0.40.11
 
 - Fixed Personal Calendar Feeds color-display dropdowns being clipped by the card boundary; desktop menus open inward and mobile menus retain their existing layout.

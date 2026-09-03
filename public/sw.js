@@ -1,4 +1,4 @@
-const CACHE = "law18referee-v0.41.1";
+const CACHE = "law18referee-v0.42.0";
 const SHELL = ["/", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {

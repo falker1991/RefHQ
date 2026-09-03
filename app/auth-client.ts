@@ -201,6 +201,15 @@ export const auth = {
     save(session);
     return session;
   },
+  signInWithGoogle() {
+    const env = config();
+    const redirectTo = new URL(window.location.href);
+    redirectTo.hash = "";
+    const authorize = new URL(`${env.url}/auth/v1/authorize`);
+    authorize.searchParams.set("provider", "google");
+    authorize.searchParams.set("redirect_to", redirectTo.toString());
+    window.location.assign(authorize.toString());
+  },
   async verifyPassword(email: string, password: string, captchaToken?: string) {
     const session = await request("/token?grant_type=password", {
       method: "POST",

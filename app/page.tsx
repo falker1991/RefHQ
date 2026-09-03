@@ -142,7 +142,7 @@ import type { ScheduleExportRow, SchedulePdfOptions } from "./schedule-export";
 import { normalizePhoneNumber, phoneCallHref } from "./phone";
 import { TurnstileChallenge, turnstileEnabled } from "./turnstile";
 
-const APP_VERSION = "0.41.1";
+const APP_VERSION = "0.42.0";
 
 type View = "dashboard" | "board" | "my_assignments" | "checkin" | "schedule" | "officials" | "coaching" | "assessments" | "import" | "event_settings" | "activity" | "appearance" | "account" | "groups" | "documentation";
 const refreshableViews: View[] = ["dashboard", "board", "my_assignments", "checkin", "schedule", "officials", "coaching", "assessments", "import", "event_settings", "activity", "appearance", "account", "groups", "documentation"];
